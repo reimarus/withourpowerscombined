@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Game binaries (never commit these — they come from Steam/LOUD)
+*.exe
+*.dll
+*.scd
+*.zip
+*.rar
+
+# Logs
+*.log
+
+# Build artifacts
+tools/*.exe
+patches/build/
