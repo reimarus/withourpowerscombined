@@ -34,6 +34,23 @@ Desktop.ini
 # Logs
 *.log
 
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# mypy
+.mypy_cache/
+
+# pytest
+.pytest_cache/
+
+# ruff
+.ruff_cache/
+
 # Build artifacts
 tools/*.exe
 patches/build/
+
+# Helper scripts (local only)
+tools/fix_python_path.ps1
