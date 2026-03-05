@@ -49,12 +49,27 @@ def run_setup(repo_init_dir: Path) -> None:
         d.mkdir(parents=True, exist_ok=True)
 
     # --- Step 1: Copy exe + DLLs from Steam SCFA/bin/ ---
-    logger.info("\n[1/6] Copying game binaries from %s", config.SCFA_BIN)
+    # Prefer FAF-patched exe if available, fall back to stock
+    patched_exe = config.PATCH_BUILD_DIR / "ForgedAlliance_exxt.exe"
+    exe_dst = config.WOPC_BIN / config.GAME_EXE
+    if patched_exe.is_file():
+        logger.info("\n[1/6] Copying FAF-patched game binaries")
+        # Always overwrite exe with latest patched version
+        shutil.copy2(patched_exe, exe_dst)
+        logger.info("  copied  %s (FAF-patched)", config.GAME_EXE)
+    else:
+        logger.info("\n[1/6] Copying game binaries from %s", config.SCFA_BIN)
+        logger.info("  NOTE: Using stock exe. Run 'wopc patch' to build FAF-patched version.")
+
     missing = []
     for fname in config.BIN_FILES:
         src = config.SCFA_BIN / fname
+        dst = config.WOPC_BIN / fname
+        # Skip exe if we already copied the patched version
+        if fname == config.GAME_EXE and dst.exists():
+            continue
         if src.exists():
-            copy_file(src, config.WOPC_BIN / fname)
+            copy_file(src, dst)
         else:
             missing.append(fname)
     if missing:

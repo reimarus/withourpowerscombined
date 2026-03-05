@@ -10,7 +10,7 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 - Local: `C:\Users\roskv\wopc\`
 - Python 3.12+, Windows-only target
 - Venv: `.venv\Scripts\activate`, install: `pip install -e ".[dev]"`
-- CLI: `wopc status | setup | launch | validate`
+- CLI: `wopc status | setup | launch | validate | patch`
 
 ## Quality Bar
 
@@ -68,23 +68,43 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 ```
 C:\Users\roskv\wopc\          (repo)
   launcher/                    Python CLI
-    wopc.py                    Entry point (status/setup/launch/validate)
+    wopc.py                    Entry point (status/setup/launch/validate/patch)
     config.py                  Path constants, file lists, version
     deploy.py                  Creates C:\ProgramData\WOPC\ game directory
     log.py                     Logging configuration
+    toolchain.py               Compiler discovery (Clang, GCC, LD)
+    manifest.py                Patch manifest parsing (wopc_patches.toml)
+    patcher.py                 Build orchestration for patched exe
   init/                        Lua init files (deployed to WOPC\bin\)
     init_wopc.lua              VFS mount order
     CommonDataPath.lua         VFS helper functions
-  tests/                       pytest suite
-  patches/                     FAF binary patches (Phase 2+)
+  vendor/                      Git submodules
+    FA-Binary-Patches/         FAF C++ patches (66 hooks + 53 sections)
+    fa-python-binary-patcher/  Python patcher tool (compiles + injects patches)
+  wopc_patches.toml            Patch manifest (exclude list)
+  patches/build/               Build output (gitignored)
   gamedata/wopc_patches/       WOPC Lua overlay (Phase 3+)
-  tools/                       Build tooling (Phase 2+)
+  tests/                       pytest suite
+```
+
+### Patch Build Flow
+
+```
+wopc patch
+  1. Copy FA-Binary-Patches → staging dir
+  2. Remove excluded patches (per wopc_patches.toml)
+  3. Copy stock exe from Steam as base
+  4. Run fa-python-binary-patcher (Clang + GCC → patched exe)
+  5. Output → patches/build/ForgedAlliance_exxt.exe
+
+wopc setup
+  → Detects patched exe and deploys it (falls back to stock if not built)
 ```
 
 ## Phase Roadmap
 - **Phase 0** ✅ Foundation — launcher, init, CI, tests
-- **Phase 1** → Validate LOUD gameplay from WOPC directory
-- **Phase 2** → Integrate FAF binary patches
+- **Phase 1** ✅ Game launches from WOPC directory
+- **Phase 2** ✅ FAF binary patches integration
 - **Phase 3** → WOPC Lua overlay
 - **Phase 4** → Multiplayer support
 - **Phase 5** → C++ pathfinding patch
@@ -95,3 +115,6 @@ C:\Users\roskv\wopc\          (repo)
 - `deploy.py` generates `wopc_paths.lua` with escaped backslashes for Lua string literals.
 - Symlinks on Windows may need admin. `link_or_copy()` handles the fallback silently.
 - The game exe expects `/init init_wopc.lua` as a command-line argument. `InitFileDir` is set by the engine to the directory containing the init file.
+- **Patcher uses module-level config.** `patcher.py` uses `from launcher import config` then `config.SCFA_BIN`, same pattern as `deploy.py`. Mock with `patch("launcher.patcher.config")` in tests.
+- **Patcher staging is disposable.** `patches/build/staging/` is a temp copy — never modify the submodule sources directly.
+- **Toolchain must be 32-bit.** SCFA is a 32-bit game. The patcher compiles with `-m32` flags. x64 compilers will produce incompatible code.

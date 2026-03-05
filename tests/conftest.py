@@ -74,6 +74,10 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
     wopc = tmp_path / "WOPC_DEPLOY"
     wopc.mkdir(exist_ok=True)
 
+    # Patch build paths (Phase 2)
+    patch_build = tmp_path / "patch_build"
+    vendor = tmp_path / "vendor"
+
     config_patches = {
         "SCFA_STEAM": scfa,
         "SCFA_BIN": scfa / "bin",
@@ -91,6 +95,10 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "WOPC_SOUNDS": wopc / "sounds",
         "WOPC_USERMODS": wopc / "usermods",
         "WOPC_USERMAPS": wopc / "usermaps",
+        "PATCH_BUILD_DIR": patch_build,
+        "FA_PATCHES_DIR": vendor / "FA-Binary-Patches",
+        "FA_PATCHER_DIR": vendor / "fa-python-binary-patcher",
+        "PATCH_MANIFEST": tmp_path / "wopc_patches.toml",
     }
 
     with patch.multiple("launcher.config", **config_patches):

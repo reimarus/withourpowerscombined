@@ -8,6 +8,10 @@ Usage:
     wopc setup        Create WOPC directory, copy/symlink content
     wopc launch       Start the game
     wopc validate     Verify WOPC directory integrity
+    wopc patch        Build patched exe from FAF binary patches
+      --clean         Force rebuild from scratch
+      --check         Verify toolchain without building
+      --dry-run       Show what would be built
 """
 
 import hashlib
@@ -17,10 +21,13 @@ import sys
 from pathlib import Path
 
 from launcher.config import (
+    FA_PATCHES_DIR,
     GAME_EXE,
     GAME_LOG,
     LOUD_GAMEDATA,
     LOUD_ROOT,
+    PATCH_BUILD_DIR,
+    PATCH_MANIFEST,
     SCFA_BIN,
     SCFA_STEAM,
     VERSION,
@@ -69,6 +76,16 @@ def cmd_status() -> int:
         logger.info("  Gamedata:  %d SCDs", gd_count)
         mods = [d.name for d in WOPC_USERMODS.iterdir()] if WOPC_USERMODS.exists() else []
         logger.info("  User mods: %s", ", ".join(mods) if mods else "none")
+
+    # Check FAF patches
+    patched_exe = PATCH_BUILD_DIR / "ForgedAlliance_exxt.exe"
+    patches_available = FA_PATCHES_DIR.is_dir()
+    logger.info("\nPatches:     %s", FA_PATCHES_DIR)
+    logger.info("  Submodule: %s", "FOUND" if patches_available else "NOT INITIALIZED")
+    logger.info(
+        "  Built exe: %s",
+        "READY" if patched_exe.is_file() else "NOT BUILT (run: wopc patch)",
+    )
 
     if not scfa_ok:
         logger.error(
@@ -203,6 +220,52 @@ def cmd_validate() -> int:
     return 0 if errors == 0 else 1
 
 
+def cmd_patch(args: list[str]) -> int:
+    """Build the patched game executable from FAF binary patches."""
+    clean = "--clean" in args
+    check_only = "--check" in args
+    dry_run = "--dry-run" in args
+
+    from launcher.manifest import ManifestError, load_manifest
+    from launcher.toolchain import ToolchainError, find_toolchain
+
+    # Check toolchain
+    try:
+        toolchain = find_toolchain()
+    except ToolchainError as exc:
+        logger.error("ERROR: %s", exc)
+        return 1
+
+    if check_only:
+        logger.info("\nToolchain OK. Ready to build patches.")
+        return 0
+
+    # Load manifest
+    try:
+        manifest = load_manifest(PATCH_MANIFEST)
+    except ManifestError as exc:
+        logger.error("ERROR: %s", exc)
+        return 1
+
+    if dry_run:
+        logger.info("\nDry run — would build patches with:")
+        logger.info("  Toolchain: %s", toolchain)
+        logger.info("  Manifest:  %s", PATCH_MANIFEST)
+        logger.info("  Output:    %s", PATCH_BUILD_DIR / "ForgedAlliance_exxt.exe")
+        return 0
+
+    # Build
+    from launcher.patcher import PatchBuildError, build_patches
+
+    try:
+        build_patches(toolchain, manifest, clean=clean)
+    except PatchBuildError as exc:
+        logger.error("ERROR: %s", exc)
+        return 1
+
+    return 0
+
+
 def main() -> int:
     """CLI entry point."""
     # Parse --verbose/-v flag
@@ -215,6 +278,7 @@ def main() -> int:
         return 0
 
     cmd = args[0].lower()
+    cmd_args = args[1:]
 
     commands = {
         "status": cmd_status,
@@ -222,6 +286,10 @@ def main() -> int:
         "launch": cmd_launch,
         "validate": cmd_validate,
     }
+
+    # Commands that accept extra arguments
+    if cmd == "patch":
+        return cmd_patch(cmd_args)
 
     if cmd in commands:
         return commands[cmd]()

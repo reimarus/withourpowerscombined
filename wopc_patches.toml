@@ -1,0 +1,17 @@
+# WOPC Patch Manifest — controls which FAF binary patches to include.
+#
+# Strategy: "include_all" means every hook/section from FA-Binary-Patches
+# is compiled EXCEPT those listed in the exclude tables below.
+#
+# To exclude a patch, add its filename to the appropriate list.
+# To switch to explicit inclusion, change strategy to "explicit" and
+# populate the [include] tables instead.
+
+[build]
+strategy = "include_all"
+
+[exclude]
+# FAF lobby networking — WOPC uses direct connect, not FAF's ICE relay
+hooks = ["gpg_net.cpp", "gpg_net.h"]
+# gpg_net.cpp: FAF matchmaking protocol  |  HashChecker.cpp: FAF client hash verification
+sections = ["gpg_net.cpp", "HashChecker.cpp"]
