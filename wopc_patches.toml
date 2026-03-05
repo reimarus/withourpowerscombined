@@ -12,6 +12,10 @@ strategy = "include_all"
 
 [exclude]
 # FAF lobby networking — WOPC uses direct connect, not FAF's ICE relay
-hooks = ["gpg_net.cpp", "gpg_net.h"]
-# gpg_net.cpp: FAF matchmaking protocol  |  HashChecker.cpp: FAF client hash verification
-sections = ["gpg_net.cpp", "HashChecker.cpp"]
+# DesyncFix.cpp: hooks into excluded networking functions
+hooks = ["gpg_net.cpp", "gpg_net.h", "DesyncFix.cpp"]
+# gpg_net.cpp: FAF matchmaking protocol
+# moho_decode.cpp: FAF network decoding (depends on gpg_net)
+# moho_input.cpp: FAF input handling (depends on moho_decode)
+# HashChecker.cpp: FAF client hash verification
+sections = ["gpg_net.cpp", "moho_decode.cpp", "moho_input.cpp", "HashChecker.cpp"]

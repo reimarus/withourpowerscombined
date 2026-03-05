@@ -58,10 +58,11 @@ BIN_FILES = [
     "msvcm80.dll",
     "msvcp80.dll",
     "msvcr80.dll",
-    # BugSplat crash reporting
+    # BugSplat crash reporting — keep the DLLs (exe links against them at load)
+    # but omit BsSndRpt.exe (the GPG reporter GUI) so crash dumps stay on disk
+    # for local analysis instead of being sent to a defunct server.
     "BugSplat.dll",
     "BugSplatRc.dll",
-    "BsSndRpt.exe",
     "DbgHelp.dll",
     # Sound / UI / compression
     "SHSMP.DLL",
@@ -100,6 +101,12 @@ FA_PATCHES_DIR = VENDOR_DIR / "FA-Binary-Patches"
 FA_PATCHER_DIR = VENDOR_DIR / "fa-python-binary-patcher"
 PATCH_BUILD_DIR = _REPO_ROOT / "patches" / "build"
 PATCH_MANIFEST = _REPO_ROOT / "wopc_patches.toml"
+
+# FAF distributes a specific base exe that the binary patches are built against.
+# The Steam SupremeCommander.exe has different code addresses, so hooks would
+# target wrong locations.  We download FAF's exe once and cache it locally.
+FAF_BASE_EXE_URL = "https://content.faforever.com/build/ForgedAlliance_base.exe"
+FAF_BASE_EXE_CACHE = PATCH_BUILD_DIR / "ForgedAlliance_base.exe"
 
 # --- Game exe name and launch arguments ---
 
