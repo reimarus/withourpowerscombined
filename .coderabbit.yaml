@@ -1,0 +1,32 @@
+# CodeRabbit AI Code Reviewer configuration
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+language: en-US
+reviews:
+  profile: chill  # Less strict for early-stage project
+  request_changes_workflow: false  # Suggest, don't block
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+  path_instructions:
+    - path: "launcher/**/*.py"
+      instructions: |
+        This is a Python CLI launcher for a game mod project (Supreme Commander: Forged Alliance).
+        Focus on: error handling, Windows path compatibility, correct use of pathlib,
+        and testability (functions should be mockable).
+    - path: "init/**/*.lua"
+      instructions: |
+        These are Lua init files for SCFA's VFS mount system.
+        SCFA uses a custom Lua 5.0 fork with != (not ~=) and continue keyword.
+        Focus on: correct mount order, path resolution, completeness.
+    - path: "tests/**/*.py"
+      instructions: |
+        Test suite using pytest. Focus on: adequate coverage, proper use of
+        tmp_path fixtures (no real filesystem), meaningful assertions.
+chat:
+  auto_reply: true
