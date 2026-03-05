@@ -11,8 +11,8 @@
 --   3. LOUD maps and sounds
 --   4. Vanilla SCFA content     (fonts, textures, effects, env, etc.)
 --   5. WOPC patches overlay     (our Lua fixes/enhancements)
---   6. User mods                (BetterPathing, etc.)
---   7. User maps
+--   6. User maps
+--   7. User mods                (loaded LAST — shadow everything above)
 -- =============================================================================
 
 do
@@ -67,14 +67,14 @@ local wopc_patches = WOPCRoot .. '\\gamedata\\wopc_patches.scd'
 -- mount_dir(wopc_patches, '/')
 
 -- =========================================================================
--- 6. User mods (BetterPathing, etc.)
--- =========================================================================
-mount_mods(WOPCRoot .. '\\usermods')
-
--- =========================================================================
--- 7. User maps
+-- 6. User maps
 -- =========================================================================
 mount_dir(WOPCRoot .. '\\usermaps', '/maps')
+
+-- =========================================================================
+-- 7. User mods (loaded LAST — shadow everything, including maps)
+-- =========================================================================
+mount_mods(WOPCRoot .. '\\usermods')
 
 -- =========================================================================
 -- Hook paths and protocols (same as LOUD)

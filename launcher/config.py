@@ -45,27 +45,36 @@ LOUD_USERMAPS = LOUD_ROOT / "usermaps"
 # --- Files to copy from SCFA/bin/ to WOPC/bin/ ---
 
 BIN_FILES = [
+    # Core engine
     "SupremeCommander.exe",
     "MohoEngine.dll",
+    "LuaPlus_1081.dll",
+    "game.dat",
+    # GPG libraries
     "gpgcore.dll",
     "gpggal.dll",
-    "LuaPlus_1081.dll",
+    # DirectX / Visual C++ runtime
     "d3dx9_31.dll",
     "msvcm80.dll",
     "msvcp80.dll",
     "msvcr80.dll",
+    # BugSplat crash reporting
     "BugSplat.dll",
     "BugSplatRc.dll",
+    "BsSndRpt.exe",
     "DbgHelp.dll",
+    # Sound / UI / compression
     "SHSMP.DLL",
     "SHW32d.DLL",
     "zlibwapi.dll",
     "wxmsw24u-vs80.dll",
     "sx32w.dll",
-    "steam_api.dll",
     "GDFBinary.dll",
-    "game.dat",
+    # Steam
+    "steam_api.dll",
     "steam_appid.txt",
+    # Assets
+    "splash.png",
 ]
 
 # --- Files from LOUD/bin/ to copy to WOPC/bin/ ---
