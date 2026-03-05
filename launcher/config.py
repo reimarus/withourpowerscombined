@@ -91,6 +91,16 @@ INIT_FILES = [
     "CommonDataPath.lua",
 ]
 
+# --- Patch build paths ---
+# These are relative to the repo root (where pyproject.toml lives)
+
+_REPO_ROOT = Path(__file__).parent.parent.resolve()
+VENDOR_DIR = _REPO_ROOT / "vendor"
+FA_PATCHES_DIR = VENDOR_DIR / "FA-Binary-Patches"
+FA_PATCHER_DIR = VENDOR_DIR / "fa-python-binary-patcher"
+PATCH_BUILD_DIR = _REPO_ROOT / "patches" / "build"
+PATCH_MANIFEST = _REPO_ROOT / "wopc_patches.toml"
+
 # --- Game exe name and launch arguments ---
 
 GAME_EXE = "SupremeCommander.exe"
