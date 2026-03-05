@@ -1,6 +1,8 @@
 """WOPC patcher — orchestrates building the patched game executable."""
 
+import ctypes
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -15,6 +17,32 @@ logger = logging.getLogger("wopc.patcher")
 
 class PatchBuildError(Exception):
     """Raised when the patch build fails."""
+
+
+def _short_path(path: Path) -> str:
+    """Convert to 8.3 short path on Windows to avoid spaces in os.system() calls.
+
+    The FAF patcher uses ``os.system()`` which passes commands through
+    ``cmd.exe``.  Paths containing spaces (e.g. ``C:\\Program Files\\...``)
+    break because they are interpolated unquoted into f-strings.  Short
+    path names (e.g. ``PROGRA~1``) side-step the limitation entirely.
+
+    Falls back to the original string if short names are unavailable or
+    if the path doesn't contain spaces.
+    """
+    path_str = str(path)
+    if " " not in path_str:
+        return path_str
+
+    try:
+        buf_size = ctypes.windll.kernel32.GetShortPathNameW(path_str, None, 0)  # type: ignore[union-attr]
+        if buf_size == 0:
+            return path_str
+        buf = ctypes.create_unicode_buffer(buf_size)
+        ctypes.windll.kernel32.GetShortPathNameW(path_str, buf, buf_size)  # type: ignore[union-attr]
+        return buf.value
+    except (AttributeError, OSError):
+        return path_str
 
 
 def _prepare_staging(staging_dir: Path, patches_src: Path, clean: bool = False) -> None:
@@ -49,13 +77,48 @@ def _prepare_staging(staging_dir: Path, patches_src: Path, clean: bool = False) 
         shutil.copy2(sig, staging_dir / "SigPatches.txt")
         logger.info("  Copied SigPatches.txt")
 
-    # Copy asm.h (root-level header used by hooks)
-    asm_h = patches_src / "asm.h"
-    if asm_h.is_file():
-        shutil.copy2(asm_h, staging_dir / "asm.h")
+    # Copy root-level source files expected by includes
+    for root_file in ("asm.h", "workflow.cpp"):
+        src_file = patches_src / root_file
+        if src_file.is_file():
+            shutil.copy2(src_file, staging_dir / root_file)
+            logger.info("  Copied %s", root_file)
 
     # Create build output directory
     (staging_dir / "build").mkdir(exist_ok=True)
+
+    # Apply MinGW Clang compatibility fixups to staging copies.
+    # FAF upstream targets MSVC-hosted Clang where <cstddef> (NULL, offsetof)
+    # is implicitly available.  MinGW Clang needs an explicit include.
+    _apply_mingw_compat(staging_dir)
+
+
+def _apply_mingw_compat(staging_dir: Path) -> None:
+    """Patch staging headers for MinGW-targeted Clang compatibility.
+
+    FAF patches are developed against MSVC-hosted Clang where standard
+    macros like ``NULL`` and ``offsetof`` are implicitly available.
+    MinGW Clang requires an explicit ``#include <cstddef>`` for these.
+
+    Modifies files **in-place** in the staging copy (never the submodule).
+    """
+    lua_h = staging_dir / "include" / "lua" / "lua.h"
+    if not lua_h.is_file():
+        return
+
+    content = lua_h.read_text(encoding="utf-8")
+    shim = (
+        "// WOPC MinGW compat: provide NULL and offsetof for non-MSVC targets\n#include <cstddef>\n"
+    )
+
+    # Insert after the first #pragma once (if present), otherwise at the top
+    if "#pragma once" in content:
+        content = content.replace("#pragma once", "#pragma once\n" + shim, 1)
+    else:
+        content = shim + content
+
+    lua_h.write_text(content, encoding="utf-8")
+    logger.info("  Applied MinGW compatibility shim to include/lua/lua.h")
 
 
 def _copy_base_exe(staging_dir: Path) -> Path:
@@ -107,16 +170,25 @@ def _run_patcher(
             f"Did you initialize submodules? Run: git submodule update --init"
         )
 
+    # The FAF patcher uses os.system() which can't handle spaces in paths.
+    # Convert toolchain paths to 8.3 short names to avoid this limitation.
     cmd = [
         sys.executable,
         str(patcher_main),
         str(staging_dir),
-        str(toolchain.clangpp),
-        str(toolchain.ld),
-        str(toolchain.gpp),
+        _short_path(toolchain.clangpp),
+        _short_path(toolchain.ld),
+        _short_path(toolchain.gpp),
     ]
 
     logger.info("  Running patcher: %s", " ".join(cmd))
+
+    # The FAF patcher invokes compilers via os.system() which spawns
+    # subprocesses (cc1plus.exe, as.exe, etc.) that need the toolchain's
+    # DLLs on PATH.  Ensure the toolchain bin directories are available.
+    env = os.environ.copy()
+    toolchain_dirs = {str(p.parent) for p in (toolchain.clangpp, toolchain.gpp, toolchain.ld)}
+    env["PATH"] = os.pathsep.join(toolchain_dirs) + os.pathsep + env.get("PATH", "")
 
     try:
         result = subprocess.run(
@@ -124,6 +196,7 @@ def _run_patcher(
             capture_output=True,
             text=True,
             timeout=600,  # 10 minute timeout for compilation
+            env=env,
         )
     except subprocess.TimeoutExpired as exc:
         raise PatchBuildError("Patcher timed out after 10 minutes") from exc
