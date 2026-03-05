@@ -83,35 +83,56 @@ class TestPrepareStaging:
 
 
 class TestCopyBaseExe:
-    """Tests for copying the stock SCFA executable."""
+    """Tests for copying the FAF base executable."""
 
-    def test_copies_exe_to_staging(self, tmp_path: Path) -> None:
-        """Should copy SupremeCommander.exe as ForgedAlliance_base.exe."""
+    def test_copies_cached_exe_to_staging(self, tmp_path: Path) -> None:
+        """Should copy cached FAF base exe as ForgedAlliance_base.exe."""
         staging = tmp_path / "staging"
         staging.mkdir()
 
-        scfa_bin = tmp_path / "SCFA" / "bin"
-        scfa_bin.mkdir(parents=True)
-        (scfa_bin / "SupremeCommander.exe").write_bytes(b"\xde\xad" * 32)
+        cache_path = tmp_path / "cached" / "ForgedAlliance_base.exe"
+        cache_path.parent.mkdir(parents=True)
+        cache_path.write_bytes(b"\xde\xad" * 32)
 
         with patch("launcher.patcher.config") as mock_config:
-            mock_config.SCFA_BIN = scfa_bin
-            mock_config.SCFA_STEAM = tmp_path / "SCFA"
+            mock_config.FAF_BASE_EXE_CACHE = cache_path
+            mock_config.FAF_BASE_EXE_URL = "https://example.com/test.exe"
             result = _copy_base_exe(staging)
 
         assert result == staging / "ForgedAlliance_base.exe"
         assert result.read_bytes() == b"\xde\xad" * 32
 
-    def test_missing_exe_raises(self, tmp_path: Path) -> None:
-        """Should raise PatchBuildError if stock exe doesn't exist."""
+    def test_download_on_cache_miss(self, tmp_path: Path) -> None:
+        """Should download FAF base exe when not cached."""
         staging = tmp_path / "staging"
         staging.mkdir()
 
-        with patch("launcher.patcher.config") as mock_config:
-            mock_config.SCFA_BIN = tmp_path / "nope" / "bin"
-            mock_config.SCFA_STEAM = tmp_path / "nope"
-            with pytest.raises(PatchBuildError, match="not found"):
-                _copy_base_exe(staging)
+        cache_path = tmp_path / "cached" / "ForgedAlliance_base.exe"
+
+        with (
+            patch("launcher.patcher.config") as mock_config,
+            patch("launcher.patcher.urllib.request") as mock_urllib,
+        ):
+            mock_config.FAF_BASE_EXE_CACHE = cache_path
+            mock_config.FAF_BASE_EXE_URL = "https://example.com/test.exe"
+
+            # Simulate download by creating the file when urlopen is called
+            def fake_urlopen(req):
+                import io
+
+                return io.BytesIO(b"\xca\xfe" * 16)
+
+            mock_urllib.Request.return_value = "fake_request"
+            mock_urllib.urlopen.return_value.__enter__ = lambda s: fake_urlopen(None)
+            mock_urllib.urlopen.return_value.__exit__ = lambda s, *a: None
+
+            # Manually create cache file to simulate download
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_bytes(b"\xca\xfe" * 16)
+
+            result = _copy_base_exe(staging)
+
+        assert result == staging / "ForgedAlliance_base.exe"
 
 
 class TestBuildPatches:
@@ -156,9 +177,11 @@ class TestBuildPatches:
     ) -> None:
         """Full build flow with mocked patcher subprocess."""
         build_dir = tmp_path / "build"
-        scfa_bin = tmp_path / "SCFA" / "bin"
-        scfa_bin.mkdir(parents=True)
-        (scfa_bin / "SupremeCommander.exe").write_bytes(b"\xde\xad" * 32)
+
+        # Create cached FAF base exe
+        cache_path = tmp_path / "cached" / "ForgedAlliance_base.exe"
+        cache_path.parent.mkdir(parents=True)
+        cache_path.write_bytes(b"\xde\xad" * 32)
 
         patcher_dir = tmp_path / "patcher"
         patcher_dir.mkdir()
@@ -182,9 +205,8 @@ class TestBuildPatches:
             mock_config.FA_PATCHES_DIR = fake_patches_src
             mock_config.FA_PATCHER_DIR = patcher_dir
             mock_config.PATCH_BUILD_DIR = build_dir
-            mock_config.SCFA_BIN = scfa_bin
-            mock_config.SCFA_STEAM = tmp_path / "SCFA"
-            mock_config.GAME_EXE = "SupremeCommander.exe"
+            mock_config.FAF_BASE_EXE_CACHE = cache_path
+            mock_config.FAF_BASE_EXE_URL = "https://example.com/test.exe"
             result = build_patches(fake_toolchain, empty_manifest)
 
         assert result == build_dir / "ForgedAlliance_exxt.exe"
@@ -199,9 +221,11 @@ class TestBuildPatches:
     ) -> None:
         """Patcher returning nonzero exit code should raise PatchBuildError."""
         build_dir = tmp_path / "build"
-        scfa_bin = tmp_path / "SCFA" / "bin"
-        scfa_bin.mkdir(parents=True)
-        (scfa_bin / "SupremeCommander.exe").write_bytes(b"\x00" * 32)
+
+        # Create cached FAF base exe
+        cache_path = tmp_path / "cached" / "ForgedAlliance_base.exe"
+        cache_path.parent.mkdir(parents=True)
+        cache_path.write_bytes(b"\x00" * 32)
 
         patcher_dir = tmp_path / "patcher"
         patcher_dir.mkdir()
@@ -222,9 +246,8 @@ class TestBuildPatches:
             mock_config.FA_PATCHES_DIR = fake_patches_src
             mock_config.FA_PATCHER_DIR = patcher_dir
             mock_config.PATCH_BUILD_DIR = build_dir
-            mock_config.SCFA_BIN = scfa_bin
-            mock_config.SCFA_STEAM = tmp_path / "SCFA"
-            mock_config.GAME_EXE = "SupremeCommander.exe"
+            mock_config.FAF_BASE_EXE_CACHE = cache_path
+            mock_config.FAF_BASE_EXE_URL = "https://example.com/test.exe"
             build_patches(fake_toolchain, empty_manifest)
 
     def test_clean_forces_rebuild(
@@ -240,9 +263,10 @@ class TestBuildPatches:
         old_exe = build_dir / "ForgedAlliance_exxt.exe"
         old_exe.write_bytes(b"\x00" * 16)  # old/small
 
-        scfa_bin = tmp_path / "SCFA" / "bin"
-        scfa_bin.mkdir(parents=True)
-        (scfa_bin / "SupremeCommander.exe").write_bytes(b"\xde\xad" * 32)
+        # Create cached FAF base exe
+        cache_path = tmp_path / "cached" / "ForgedAlliance_base.exe"
+        cache_path.parent.mkdir(parents=True)
+        cache_path.write_bytes(b"\xde\xad" * 32)
 
         patcher_dir = tmp_path / "patcher"
         patcher_dir.mkdir()
@@ -264,9 +288,8 @@ class TestBuildPatches:
             mock_config.FA_PATCHES_DIR = fake_patches_src
             mock_config.FA_PATCHER_DIR = patcher_dir
             mock_config.PATCH_BUILD_DIR = build_dir
-            mock_config.SCFA_BIN = scfa_bin
-            mock_config.SCFA_STEAM = tmp_path / "SCFA"
-            mock_config.GAME_EXE = "SupremeCommander.exe"
+            mock_config.FAF_BASE_EXE_CACHE = cache_path
+            mock_config.FAF_BASE_EXE_URL = "https://example.com/test.exe"
             result = build_patches(fake_toolchain, empty_manifest, clean=True)
 
         # Should have new content, not the old 16-byte file

@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 from launcher import config
@@ -121,27 +122,58 @@ def _apply_mingw_compat(staging_dir: Path) -> None:
     logger.info("  Applied MinGW compatibility shim to include/lua/lua.h")
 
 
+def _download_faf_base_exe(cache_path: Path) -> Path:
+    """Download FAF's base exe if not already cached.
+
+    FAF binary patches use hardcoded addresses for a specific base exe
+    distributed by FAF.  The Steam SupremeCommander.exe has different code
+    layout and cannot be used.
+
+    Returns:
+        Path to the cached FAF base exe.
+
+    Raises:
+        PatchBuildError: If the download fails.
+    """
+    if cache_path.is_file():
+        logger.info("  Using cached FAF base exe: %s", cache_path)
+        return cache_path
+
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    url = config.FAF_BASE_EXE_URL
+    logger.info("  Downloading FAF base exe from %s ...", url)
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "WOPC-Patcher/1.0"})
+        with urllib.request.urlopen(req) as resp, cache_path.open("wb") as f:
+            shutil.copyfileobj(resp, f)
+    except (urllib.error.URLError, OSError) as exc:
+        raise PatchBuildError(
+            f"Failed to download FAF base exe from {url}: {exc}\n"
+            "Check your internet connection, or manually place "
+            f"ForgedAlliance_base.exe at {cache_path}"
+        ) from exc
+
+    logger.info("  Downloaded %s (%d bytes)", cache_path.name, cache_path.stat().st_size)
+    return cache_path
+
+
 def _copy_base_exe(staging_dir: Path) -> Path:
-    """Copy the stock SCFA exe to the staging directory as ForgedAlliance_base.exe.
+    """Copy the FAF base exe to the staging directory as ForgedAlliance_base.exe.
+
+    Downloads from FAF's content server on first use (cached for future builds).
 
     Returns:
         Path to the copied base exe.
 
     Raises:
-        PatchBuildError: If the source exe doesn't exist.
+        PatchBuildError: If the download or copy fails.
     """
-    src_exe = config.SCFA_BIN / "SupremeCommander.exe"
+    src_exe = _download_faf_base_exe(config.FAF_BASE_EXE_CACHE)
     dst_exe = staging_dir / "ForgedAlliance_base.exe"
 
-    if not src_exe.is_file():
-        raise PatchBuildError(
-            f"Stock SCFA executable not found at {src_exe}. "
-            f"Check your SCFA_STEAM path: {config.SCFA_STEAM}"
-        )
-
-    # Always copy fresh to ensure correct version
     shutil.copy2(src_exe, dst_exe)
-    logger.info("  Copied base exe from %s", src_exe)
+    logger.info("  Copied base exe to staging")
     return dst_exe
 
 
