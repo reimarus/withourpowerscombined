@@ -101,7 +101,7 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "PATCH_MANIFEST": tmp_path / "wopc_patches.toml",
     }
 
-    with patch.multiple("launcher.config", **config_patches):
+    with patch.multiple("launcher.config", **config_patches):  # type: ignore[call-overload]
         yield config_patches
 
 

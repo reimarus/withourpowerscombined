@@ -1,7 +1,7 @@
 import logging
 import threading
 
-import customtkinter as ctk
+import customtkinter as ctk  # type: ignore[import-untyped]
 
 from launcher import config
 from launcher.gui.worker import SetupWorker

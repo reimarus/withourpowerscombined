@@ -1,5 +1,6 @@
 import threading
 from collections.abc import Callable
+from pathlib import Path
 
 from launcher.deploy import run_setup
 
@@ -19,13 +20,13 @@ class SetupWorker(threading.Thread):
         self.on_log("Starting WOPC deployment in background...")
         try:
             # We override the direct console print/logging by wrapping it or just running
-            # For now, run_setup() logs to the standard python logger. We will catch
             # its success/failure status.
-            success = run_setup() == 0
-            if success:
-                self.on_log("Deployment completed successfully!")
-            else:
-                self.on_log("Deployment failed. Check WOPC.log for details.")
+            repo_root = Path(__file__).resolve().parent.parent.parent
+            init_dir = repo_root / "init"
+            run_setup(init_dir)
+
+            success = True
+            self.on_log("Deployment completed successfully!")
             self.on_complete(success)
         except Exception as e:
             self.on_log(f"Critical error during setup: {e}")

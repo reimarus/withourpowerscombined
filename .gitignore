@@ -54,3 +54,7 @@ patches/build/
 
 # Helper scripts (local only)
 tools/fix_python_path.ps1
+
+dist/
+build/
+*.spec

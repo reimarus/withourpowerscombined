@@ -34,7 +34,7 @@ def test_wopc_app_initialization(mocker):
 
 def test_setup_worker_success(mocker):
     """Test the SetupWorker thread logic on success."""
-    mocker.patch("launcher.gui.worker.run_setup", return_value=0)
+    mocker.patch("launcher.gui.worker.run_setup", return_value=None)
 
     mock_complete = mocker.MagicMock()
     mock_log = mocker.MagicMock()
@@ -49,7 +49,7 @@ def test_setup_worker_success(mocker):
 
 def test_setup_worker_failure(mocker):
     """Test the SetupWorker thread logic on failure."""
-    mocker.patch("launcher.gui.worker.run_setup", return_value=1)
+    mocker.patch("launcher.gui.worker.run_setup", side_effect=Exception("Failed"))
 
     mock_complete = mocker.MagicMock()
     mock_log = mocker.MagicMock()
@@ -58,4 +58,4 @@ def test_setup_worker_failure(mocker):
     worker.run()
 
     mock_complete.assert_called_once_with(False)
-    mock_log.assert_any_call("Deployment failed. Check WOPC.log for details.")
+    mock_log.assert_any_call("Critical error during setup: Failed")
