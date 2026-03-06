@@ -50,6 +50,12 @@ class WopcApp(BaseApp):  # type: ignore
         self._build_sidebar()
         self._build_main_view()
         self._check_installation_status()
+        self._bind_hotkeys()
+
+    def _bind_hotkeys(self) -> None:
+        """Bind global keyboard shortcuts."""
+        self.bind("<Return>", lambda e: self._on_primary_click())
+        self.bind("<Escape>", lambda e: self.destroy())
 
     def _build_sidebar(self) -> None:
         """Construct the left sidebar navigation and status area."""

@@ -21,6 +21,7 @@ def test_launch_gui_mocks_mainloop(mocker):
 
 def test_wopc_app_initialization(mocker):
     """Test the GUI components are built correctly."""
+    mocker.patch.object(WopcApp, "bind")
     mocker.patch("launcher.gui.app.ctk.CTk")
 
     app = WopcApp()
@@ -30,6 +31,11 @@ def test_wopc_app_initialization(mocker):
     assert hasattr(app, "main_content")
     assert hasattr(app, "primary_btn")
     assert hasattr(app, "log_textbox")
+
+    # Verify hotkeys were bound
+    assert app.bind.call_count >= 2
+    app.bind.assert_any_call("<Return>", mocker.ANY)
+    app.bind.assert_any_call("<Escape>", mocker.ANY)
 
 
 def test_setup_worker_success(mocker):
