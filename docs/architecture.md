@@ -130,17 +130,17 @@ Create `wopc_patches.scd` containing Lua files that:
 
 Content manifest system for multiplayer sync validation. Players compare checksums before connecting.
 
-### Phase 5: WOPC Advanced Launcher
+### Phase 5: WOPC Advanced Launcher (Complete)
 
 Evolve the command-line script into a graphical interface using CustomTkinter. Provide discrete selection of mod preferences and seamless launching.
 
-### Phase 6: In-Game FAF UI Integration
+### Phase 6: In-Game FAF UI Integration (Complete)
 
-Import FAF's Lua UI as a submodule, compile it into an SCD, and inject it via the VFS layer to provide a modern interface overlapping the legacy LOUD UI.
+Import FAF's Lua UI as a submodule, compile it into an SCD, and inject it via the VFS layer to provide a modern interface overlapping the legacy LOUD UI. Built a custom Mod Manager config UI.
 
-### Phase 7: deLOUDing & Standalone Overhaul
+### Phase 7: deLOUDing & Standalone Overhaul (Complete)
 
-Severing all dependencies on local LOUD installations. All necessary gamedata and assets are sourced directly from the WOPC repository and GitHub releases. Overhaul the CustomTkinter launcher into a modern, Discord-style dark aesthetic.
+Severing all dependencies on local LOUD installations. All necessary gamedata and assets are sourced directly from the WOPC repository and GitHub releases. Overhauled the CustomTkinter launcher into a modern, Discord-style dark match lobby with direct map launching.
 
 ### Phase 8: C++ Engine Patches & Pathfinding
 

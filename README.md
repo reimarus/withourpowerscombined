@@ -41,8 +41,8 @@ WOPC creates an isolated game directory at `C:\ProgramData\WOPC\` containing:
 | 3 | Complete | WOPC Lua overlay - compatibility patches, new features |
 | 4 | Complete | Multiplayer support - content manifests, version checking |
 | 5 | Planned | First C++ engine patch - pathfinding improvement |
-| 6 | Planned | WOPC Advanced Launcher - GUI, discrete mod selection |
-| 7 | Planned | Roguelike Campaign - persistent, generative co-op mode |
+| 6 | Complete | WOPC Advanced Launcher - GUI, discrete mod selection |
+| 7 | Complete | Match Lobby - Discord UI, standalone direct launch |
 | 8 | Planned | Deep C++ Refactoring - rendering optimizations, simulation speed |
 
 See [docs/architecture.md](docs/architecture.md) for the full technical plan.
