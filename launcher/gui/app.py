@@ -80,7 +80,8 @@ class WopcApp(BaseApp):  # type: ignore
         from pathlib import Path
 
         if getattr(sys, "frozen", False):
-            base_dir = Path(sys.executable).parent.resolve()
+            # PyInstaller extracts bundled data to _MEIPASS
+            base_dir = Path(sys._MEIPASS)
         else:
             base_dir = Path(__file__).parent.parent.parent.resolve()
 
@@ -202,9 +203,59 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.selected_map_label.grid(row=0, column=0, pady=(10, 5), padx=20, sticky="w")
 
+        self.selected_map_label.grid(row=0, column=0, pady=(10, 5), padx=20, sticky="w")
+
+        # Map Filters
+        self.filter_frame = ctk.CTkFrame(self.config_panel, fg_color="transparent")
+        self.filter_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 10))
+        self.filter_frame.grid_columnconfigure(0, weight=1)
+
+        self.search_var = ctk.StringVar()
+        self.search_var.trace_add("write", self._apply_map_filters)
+        self.search_entry = ctk.CTkEntry(
+            self.filter_frame,
+            textvariable=self.search_var,
+            placeholder_text="Search maps...",
+            height=28,
+        )
+        self.search_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+
+        self.type_var = ctk.StringVar(value="All")
+        self.type_menu = ctk.CTkOptionMenu(
+            self.filter_frame,
+            values=["All", "Skirmish", "Campaign"],
+            variable=self.type_var,
+            command=self._apply_map_filters,
+            width=100,
+            height=28,
+        )
+        self.type_menu.grid(row=0, column=1, padx=(0, 10))
+
+        self.players_var = ctk.StringVar(value="Any")
+        self.players_menu = ctk.CTkOptionMenu(
+            self.filter_frame,
+            values=["Any", "2", "4", "6", "8", "10", "12", "14", "16"],
+            variable=self.players_var,
+            command=self._apply_map_filters,
+            width=70,
+            height=28,
+        )
+        self.players_menu.grid(row=0, column=2, padx=(0, 10))
+
+        self.size_var = ctk.StringVar(value="Any")
+        self.size_menu = ctk.CTkOptionMenu(
+            self.filter_frame,
+            values=["Any", "5km", "10km", "20km", "40km", "81km"],
+            variable=self.size_var,
+            command=self._apply_map_filters,
+            width=80,
+            height=28,
+        )
+        self.size_menu.grid(row=0, column=3)
+
         # Scrollable Map Selector
         self.map_scroll = ctk.CTkScrollableFrame(self.config_panel, fg_color="transparent")
-        self.map_scroll.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.map_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
         self.map_buttons: list[Any] = []
 
@@ -327,18 +378,46 @@ class WopcApp(BaseApp):  # type: ignore
         self._update_play_summary()
 
     def _refresh_map_list(self) -> None:
-        """Scan the maps directory and populate the UI map selector."""
+        """Scan the maps directory and cache the list, then apply filters."""
+        self._all_maps = getattr(self, "_all_maps", [])
+        if not self._all_maps:
+            self._all_maps = map_scanner.scan_all_maps()
+
+        self._apply_map_filters()
+
+    def _apply_map_filters(self, *args: Any) -> None:
+        """Filter the cached map list and rebuild the UI buttons."""
         for btn in self.map_buttons:
             btn.destroy()
         self.map_buttons.clear()
 
-        all_maps = map_scanner.scan_all_maps()
-        if not all_maps:
+        if not getattr(self, "_all_maps", None):
             return
 
         active_map = prefs.get_active_map()
+        search_term = self.search_var.get().lower()
+        map_type = self.type_var.get()
+        players = self.players_var.get()
+        size = self.size_var.get()
 
-        for idx, info in enumerate(all_maps):
+        filtered_maps = []
+        for info in self._all_maps:
+            if search_term:
+                name_match = search_term in info.display_name.lower()
+                folder_match = search_term in info.folder_name.lower()
+                if not name_match and not folder_match:
+                    continue
+            if map_type == "Skirmish" and info.is_campaign:
+                continue
+            if map_type == "Campaign" and not info.is_campaign:
+                continue
+            if players != "Any" and str(info.max_players) != players:
+                continue
+            if size != "Any" and info.size_label != size:
+                continue
+            filtered_maps.append(info)
+
+        for idx, info in enumerate(filtered_maps):
             is_active = info.folder_name == active_map
 
             # Rich label: "Setons Clutch — 8p, 20km"

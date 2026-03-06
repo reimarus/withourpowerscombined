@@ -62,6 +62,7 @@ class TestParseScenario:
         assert info.max_players == 8
         assert info.size_label == "40km"
         assert info.description == "A classic naval map."
+        assert not info.is_campaign
 
     def test_handles_missing_metadata(self, maps_dir: Path) -> None:
         scenario = maps_dir / "TestMap" / "TestMap_scenario.lua"
@@ -70,6 +71,16 @@ class TestParseScenario:
         assert info.display_name == "TestMap"  # falls back to folder name
         assert info.max_players == 0
         assert info.size_label == "?"
+        assert not info.is_campaign
+
+    def test_detects_campaign_prefix(self, tmp_path: Path) -> None:
+        scenario_dir = tmp_path / "X1CA_001"
+        scenario_dir.mkdir()
+        scenario = scenario_dir / "X1CA_001_scenario.lua"
+        scenario.write_text("ScenarioInfo = {}", encoding="utf-8")
+        info = map_scanner.parse_scenario(scenario)
+        assert info is not None
+        assert info.is_campaign
 
     def test_returns_none_for_unreadable_file(self, tmp_path: Path) -> None:
         missing = tmp_path / "nonexistent_scenario.lua"

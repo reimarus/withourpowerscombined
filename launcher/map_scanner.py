@@ -32,6 +32,7 @@ class MapInfo:
     max_players: int
     size_label: str
     description: str
+    is_campaign: bool
 
 
 def _extract_lua_string(content: str, key: str) -> str:
@@ -81,12 +82,16 @@ def parse_scenario(scenario_path: Path) -> MapInfo | None:
     if not display_name:
         display_name = folder_name
 
+    # SCFA campaign maps use specific prefixes
+    is_cam = "CA_" in folder_name or folder_name.startswith(("SCMA_", "X1CA_"))
+
     return MapInfo(
         folder_name=folder_name,
         display_name=display_name,
         max_players=army_count,
         size_label=size_label,
         description=description,
+        is_campaign=is_cam,
     )
 
 
