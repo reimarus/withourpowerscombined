@@ -45,7 +45,7 @@ from launcher.log import setup_logging
 
 # Resolve paths relative to this script (for finding repo init/ dir)
 if getattr(sys, "frozen", False):
-    REPO_ROOT = Path(getattr(sys, "_MEIPASS", "")).resolve()
+    REPO_ROOT = Path(sys.executable).parent.resolve()
 else:
     SCRIPT_DIR = Path(__file__).parent.resolve()
     REPO_ROOT = SCRIPT_DIR.parent

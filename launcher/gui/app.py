@@ -41,6 +41,23 @@ class WopcApp(BaseApp):  # type: ignore
         self.geometry("800x600")
         self.minsize(600, 450)
         self.configure(fg_color=COLOR_BG)
+        self._set_window_icon()
+
+    def _set_window_icon(self) -> None:
+        """Set the application window icon if it exists."""
+        from pathlib import Path
+
+        if getattr(sys, "frozen", False):
+            base_dir = Path(sys.executable).parent.resolve()
+        else:
+            base_dir = Path(__file__).parent.parent.parent.resolve()
+
+        icon_path = base_dir / "launcher" / "gui" / "wopc.ico"
+        if icon_path.exists():
+            try:
+                self.iconbitmap(str(icon_path))
+            except Exception as exc:
+                logger.warning("Failed to set window icon: %s", exc)
 
         # Configure 2x2 grid layout
         self.grid_rowconfigure(1, weight=1)

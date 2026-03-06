@@ -21,7 +21,7 @@ def main():
         "--noconfirm",
         "--onedir",
         "--windowed",
-        "--icon=NONE",  # Can add an .ico file later
+        "--icon=launcher/gui/wopc.ico",
         "--name",
         "WOPC-Launcher",
         # Ensure we collect CustomTkinter assets
@@ -33,6 +33,8 @@ def main():
         f"{repo_root / 'gamedata'};gamedata",
         "--add-data",
         f"{repo_root / 'vendor'};vendor",
+        "--add-data",
+        f"{repo_root / 'launcher' / 'gui' / 'wopc.ico'};launcher/gui",
         str(wopc_script),
     ]
 
