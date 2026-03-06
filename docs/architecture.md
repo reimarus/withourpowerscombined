@@ -102,15 +102,15 @@ SCFA's VFS (Virtual File System) loads content in a priority order. When multipl
 
 ## Phase Details
 
-### Phase 0: Foundation
+### Phase 0: Foundation (Complete)
 
 Build the launcher and init file. The game launches from `C:\ProgramData\WOPC\` with LOUD content using the stock (unpatched) exe.
 
-### Phase 1: Validation
+### Phase 1: Validation (Complete)
 
 Play-test LOUD gameplay from the WOPC directory. Fix any path issues. Add content validation (checksums).
 
-### Phase 2: FAF Binary Patching
+### Phase 2: FAF Binary Patching (Complete)
 
 Install the C++ build toolchain (MSYS2 + mingw-w64-i686-gcc + clang). Fork FA-Binary-Patches. Build a FAF-patched exe. Test compatibility with LOUD content.
 
@@ -120,14 +120,14 @@ Install the C++ build toolchain (MSYS2 + mingw-w64-i686-gcc + clang). Fork FA-Bi
 - `PathfindingTweaks.cpp` exposes `SetNavigatorPersonalPosMaxDistance` - harmless addition
 - `TableFuncs.cxx` adds optimized table functions - backward compatible
 
-### Phase 3: WOPC Lua Overlay
+### Phase 3: WOPC Lua Overlay (Complete)
 
 Create `wopc_patches.scd` containing Lua files that:
 - Fix any LOUD/FAF incompatibilities found in Phase 2
 - Expose new FAF engine functions to LOUD's AI
 - Add WOPC-specific enhancements
 
-### Phase 4: Multiplayer
+### Phase 4: Multiplayer (Complete)
 
 Content manifest system for multiplayer sync validation. Players compare checksums before connecting.
 
@@ -139,6 +139,27 @@ The main event. Using FAF's binary patching infrastructure:
 2. **"Don't stop, repath"**: Replace the A* "stop and wait on collision" branch with perpendicular repath
 3. **Personal space steering**: Add SC2-style unit repulsion at the C++ steering level
 4. **Flowfield pathfinding**: Replace A* entirely with a flowfield system (long-term goal)
+
+### Phase 6: WOPC Advanced Launcher
+
+Evolve the command-line script into a graphical interface:
+- Discrete selection of mod preferences
+- Toggling of experimental engine patches
+- Profile saving and sharing
+
+### Phase 7: Roguelike Campaign System
+
+Introduce a persistent, generative meta-campaign using our custom initialization hooks:
+- Randomized tech trees and AI threats
+- Persistent commander upgrades between skirmishes
+- Cooperative progression with friends
+
+### Phase 8: Deep C++ Refactoring
+
+Beyond pathfinding, push the engine to its absolute limits:
+- Rewrite rendering bottlenecks
+- Optimize simulation tick rate for 10,000+ unit fields
+- Expose new multi-threading capabilities to the Lua AI
 
 ### Engine Architecture (from reverse engineering)
 
