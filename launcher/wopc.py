@@ -124,15 +124,17 @@ def cmd_setup() -> int:
 def cmd_launch() -> int:
     """Launch the game from the WOPC directory."""
     exe_path = WOPC_BIN / GAME_EXE
-    init_path = WOPC_BIN / "init_wopc.lua"
 
     if not exe_path.exists():
         logger.error("ERROR: Game exe not found at %s", exe_path)
         logger.error("Run 'wopc setup' first.")
         return 1
-    if not init_path.exists():
-        logger.error("ERROR: Init file not found at %s", init_path)
-        return 1
+
+    # Regenerate init_wopc.lua from current preferences (content packs, mods)
+    from launcher.init_generator import generate_init_lua
+
+    init_path = generate_init_lua()
+    logger.info("Regenerated %s", init_path)
 
     cmd = [
         str(exe_path),

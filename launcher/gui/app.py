@@ -3,6 +3,8 @@ import sys
 import threading
 from typing import TYPE_CHECKING, Any
 
+from launcher import init_generator, map_scanner
+
 if TYPE_CHECKING:
     import customtkinter as ctk  # type: ignore[import-untyped]
 
@@ -223,43 +225,87 @@ class WopcApp(BaseApp):  # type: ignore
         self.mod_pane = ctk.CTkFrame(self, fg_color=COLOR_MOD_PANEL, corner_radius=0)
         self.mod_pane.grid(row=0, column=2, sticky="nsew")
         self.mod_pane.grid_rowconfigure(1, weight=1)
+        self.mod_pane.grid_rowconfigure(3, weight=1)
 
-        self.mod_header = ctk.CTkLabel(
+        # --- Content Packs Section ---
+        self.packs_header = ctk.CTkLabel(
             self.mod_pane,
-            text="ACTIVE MODS",
+            text="CONTENT PACKS",
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12, weight="bold"),
         )
-        self.mod_header.grid(row=0, column=0, padx=20, pady=(30, 10), sticky="w")
+        self.packs_header.grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
 
-        # Scrollable frame for mod list
+        self.packs_scroll = ctk.CTkScrollableFrame(self.mod_pane, fg_color="transparent")
+        self.packs_scroll.grid(row=1, column=0, sticky="nsew", padx=10)
+        self.pack_checkboxes: dict[str, Any] = {}
+
+        # --- User Mods Section ---
+        self.mod_header = ctk.CTkLabel(
+            self.mod_pane,
+            text="USER MODS",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        self.mod_header.grid(row=2, column=0, padx=20, pady=(15, 5), sticky="w")
+
         self.mods_scroll = ctk.CTkScrollableFrame(self.mod_pane, fg_color="transparent")
-        self.mods_scroll.grid(row=1, column=0, sticky="nsew", padx=10, pady=0)
-
+        self.mods_scroll.grid(row=3, column=0, sticky="nsew", padx=10)
         self.mod_checkboxes: dict[str, Any] = {}
 
         # Summary Status
         self.play_summary = ctk.CTkLabel(
-            self.mod_pane, text="Enabled: 0", text_color=COLOR_TEXT_MUTED, font=ctk.CTkFont(size=12)
+            self.mod_pane,
+            text="Enabled: 0",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
         )
-        self.play_summary.grid(row=2, column=0, padx=20, pady=20, sticky="w")
+        self.play_summary.grid(row=4, column=0, padx=20, pady=10, sticky="w")
 
     def _refresh_mods_list(self) -> None:
-        """Read available mods from disk and update the Mods tab."""
-        # Clear existing checkboxes
+        """Read available mods and content packs from disk and update the UI."""
+        # --- Content Packs ---
+        for cb in self.pack_checkboxes.values():
+            cb.destroy()
+        self.pack_checkboxes.clear()
+
+        toggleable = init_generator.get_toggleable_scds()
+        enabled_packs = init_generator.get_enabled_packs()
+
+        for idx, scd_name in enumerate(toggleable):
+            label = init_generator.CONTENT_PACK_LABELS.get(scd_name, scd_name)
+            scd_path = config.WOPC_GAMEDATA / scd_name
+            if scd_path.exists():
+                size_mb = scd_path.stat().st_size / 1_048_576
+                label = f"{label}  ({size_mb:.0f} MB)"
+
+            is_enabled = scd_name in enabled_packs
+
+            def on_pack_toggle(name=scd_name) -> None:
+                cb = self.pack_checkboxes[name]
+                init_generator.set_pack_state(name, bool(cb.get()))
+                self._update_play_summary()
+
+            cb = ctk.CTkCheckBox(self.packs_scroll, text=label, command=on_pack_toggle)
+            if is_enabled:
+                cb.select()
+            cb.grid(row=idx, column=0, pady=3, padx=10, sticky="w")
+            self.pack_checkboxes[scd_name] = cb
+
+        # --- User Mods ---
         for cb in self.mod_checkboxes.values():
             cb.destroy()
         self.mod_checkboxes.clear()
 
         if not config.WOPC_USERMODS.exists():
+            self._update_play_summary()
             return
 
         enabled_mods = prefs.get_enabled_mods()
 
-        # Find all mod folders or SCDs
         available = []
         for d in config.WOPC_USERMODS.iterdir():
-            if d.is_dir() or d.name.endswith(".scd") or d.name.endswith(".zip"):
+            if d.is_dir() or d.name.endswith((".scd", ".zip")):
                 available.append(d.name)
 
         available.sort()
@@ -267,8 +313,7 @@ class WopcApp(BaseApp):  # type: ignore
         for idx, mod_name in enumerate(available):
             is_enabled = mod_name in enabled_mods
 
-            # Create a localized callback using default arguments to capture `mod_name` correctly
-            def on_toggle(name=mod_name):
+            def on_toggle(name=mod_name) -> None:
                 cb = self.mod_checkboxes[name]
                 prefs.set_mod_state(name, bool(cb.get()))
                 self._update_play_summary()
@@ -276,7 +321,7 @@ class WopcApp(BaseApp):  # type: ignore
             cb = ctk.CTkCheckBox(self.mods_scroll, text=mod_name, command=on_toggle)
             if is_enabled:
                 cb.select()
-            cb.grid(row=idx, column=0, pady=5, padx=10, sticky="w")
+            cb.grid(row=idx, column=0, pady=3, padx=10, sticky="w")
             self.mod_checkboxes[mod_name] = cb
 
         self._update_play_summary()
@@ -287,59 +332,53 @@ class WopcApp(BaseApp):  # type: ignore
             btn.destroy()
         self.map_buttons.clear()
 
-        maps_dir = config.WOPC_ROOT / "maps"
-        if not maps_dir.exists():
+        all_maps = map_scanner.scan_all_maps()
+        if not all_maps:
             return
 
-        # Find directories containing a _scenario.lua file
-        available_maps = []
-        for d in maps_dir.iterdir():
-            if not d.is_dir():
-                continue
-            # Look for the scenario file
-            scenario_found = False
-            for f in d.iterdir():
-                if f.name.endswith("_scenario.lua"):
-                    scenario_found = True
-                    break
-            if scenario_found:
-                available_maps.append(d.name)
-
-        available_maps.sort()
-
-        # The active map is selected in prefs
         active_map = prefs.get_active_map()
 
-        for idx, map_name in enumerate(available_maps):
-            is_active = map_name == active_map
+        for idx, info in enumerate(all_maps):
+            is_active = info.folder_name == active_map
 
-            def on_select(name=map_name):
+            # Rich label: "Setons Clutch — 8p, 20km"
+            parts = [info.display_name]
+            if info.max_players:
+                parts.append(f"{info.max_players}p")
+            if info.size_label != "?":
+                parts.append(info.size_label)
+            label = f"{parts[0]} — {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
+
+            def on_select(name=info.folder_name, disp=info.display_name) -> None:
                 prefs.set_active_map(name)
                 for map_btn in self.map_buttons:
-                    map_btn.configure(fg_color="transparent", text_color=COLOR_TEXT_PRIMARY)
-
-                # Highlight the selected button (find by text matching name)
+                    map_btn.configure(
+                        fg_color="transparent",
+                        text_color=COLOR_TEXT_PRIMARY,
+                    )
+                # Re-highlight selected
                 for map_btn in self.map_buttons:
-                    if map_btn.cget("text") == name:
+                    if getattr(map_btn, "_wopc_folder", None) == name:
                         map_btn.configure(fg_color=COLOR_ACCENT, text_color="white")
-                self.selected_map_label.configure(text=f"Selected Map: {name}")
+                self.selected_map_label.configure(text=f"Selected Map: {disp}")
 
             color = COLOR_ACCENT if is_active else "transparent"
             tcolor = "white" if is_active else COLOR_TEXT_PRIMARY
 
             btn = ctk.CTkButton(
                 self.map_scroll,
-                text=map_name,
+                text=label,
                 fg_color=color,
                 text_color=tcolor,
                 anchor="w",
                 command=on_select,
             )
+            btn._wopc_folder = info.folder_name
             btn.grid(row=idx, column=0, sticky="ew", pady=2)
             self.map_buttons.append(btn)
 
             if is_active:
-                self.selected_map_label.configure(text=f"Selected Map: {map_name}")
+                self.selected_map_label.configure(text=f"Selected Map: {info.display_name}")
 
     def _update_play_summary(self) -> None:
         """Update the label on the play tab showing the active config."""
