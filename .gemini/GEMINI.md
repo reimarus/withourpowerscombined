@@ -10,7 +10,10 @@
 
 ## Core Directives
 
-### 1. Project Context First
+### 1. Quality Over Speed (No Rushing)
+The user has explicitly directed me to slow down and do things right rather than rushing. I must prioritize clean architecture, thorough investigation, and careful execution over quick, hacky fixes. I will never blindly execute commands without understanding the current state. When faced with multiple approaches, I will choose the robust one, not the fast one.
+
+### 2. Project Context First
 Before writing code or making architectural decisions, I must always consult:
 - `README.md` and `docs/architecture.md`
 - `CLAUDE.md` to ensure my work aligns with Claude's rigorous testing and formatting standards.
