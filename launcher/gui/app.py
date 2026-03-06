@@ -1,12 +1,20 @@
 import logging
 import sys
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-try:
+if TYPE_CHECKING:
     import customtkinter as ctk  # type: ignore[import-untyped]
-except ImportError:
-    ctk = None  # type: ignore[assignment]
+
+    BaseApp = ctk.CTk
+else:
+    try:
+        import customtkinter as ctk  # type: ignore[import-untyped]
+
+        BaseApp = ctk.CTk
+    except ImportError:
+        ctk = None  # type: ignore[assignment]
+        BaseApp = object  # type: ignore[misc, no-redef]
 
 from launcher import config, prefs
 from launcher.gui.worker import SetupWorker
@@ -19,28 +27,50 @@ if ctk is not None:
     ctk.set_appearance_mode("Dark")
     # We'll use the built-in dark-blue theme as a sleek base
     ctk.set_default_color_theme("dark-blue")
-    BaseApp: Any = ctk.CTk
-else:
-    BaseApp = object  # type: ignore[misc, no-redef]
 
-# Custom colors for our WOPC aesthetic
-COLOR_BG = "#1A1A1A"
-COLOR_PANEL = "#2B2B2B"
-COLOR_ACCENT = "#00D4FF"  # Cyan accent for interactive elements
-COLOR_READY = "#00FF66"  # Neon green for PLAY state
-COLOR_WARN = "#FFB300"  # Orange for UPDATE/INSTALL state
+# Custom colors for Discord-style aesthetic
+COLOR_BG = "#1E1F22"  # Deepest background (Sidebar)
+COLOR_PANEL = "#313338"  # Main chat/content area
+COLOR_MOD_PANEL = "#2B2D31"  # Secondary sidebar (Mods/Members lists)
+COLOR_ACCENT = "#5865F2"  # Discord Blurple for interactive elements
+COLOR_READY = "#23A559"  # Discord Green for PLAY state
+COLOR_WARN = "#FEE75C"  # Discord Yellow for UPDATE/INSTALL state
+COLOR_TEXT_PRIMARY = "#F2F3F5"
+COLOR_TEXT_MUTED = "#949BA4"
 
 
 class WopcApp(BaseApp):  # type: ignore
     """The main Graphical User Interface for the WOPC Launcher."""
 
+    # UI Widgets
+    sidebar: Any
+    logo_label: Any
+    subtitle_label: Any
+    status_scfa: Any
+    status_bundled: Any
+    status_wopc: Any
+    primary_btn: Any
+    version_label: Any
+    main_content: Any
+    header_label: Any
+    config_panel: Any
+    selected_map_label: Any
+    map_scroll: Any
+    map_buttons: list[Any]
+    log_textbox: Any
+    mod_pane: Any
+    mod_header: Any
+    mods_scroll: Any
+    mod_checkboxes: dict[str, Any]
+    play_summary: Any
+
     def __init__(self) -> None:
         super().__init__()
 
-        self.title("WOPC - With Our Powers Combined")
-        self.geometry("800x600")
-        self.minsize(600, 450)
-        self.configure(fg_color=COLOR_BG)
+        self.title("WOPC - Match Lobby")
+        self.geometry("1024x768")
+        self.minsize(800, 600)
+        self.configure(fg_color=COLOR_PANEL)
         self._set_window_icon()
 
     def _set_window_icon(self) -> None:
@@ -59,13 +89,16 @@ class WopcApp(BaseApp):  # type: ignore
             except Exception as exc:
                 logger.warning("Failed to set window icon: %s", exc)
 
-        # Configure 2x2 grid layout
-        self.grid_rowconfigure(1, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=2)
+        # Configure 3x3 grid layout (Sidebar | Lobby | Mod Pane)
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=0, minsize=240)  # Left Sidebar
+        self.grid_columnconfigure(1, weight=3)  # Main Lobby Area
+        self.grid_columnconfigure(2, weight=1, minsize=260)  # Right Mod Pane
 
         self._build_sidebar()
-        self._build_main_view()
+        self._build_main_lobby()
+        self._build_mod_pane()
+
         self._check_installation_status()
         self._bind_hotkeys()
 
@@ -76,103 +109,140 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _build_sidebar(self) -> None:
         """Construct the left sidebar navigation and status area."""
-        self.sidebar = ctk.CTkFrame(self, fg_color=COLOR_PANEL, corner_radius=0)
-        self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
-        self.sidebar.grid_rowconfigure(4, weight=1)
+        self.sidebar = ctk.CTkFrame(self, fg_color=COLOR_BG, corner_radius=0)
+        self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.sidebar.grid_rowconfigure(5, weight=1)
 
         # Logo / Title
         self.logo_label = ctk.CTkLabel(
-            self.sidebar, text="WOPC\nLAUNCHER", font=ctk.CTkFont(size=24, weight="bold")
+            self.sidebar,
+            text="WOPC",
+            text_color=COLOR_TEXT_PRIMARY,
+            font=ctk.CTkFont(size=28, weight="bold"),
         )
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 0), sticky="w")
+
+        self.subtitle_label = ctk.CTkLabel(
+            self.sidebar,
+            text="LOBBY TERMINAL",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        self.subtitle_label.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="w")
 
         # Status indicators
-        self.status_scfa = ctk.CTkLabel(self.sidebar, text="SCFA: Checking...")
-        self.status_scfa.grid(row=1, column=0, padx=20, pady=5, sticky="w")
+        self.status_scfa = ctk.CTkLabel(
+            self.sidebar, text="SCFA: Checking...", text_color=COLOR_TEXT_MUTED
+        )
+        self.status_scfa.grid(row=2, column=0, padx=20, pady=5, sticky="w")
 
-        self.status_bundled = ctk.CTkLabel(self.sidebar, text="Bundled Assets: Checking...")
-        self.status_bundled.grid(row=2, column=0, padx=20, pady=5, sticky="w")
+        self.status_bundled = ctk.CTkLabel(
+            self.sidebar, text="Assets: Checking...", text_color=COLOR_TEXT_MUTED
+        )
+        self.status_bundled.grid(row=3, column=0, padx=20, pady=5, sticky="w")
 
-        self.status_wopc = ctk.CTkLabel(self.sidebar, text="WOPC: Checking...")
-        self.status_wopc.grid(row=3, column=0, padx=20, pady=5, sticky="w")
+        self.status_wopc = ctk.CTkLabel(
+            self.sidebar, text="WOPC: Checking...", text_color=COLOR_TEXT_MUTED
+        )
+        self.status_wopc.grid(row=4, column=0, padx=20, pady=5, sticky="w")
+
+        # Play Button (Bottom of Sidebar)
+        self.primary_btn = ctk.CTkButton(
+            self.sidebar,
+            text="PLAY MATCH",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            height=50,
+            fg_color=COLOR_READY,
+            hover_color="#1F8B4C",
+            text_color="white",
+            command=self._on_primary_click,
+        )
+        self.primary_btn.grid(row=6, column=0, padx=20, pady=(0, 10), sticky="ew")
 
         # Version tag
         self.version_label = ctk.CTkLabel(
-            self.sidebar, text=f"v{config.VERSION}", text_color="gray"
+            self.sidebar,
+            text=f"v{config.VERSION}",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
         )
-        self.version_label.grid(row=5, column=0, padx=20, pady=20, sticky="s")
+        self.version_label.grid(row=7, column=0, padx=20, pady=(0, 20), sticky="w")
 
-    def _build_main_view(self) -> None:
-        """Construct the central content area with tabbed navigation."""
+    def _build_main_lobby(self) -> None:
+        """Construct the central matching routing/configuration area."""
         self.main_content = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_content.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=20, pady=20)
-        self.main_content.grid_rowconfigure(0, weight=1)
+        self.main_content.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
+        self.main_content.grid_rowconfigure(1, weight=1)
         self.main_content.grid_columnconfigure(0, weight=1)
 
-        # Tab View
-        self.tabview = ctk.CTkTabview(self.main_content)
-        self.tabview.grid(row=0, column=0, sticky="nsew")
-        self.tabview.add("Play")
-        self.tabview.add("Mods")
-        self.tabview.add("Maps")
+        self.header_label = ctk.CTkLabel(
+            self.main_content,
+            text="Game Configuration",
+            text_color=COLOR_TEXT_PRIMARY,
+            font=ctk.CTkFont(size=20, weight="bold"),
+        )
+        self.header_label.grid(row=0, column=0, sticky="w", pady=(0, 20))
 
-        self._build_play_tab()
-        self._build_mods_tab()
-        self._build_maps_tab()
+        # Config Panel (Map / Players / Settings Placeholder)
+        self.config_panel = ctk.CTkFrame(
+            self.main_content, fg_color=COLOR_MOD_PANEL, corner_radius=8
+        )
+        self.config_panel.grid(row=1, column=0, sticky="nsew")
+        self.config_panel.grid_rowconfigure(1, weight=1)
+        self.config_panel.grid_columnconfigure(0, weight=1)
+
+        # Selected Map Header
+        self.selected_map_label = ctk.CTkLabel(
+            self.config_panel,
+            text="Selected Map: None",
+            text_color=COLOR_ACCENT,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        self.selected_map_label.grid(row=0, column=0, pady=(10, 5), padx=20, sticky="w")
+
+        # Scrollable Map Selector
+        self.map_scroll = ctk.CTkScrollableFrame(self.config_panel, fg_color="transparent")
+        self.map_scroll.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+
+        self.map_buttons: list[Any] = []
 
         # Log Window at the bottom
         self.log_textbox = ctk.CTkTextbox(
-            self.main_content, height=120, fg_color=COLOR_PANEL, text_color="white"
+            self.main_content,
+            height=140,
+            fg_color=COLOR_MOD_PANEL,
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
         )
-        self.log_textbox.grid(row=1, column=0, sticky="ew", pady=(10, 0))
-        self.log_textbox.insert("0.0", "Welcome to the WOPC Launcher...\\n")
+        self.log_textbox.grid(row=2, column=0, sticky="ew", pady=(20, 0))
+        self.log_textbox.insert("0.0", "Welcome to the WOPC Match Lobby.\\n")
         self.log_textbox.configure(state="disabled")
 
-    def _build_play_tab(self) -> None:
-        """Construct the main Play tab."""
-        play_tab = self.tabview.tab("Play")
-        play_tab.grid_rowconfigure(0, weight=1)
-        play_tab.grid_columnconfigure(0, weight=1)
+    def _build_mod_pane(self) -> None:
+        """Construct the right-hand sidebar for Mod management."""
+        self.mod_pane = ctk.CTkFrame(self, fg_color=COLOR_MOD_PANEL, corner_radius=0)
+        self.mod_pane.grid(row=0, column=2, sticky="nsew")
+        self.mod_pane.grid_rowconfigure(1, weight=1)
 
-        self.center_frame = ctk.CTkFrame(play_tab, fg_color="transparent")
-        self.center_frame.grid(row=0, column=0)
-
-        self.primary_btn = ctk.CTkButton(
-            self.center_frame,
-            text="PLAY WOPC",
-            font=ctk.CTkFont(size=28, weight="bold"),
-            height=80,
-            width=300,
-            fg_color=COLOR_READY,
-            hover_color="#00CC52",
-            text_color="black",
-            command=self._on_primary_click,
+        self.mod_header = ctk.CTkLabel(
+            self.mod_pane,
+            text="ACTIVE MODS",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
         )
-        self.primary_btn.pack(pady=20)
-
-        # Summary Status
-        self.play_summary = ctk.CTkLabel(
-            self.center_frame, text="Active Mods: 0", text_color="gray"
-        )
-        self.play_summary.pack()
-
-    def _build_mods_tab(self) -> None:
-        """Construct the Mod manager tab."""
-        mods_tab = self.tabview.tab("Mods")
-        mods_tab.grid_rowconfigure(0, weight=1)
-        mods_tab.grid_columnconfigure(0, weight=1)
+        self.mod_header.grid(row=0, column=0, padx=20, pady=(30, 10), sticky="w")
 
         # Scrollable frame for mod list
-        self.mods_scroll = ctk.CTkScrollableFrame(mods_tab, fg_color="transparent")
-        self.mods_scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self.mods_scroll = ctk.CTkScrollableFrame(self.mod_pane, fg_color="transparent")
+        self.mods_scroll.grid(row=1, column=0, sticky="nsew", padx=10, pady=0)
 
         self.mod_checkboxes: dict[str, Any] = {}
 
-    def _build_maps_tab(self) -> None:
-        """Construct the Map selector tab."""
-        maps_tab = self.tabview.tab("Maps")
-        label = ctk.CTkLabel(maps_tab, text="Map Selection Coming Soon...")
-        label.pack(pady=50)
+        # Summary Status
+        self.play_summary = ctk.CTkLabel(
+            self.mod_pane, text="Enabled: 0", text_color=COLOR_TEXT_MUTED, font=ctk.CTkFont(size=12)
+        )
+        self.play_summary.grid(row=2, column=0, padx=20, pady=20, sticky="w")
 
     def _refresh_mods_list(self) -> None:
         """Read available mods from disk and update the Mods tab."""
@@ -210,6 +280,66 @@ class WopcApp(BaseApp):  # type: ignore
             self.mod_checkboxes[mod_name] = cb
 
         self._update_play_summary()
+
+    def _refresh_map_list(self) -> None:
+        """Scan the maps directory and populate the UI map selector."""
+        for btn in self.map_buttons:
+            btn.destroy()
+        self.map_buttons.clear()
+
+        maps_dir = config.WOPC_ROOT / "maps"
+        if not maps_dir.exists():
+            return
+
+        # Find directories containing a _scenario.lua file
+        available_maps = []
+        for d in maps_dir.iterdir():
+            if not d.is_dir():
+                continue
+            # Look for the scenario file
+            scenario_found = False
+            for f in d.iterdir():
+                if f.name.endswith("_scenario.lua"):
+                    scenario_found = True
+                    break
+            if scenario_found:
+                available_maps.append(d.name)
+
+        available_maps.sort()
+
+        # The active map is selected in prefs
+        active_map = prefs.get_active_map()
+
+        for idx, map_name in enumerate(available_maps):
+            is_active = map_name == active_map
+
+            def on_select(name=map_name):
+                prefs.set_active_map(name)
+                for map_btn in self.map_buttons:
+                    map_btn.configure(fg_color="transparent", text_color=COLOR_TEXT_PRIMARY)
+
+                # Highlight the selected button (find by text matching name)
+                for map_btn in self.map_buttons:
+                    if map_btn.cget("text") == name:
+                        map_btn.configure(fg_color=COLOR_ACCENT, text_color="white")
+                self.selected_map_label.configure(text=f"Selected Map: {name}")
+
+            color = COLOR_ACCENT if is_active else "transparent"
+            tcolor = "white" if is_active else COLOR_TEXT_PRIMARY
+
+            btn = ctk.CTkButton(
+                self.map_scroll,
+                text=map_name,
+                fg_color=color,
+                text_color=tcolor,
+                anchor="w",
+                command=on_select,
+            )
+            btn.grid(row=idx, column=0, sticky="ew", pady=2)
+            self.map_buttons.append(btn)
+
+            if is_active:
+                self.selected_map_label.configure(text=f"Selected Map: {map_name}")
 
     def _update_play_summary(self) -> None:
         """Update the label on the play tab showing the active config."""
@@ -260,23 +390,21 @@ class WopcApp(BaseApp):  # type: ignore
             self.log("WOPC is not deployed. Click Install to begin.")
         else:
             self.primary_btn.configure(
-                text="PLAY WOPC",
+                text="PLAY MATCH",
                 fg_color=COLOR_READY,
-                hover_color="#00CC52",
-                text_color="black",
+                hover_color="#1F8B4C",
+                text_color="white",
                 state="normal",
             )
             self.log("All systems ready.")
             self._refresh_mods_list()
+            self._refresh_map_list()
 
     def _on_primary_click(self) -> None:
         """Handle main button action depending on current state."""
         btn_text = self.primary_btn.cget("text")
-        if btn_text == "PLAY WOPC":
+        if btn_text == "PLAY MATCH":
             self.log("Launching game...")
-            # Run launch command and check return code
-            # Note: cmd_launch currently blocks until game closes.
-            # Subprocess logic will be moved to the worker later.
             threading.Thread(target=self._launch_game, daemon=True).start()
 
         elif btn_text == "INSTALL / UPDATE":

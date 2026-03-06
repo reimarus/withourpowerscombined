@@ -126,10 +126,15 @@ class TestCmdLaunch:
         (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
         (wopc_bin / "init_wopc.lua").write_text("-- init")
 
+        wopc_maps = tmp_path / "maps"
+        (wopc_maps / "SCMP_002").mkdir(parents=True)
+        (wopc_maps / "SCMP_002" / "SCMP_002_scenario.lua").write_text("-- scenario")
+
         mock_popen.return_value = MagicMock()
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
             patch("launcher.wopc.prefs.get_active_map", return_value="SCMP_002"),
@@ -142,7 +147,7 @@ class TestCmdLaunch:
             call_args = mock_popen.call_args[0][0]
             assert "SupremeCommander.exe" in call_args[0]
             assert "/map" in call_args
-            assert "SCMP_002" in call_args
+            assert "/maps/SCMP_002/SCMP_002_scenario.lua" in call_args
             assert "/mod" in call_args
             assert "BrewLAN" in call_args
 
