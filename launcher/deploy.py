@@ -76,14 +76,12 @@ def run_setup(repo_init_dir: Path) -> None:
     if missing:
         logger.warning("  WARNING: missing files: %s", ", ".join(missing))
 
-    # --- Step 2: Copy LOUD bin files (icons SCD, CommonDataPath) ---
-    logger.info("\n[2/6] Copying LOUD bin files from %s", config.LOUD_BIN)
-    for fname in config.LOUD_BIN_FILES:
-        src = config.LOUD_BIN / fname
-        if src.exists():
-            copy_file(src, config.WOPC_BIN / fname)
-        else:
-            logger.warning("  WARNING: missing %s", fname)
+    # --- Step 2: Copy bundled bin files (icons SCD, etc) ---
+    logger.info("\n[2/6] Copying bundled bin files")
+    if config.REPO_BUNDLED_BIN.exists():
+        for f in config.REPO_BUNDLED_BIN.iterdir():
+            if f.is_file():
+                copy_file(f, config.WOPC_BIN / f.name)
 
     # --- Step 3: Copy init files from repo ---
     logger.info("\n[3/6] Copying init files from repo")
@@ -106,16 +104,15 @@ def run_setup(repo_init_dir: Path) -> None:
     )
     logger.info("  generated wopc_paths.lua (SCFA = %s)", config.SCFA_STEAM)
 
-    # --- Step 4: Symlink/copy LOUD content ---
-    logger.info("\n[4/6] Linking LOUD content")
+    # --- Step 4: Copy bundled content ---
+    logger.info("\n[4/6] Copying bundled content")
 
-    # Gamedata: symlink individual SCD files (not the directory itself,
-    # because we'll add wopc_patches.scd alongside them)
-    if config.LOUD_GAMEDATA.exists():
-        for scd in sorted(config.LOUD_GAMEDATA.glob("*.scd")):
-            link_or_copy(scd, config.WOPC_GAMEDATA / scd.name)
+    # Gamedata: copy individual SCD files
+    if config.REPO_BUNDLED_GAMEDATA.exists():
+        for scd in sorted(config.REPO_BUNDLED_GAMEDATA.glob("*.scd")):
+            copy_file(scd, config.WOPC_GAMEDATA / scd.name)
     else:
-        logger.warning("  WARNING: LOUD gamedata not found at %s", config.LOUD_GAMEDATA)
+        logger.warning("  WARNING: Bundled gamedata not found at %s", config.REPO_BUNDLED_GAMEDATA)
 
     # Build faf_ui.scd
     faf_ui_src = config.REPO_FAF_UI
@@ -147,16 +144,16 @@ def run_setup(repo_init_dir: Path) -> None:
     else:
         logger.warning("  WARNING: %s not found", wopc_patches_src)
 
-    # Maps, sounds: symlink entire directories
-    if config.LOUD_MAPS.exists():
-        link_or_copy(config.LOUD_MAPS, config.WOPC_MAPS)
-    if config.LOUD_SOUNDS.exists():
-        link_or_copy(config.LOUD_SOUNDS, config.WOPC_SOUNDS)
+    # Maps, sounds: copy entire directories
+    if config.REPO_BUNDLED_MAPS.exists():
+        shutil.copytree(config.REPO_BUNDLED_MAPS, config.WOPC_MAPS, dirs_exist_ok=True)
+    if config.REPO_BUNDLED_SOUNDS.exists():
+        shutil.copytree(config.REPO_BUNDLED_SOUNDS, config.WOPC_SOUNDS, dirs_exist_ok=True)
 
     # --- Step 5: Copy usermods (not symlink - user may add/remove mods) ---
     logger.info("\n[5/6] Copying user mods")
-    if config.LOUD_USERMODS.exists() and not config.WOPC_USERMODS.exists():
-        shutil.copytree(config.LOUD_USERMODS, config.WOPC_USERMODS)
+    if config.REPO_BUNDLED_USERMODS.exists() and not config.WOPC_USERMODS.exists():
+        shutil.copytree(config.REPO_BUNDLED_USERMODS, config.WOPC_USERMODS)
         logger.info(
             "  copied usermods/ (%d files)", sum(1 for _ in config.WOPC_USERMODS.rglob("*"))
         )
@@ -166,13 +163,10 @@ def run_setup(repo_init_dir: Path) -> None:
         config.WOPC_USERMODS.mkdir(parents=True, exist_ok=True)
         logger.info("  created empty usermods/")
 
-    # --- Step 6: Link/create usermaps ---
+    # --- Step 6: Setup user maps ---
     logger.info("\n[6/6] Setting up user maps")
-    if config.LOUD_USERMAPS.exists():
-        link_or_copy(config.LOUD_USERMAPS, config.WOPC_USERMAPS)
-    else:
-        config.WOPC_USERMAPS.mkdir(parents=True, exist_ok=True)
-        logger.info("  created empty usermaps/")
+    config.WOPC_USERMAPS.mkdir(parents=True, exist_ok=True)
+    logger.info("  ensured empty usermaps/ exists")
 
     logger.info("\n=== Setup complete ===")
     logger.info("Game directory: %s", config.WOPC_ROOT)

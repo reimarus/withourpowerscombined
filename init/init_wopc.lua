@@ -1,14 +1,14 @@
 -- =============================================================================
 -- init_wopc.lua — WOPC init file
--- With Our Powers Combined: LOUD gameplay + FAF engine patches
+-- With Our Powers Combined: Standalone gameplay + FAF engine patches
 --
 -- This file is the /init argument passed to SupremeCommander.exe.
 -- It defines the VFS mount order for the WOPC game directory.
 --
 -- Mount order determines content priority (later mounts shadow earlier ones):
---   1. BrewLAN strategic icons  (from WOPC/bin/)
---   2. LOUD gamedata SCDs       (lua.scd, units.scd, brewlan.scd, etc.)
---   3. LOUD maps and sounds
+--   1. Bundled strategic icons  (from WOPC/bin/)
+--   2. Bundled gamedata SCDs    (lua.scd, units.scd, brewlan.scd, etc.)
+--   3. Bundled maps and sounds
 --   4. Vanilla SCFA content     (fonts, textures, effects, env, etc.)
 --   5. WOPC patches overlay     (our Lua fixes/enhancements)
 --   6. User maps
@@ -26,17 +26,17 @@ local WOPCRoot = InitFileDir .. '\\..'
 dofile(InitFileDir.."\\wopc_paths.lua");
 
 -- =========================================================================
--- 1. LOUD strategic icons
+-- 1. Bundled strategic icons
 -- =========================================================================
 mount_dir(InitFileDir .. '\\BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd', '/')
 
 -- =========================================================================
--- 2. LOUD gamedata (17 SCDs — the core gameplay content)
+-- 2. Bundled gamedata (Core gameplay content)
 -- =========================================================================
 mount_dir(WOPCRoot .. '\\gamedata\\*.scd', '/')
 
 -- =========================================================================
--- 3. LOUD maps and sounds
+-- 3. Bundled maps and sounds
 -- =========================================================================
 mount_dir(WOPCRoot .. '\\maps', '/maps')
 mount_dir(WOPCRoot .. '\\sounds', '/sounds')
@@ -58,7 +58,7 @@ mount_dir(SCFARoot .. '\\movies', '/movies')
 mount_dir(SCFARoot .. '\\sounds', '/sounds')
 
 -- =========================================================================
--- 5. FAF UI Integration (shadows vanilla and LOUD)
+-- 5. FAF UI Integration (shadows vanilla and bundled content)
 -- =========================================================================
 local faf_ui = WOPCRoot .. '\\gamedata\\faf_ui.scd'
 mount_dir(faf_ui, '/')
@@ -66,7 +66,7 @@ mount_dir(faf_ui, '/')
 -- =========================================================================
 -- 6. WOPC patches overlay (our custom Lua fixes — shadows everything above)
 -- =========================================================================
--- This SCD is built from gamedata/wopc_patches/ and mounted AFTER all LOUD
+-- This SCD is built from gamedata/wopc_patches/ and mounted AFTER all bundled
 -- and FAF content, so our files take priority.
 local wopc_patches = WOPCRoot .. '\\gamedata\\wopc_patches.scd'
 -- Only mount if the patches SCD exists (Phase 3+)
@@ -83,7 +83,7 @@ mount_dir(WOPCRoot .. '\\usermaps', '/maps')
 mount_mods(WOPCRoot .. '\\usermods')
 
 -- =========================================================================
--- Hook paths and protocols (same as LOUD)
+-- Hook paths and protocols
 -- =========================================================================
 hook = {
     '/schook'

@@ -90,8 +90,8 @@ class WopcApp(BaseApp):  # type: ignore
         self.status_scfa = ctk.CTkLabel(self.sidebar, text="SCFA: Checking...")
         self.status_scfa.grid(row=1, column=0, padx=20, pady=5, sticky="w")
 
-        self.status_loud = ctk.CTkLabel(self.sidebar, text="LOUD: Checking...")
-        self.status_loud.grid(row=2, column=0, padx=20, pady=5, sticky="w")
+        self.status_bundled = ctk.CTkLabel(self.sidebar, text="Bundled Assets: Checking...")
+        self.status_bundled.grid(row=2, column=0, padx=20, pady=5, sticky="w")
 
         self.status_wopc = ctk.CTkLabel(self.sidebar, text="WOPC: Checking...")
         self.status_wopc.grid(row=3, column=0, padx=20, pady=5, sticky="w")
@@ -231,25 +231,25 @@ class WopcApp(BaseApp):  # type: ignore
     def _check_installation_status(self) -> None:
         """Check directories and update UI states appropriately."""
         scfa_ok = config.SCFA_STEAM.exists() and (config.SCFA_BIN / config.GAME_EXE).exists()
-        loud_ok = config.LOUD_ROOT.exists() and (config.LOUD_ROOT / "gamedata" / "lua.scd").exists()
+        bundled_ok = config.REPO_BUNDLED_GAMEDATA.exists()
         wopc_ok = config.WOPC_BIN.exists() and (config.WOPC_BIN / config.GAME_EXE).exists()
 
         self.status_scfa.configure(
             text=f"SCFA: {'FOUND' if scfa_ok else 'MISSING'}",
             text_color="white" if scfa_ok else COLOR_WARN,
         )
-        self.status_loud.configure(
-            text=f"LOUD: {'FOUND' if loud_ok else 'MISSING'}",
-            text_color="white" if loud_ok else COLOR_WARN,
+        self.status_bundled.configure(
+            text=f"Bundled Assets: {'FOUND' if bundled_ok else 'MISSING'}",
+            text_color="white" if bundled_ok else COLOR_WARN,
         )
         self.status_wopc.configure(
             text=f"WOPC: {'READY' if wopc_ok else 'NOT SETUP'}",
             text_color="white" if wopc_ok else COLOR_WARN,
         )
 
-        if not scfa_ok or not loud_ok:
+        if not scfa_ok or not bundled_ok:
             self.primary_btn.configure(text="MISSING GAME FILES", state="disabled", fg_color="gray")
-            self.log("ERROR: Master game files (SCFA or LOUD) not found.")
+            self.log("ERROR: Master game files (SCFA or Bundled Assets) not found.")
         elif not wopc_ok:
             self.primary_btn.configure(
                 text="INSTALL / UPDATE",

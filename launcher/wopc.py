@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 WOPC Launcher - With Our Powers Combined
-Supreme Commander: Forged Alliance with LOUD gameplay + FAF engine patches.
+Standalone Supreme Commander: Forged Alliance client replacing LOUD and FAF.
 
 Usage:
     wopc gui          Launch the graphical UI (default)
@@ -27,10 +27,9 @@ from launcher.config import (
     FA_PATCHES_DIR,
     GAME_EXE,
     GAME_LOG,
-    LOUD_GAMEDATA,
-    LOUD_ROOT,
     PATCH_BUILD_DIR,
     PATCH_MANIFEST,
+    REPO_BUNDLED_GAMEDATA,
     SCFA_BIN,
     SCFA_STEAM,
     VERSION,
@@ -64,12 +63,12 @@ def cmd_status() -> int:
     logger.info("Steam SCFA:  %s", SCFA_STEAM)
     logger.info("  Status:    %s", "FOUND" if scfa_ok else "NOT FOUND")
 
-    # Check LOUD
-    loud_ok = LOUD_ROOT.exists() and (LOUD_ROOT / "gamedata" / "lua.scd").exists()
-    logger.info("\nLOUD:        %s", LOUD_ROOT)
-    logger.info("  Status:    %s", "FOUND" if loud_ok else "NOT FOUND")
-    if loud_ok:
-        scds = list(LOUD_GAMEDATA.glob("*.scd"))
+    # Check bundled assets
+    bundled_ok = REPO_BUNDLED_GAMEDATA.exists()
+    logger.info("\nBundled:     %s", REPO_BUNDLED_GAMEDATA)
+    logger.info("  Status:    %s", "FOUND" if bundled_ok else "NOT FOUND")
+    if bundled_ok:
+        scds = list(REPO_BUNDLED_GAMEDATA.glob("*.scd"))
         logger.info("  SCDs:      %d files", len(scds))
 
     # Check WOPC
@@ -99,9 +98,8 @@ def cmd_status() -> int:
             "\nERROR: SCFA not found. Set SCFA_STEAM environment variable to your install path."
         )
         return 1
-    if not loud_ok:
-        logger.error("\nERROR: LOUD not found. Install LOUD first.")
-        return 1
+    if not bundled_ok:
+        logger.warning("\nWARNING: Bundled assets not found in repo.")
     return 0
 
 
@@ -111,9 +109,8 @@ def cmd_setup() -> int:
     if not SCFA_STEAM.exists():
         logger.error("ERROR: SCFA not found at %s", SCFA_STEAM)
         return 1
-    if not LOUD_ROOT.exists():
-        logger.error("ERROR: LOUD not found at %s", LOUD_ROOT)
-        return 1
+    if not REPO_BUNDLED_GAMEDATA.exists():
+        logger.warning("WARNING: Bundled assets not found in repo.")
     if not INIT_DIR.exists():
         logger.error("ERROR: init/ directory not found at %s", INIT_DIR)
         return 1

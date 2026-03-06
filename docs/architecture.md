@@ -2,7 +2,7 @@
 
 ## Overview
 
-WOPC merges LOUD's gameplay (545 modified Lua files, 888MB of content packs, complete AI overhaul) with FAF's binary-patched engine (66 hooks + 53 C++ code sections). The result is a self-contained game distribution at `C:\ProgramData\WOPC\` that leaves both Steam SCFA and LOUD installations untouched.
+WOPC is a self-contained, standalone Supreme Commander: Forged Alliance game distribution. It merges the best gameplay aspects of the LOUD conversion mod with the engine stability and capabilities of FAF's binary-patched engine. Moving forward, WOPC provides all necessary assets internally, replacing the need for separate LOUD or FAF installations. The game is deployed to `C:\ProgramData\WOPC\` leaving Steam SCFA untouched.
 
 ## Directory Layout
 
@@ -43,14 +43,13 @@ C:\ProgramData\WOPC\
     *.dll                   All runtime DLLs from Steam SCFA/bin
     game.dat                Engine configuration
   gamedata\
-    lua.scd                 LOUD core Lua (symlinked from LOUD)
-    units.scd               LOUD units (symlinked)
-    brewlan.scd             BrewLAN content (symlinked)
-    ... (17 SCD files)
+    lua.scd                 Core WOPC Lua
+    units.scd               WOPC units
+    ... (Additional SCD files bundled via repository releases)
     wopc_patches.scd        Our overlay patches
-  maps\                     Symlinked from LOUD
-  sounds\                   Symlinked from LOUD
-  usermods\                 Copied from LOUD (BetterPathing etc.)
+  maps\                     Custom WOPC map library
+  sounds\                   Custom WOPC sound banks
+  usermods\                 Bundled UI and gameplay mods
 ```
 
 ## Content Mount Order
@@ -86,12 +85,12 @@ SCFA's VFS (Virtual File System) loads content in a priority order. When multipl
 - Writable without admin on Windows 10/11
 - Survives user profile resets
 
-### Why symlinks for content?
+### Why bundle content directly?
 
-- 888MB of SCD files cannot go in a git repo
-- LOUD is actively maintained - users get latest content automatically
-- Symlinks avoid disk space duplication
-- Fallback to file copy when symlinks require admin
+- WOPC is designed to fully replace both FAF and LOUD.
+- Eliminates dependency on external mod projects that may break compatibility.
+- Ensures all users play on an identical, checksum-verified baseline of gamedata, maps, and UI.
+- Simplifies the launcher deployment process to a single self-contained application.
 
 ### Why fork FA-Binary-Patches instead of using FAF's patcher directly?
 
@@ -131,35 +130,33 @@ Create `wopc_patches.scd` containing Lua files that:
 
 Content manifest system for multiplayer sync validation. Players compare checksums before connecting.
 
-### Phase 5: C++ Engine Patches
+### Phase 5: WOPC Advanced Launcher
 
-The main event. Using FAF's binary patching infrastructure:
+Evolve the command-line script into a graphical interface using CustomTkinter. Provide discrete selection of mod preferences and seamless launching.
 
+### Phase 6: In-Game FAF UI Integration
+
+Import FAF's Lua UI as a submodule, compile it into an SCD, and inject it via the VFS layer to provide a modern interface overlapping the legacy LOUD UI.
+
+### Phase 7: deLOUDing & Standalone Overhaul
+
+Severing all dependencies on local LOUD installations. All necessary gamedata and assets are sourced directly from the WOPC repository and GitHub releases. Overhaul the CustomTkinter launcher into a modern, Discord-style dark aesthetic.
+
+### Phase 8: C++ Engine Patches & Pathfinding
+
+Using FAF's binary patching infrastructure to hook into Moho:
 1. **Proof of concept**: Hook `CAiNavigatorImpl::SetGoal()`, log pathfinding requests
 2. **"Don't stop, repath"**: Replace the A* "stop and wait on collision" branch with perpendicular repath
 3. **Personal space steering**: Add SC2-style unit repulsion at the C++ steering level
 4. **Flowfield pathfinding**: Replace A* entirely with a flowfield system (long-term goal)
 
-### Phase 6: WOPC Advanced Launcher
+### Phase 9: Generative Campaign & Deep Refactoring
 
-Evolve the command-line script into a graphical interface:
-- Discrete selection of mod preferences
-- Toggling of experimental engine patches
-- Profile saving and sharing
+Introduce a persistent, generative meta-campaign using custom initialization hooks. Push the engine to extreme limits by optimizing rendering bottlenecks and simulation tick rates for 10,000+ unit fields.
 
-### Phase 7: Roguelike Campaign System
+### Phase 10: Scoring System Overhaul
 
-Introduce a persistent, generative meta-campaign using our custom initialization hooks:
-- Randomized tech trees and AI threats
-- Persistent commander upgrades between skirmishes
-- Cooperative progression with friends
-
-### Phase 8: Deep C++ Refactoring
-
-Beyond pathfinding, push the engine to its absolute limits:
-- Rewrite rendering bottlenecks
-- Optimize simulation tick rate for 10,000+ unit fields
-- Expose new multi-threading capabilities to the Lua AI
+Investigate and rewrite the end-game and in-game scoring metrics calculation systems, which currently generate erratic or 'wacky' data, ensuring that both the UI and backend telemetry perfectly match actual in-game performance.
 
 ### Engine Architecture (from reverse engineering)
 
