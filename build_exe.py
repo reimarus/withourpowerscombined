@@ -32,6 +32,8 @@ def main() -> int:
         "--windowed",
         "--name",
         "WOPC-Launcher",
+        "--icon",
+        str(repo_root / "launcher" / "gui" / "wopc.ico"),
         # Bundle CustomTkinter theme assets (required for the GUI)
         "--collect-all",
         "customtkinter",

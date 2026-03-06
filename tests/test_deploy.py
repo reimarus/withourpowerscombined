@@ -146,6 +146,19 @@ class TestRunSetup:
         assert (wopc_gd / "faf_ui.scd").exists()
         assert (wopc_gd / "wopc_patches.scd").exists()
 
+    def test_copies_scfa_maps(self, patched_config, repo_init_dir):
+        """Copies SCFA stock maps to WOPC maps directory."""
+        from launcher.deploy import run_setup
+
+        scfa_maps = patched_config["SCFA_STEAM"] / "maps"
+        scfa_maps.mkdir(parents=True)
+        (scfa_maps / "SCMP_001").mkdir()
+
+        run_setup(repo_init_dir)
+
+        wopc_maps = patched_config["WOPC_MAPS"]
+        assert (wopc_maps / "SCMP_001").exists()
+
     def test_creates_usermods_dir(self, patched_config, repo_init_dir):
         """Creates or copies usermods directory."""
         from launcher.deploy import run_setup

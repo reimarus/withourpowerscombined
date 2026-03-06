@@ -400,25 +400,20 @@ class WopcApp(BaseApp):  # type: ignore
     def _check_installation_status(self) -> None:
         """Check directories and update UI states appropriately."""
         scfa_ok = config.SCFA_STEAM.exists() and (config.SCFA_BIN / config.GAME_EXE).exists()
-        bundled_ok = config.REPO_BUNDLED_GAMEDATA.exists()
         wopc_ok = config.WOPC_BIN.exists() and (config.WOPC_BIN / config.GAME_EXE).exists()
 
         self.status_scfa.configure(
             text=f"SCFA: {'FOUND' if scfa_ok else 'MISSING'}",
             text_color="white" if scfa_ok else COLOR_WARN,
         )
-        self.status_bundled.configure(
-            text=f"Bundled Assets: {'FOUND' if bundled_ok else 'MISSING'}",
-            text_color="white" if bundled_ok else COLOR_WARN,
-        )
         self.status_wopc.configure(
             text=f"WOPC: {'READY' if wopc_ok else 'NOT SETUP'}",
             text_color="white" if wopc_ok else COLOR_WARN,
         )
 
-        if not scfa_ok or not bundled_ok:
+        if not scfa_ok:
             self.primary_btn.configure(text="MISSING GAME FILES", state="disabled", fg_color="gray")
-            self.log("ERROR: Master game files (SCFA or Bundled Assets) not found.")
+            self.log("ERROR: SCFA installation not found.")
         elif not wopc_ok:
             self.primary_btn.configure(
                 text="INSTALL / UPDATE",
@@ -436,8 +431,10 @@ class WopcApp(BaseApp):  # type: ignore
                 state="normal",
             )
             self.log("All systems ready.")
-            self._refresh_mods_list()
-            self._refresh_map_list()
+
+        # Always populate maps and mods regardless of setup status
+        self._refresh_mods_list()
+        self._refresh_map_list()
 
     def _on_primary_click(self) -> None:
         """Handle main button action depending on current state."""

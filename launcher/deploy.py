@@ -147,6 +147,14 @@ def run_setup(repo_init_dir: Path) -> None:
     # Maps, sounds: copy entire directories
     if config.REPO_BUNDLED_MAPS.exists():
         shutil.copytree(config.REPO_BUNDLED_MAPS, config.WOPC_MAPS, dirs_exist_ok=True)
+
+    # Copy SCFA stock maps (from Steam installation)
+    scfa_maps = config.SCFA_STEAM / "maps"
+    if scfa_maps.exists():
+        logger.info("  Copying SCFA stock maps from %s", scfa_maps)
+        shutil.copytree(scfa_maps, config.WOPC_MAPS, dirs_exist_ok=True)
+    else:
+        logger.warning("  WARNING: SCFA maps directory not found at %s", scfa_maps)
     if config.REPO_BUNDLED_SOUNDS.exists():
         shutil.copytree(config.REPO_BUNDLED_SOUNDS, config.WOPC_SOUNDS, dirs_exist_ok=True)
 
