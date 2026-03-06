@@ -1,0 +1,26 @@
+{
+    "version": "0.1.0",
+    "files": {
+        "bin/SupremeCommander.exe": "1591fe448152955f7e54617d73cceaa61e5e3d2866d844d168cd623263f1b64e",
+        "bin/MohoEngine.dll": "3e6e1a698a57d051e8ee6120d81d4af373321b9bf5f10071e291c96c08a7c3b5",
+        "bin/init_wopc.lua": "24e234e7de8a738da534761ed7c95834f03b1937302b2aa36a8b9207ecd2781a",
+        "gamedata/4D-CompatibilityPack.scd": "6d6a80ab2902d279a9002882754bd02617b8cf31f41ccd2b7e2e2247658a99ca",
+        "gamedata/blackops.scd": "f58951c4de4a4c77b1accbf0f84c4020f74335703c0c408f8992dc31d31de372",
+        "gamedata/brewlan.scd": "3d1857c88e1d1727a096c861b277f9d2bdd9d14382a977edbd9c36381a393bc8",
+        "gamedata/civ_units.scd": "460832f2cad4c7c24e52e14db4b1b996245e6db287ce1f022cddcb28c228e1da",
+        "gamedata/effects.scd": "beb35cb3c7865cab637223fce93fd3cdb4096542205b6d072f01026247b6ce9d",
+        "gamedata/env.scd": "f4e06a35379507999c3d1007759f2527bb1e63bc1e039bb8851b9c9fdc2dcc4a",
+        "gamedata/extra_env.scd": "6a101ec0e8db7eb04b1aa0644292a4c2181c6104f31f33bdaee8847c3a545c67",
+        "gamedata/loc_US.scd": "2f4946926de76b15c0562af1a3245712e75a0fff3f7a6020d3189e584d10fd48",
+        "gamedata/loud_misc.scd": "71ef8212846269005a6076d70dea835305aae4478182447ccbf6239804ebb433",
+        "gamedata/loud_units.scd": "37c0d3db67d54895efb1b10b65beca4f9ef7897e2b82b8eb6baf507b05fb9e30",
+        "gamedata/lua.scd": "531fe0c16041d616565ea9a4ba40bc6591e631fdd088e7c5d737aad5293349da",
+        "gamedata/projectiles.scd": "db37f4bd84b48a6c1d35c79b806aaa352762df8bda411b6fbaa1ea047f2d91be",
+        "gamedata/SC_Music.scd": "f44d1f2300a08488a33236d34295fbdb9ff83b72a0fdd6f0c9b1506895ddbecb",
+        "gamedata/textures.scd": "b93521b537aaf81f6ea02a03cc3ec803e0ba192d2a7ddc5efc6f18b3dd8e797a",
+        "gamedata/TotalMayhem.scd": "5cb52f142d259f152b43ebeb08545749591149d71af6a2d0c06fe2143b878ec5",
+        "gamedata/units.scd": "f0afd76b2fed88e2bc81a64ce4f676777eba7fafbbebab42c5148904d7b901db",
+        "gamedata/wopc_patches.scd": "9e17d4f459819fab328cece0fbaf80bebcdeeb69bed77b037c8c7e8d2aa6795f",
+        "gamedata/WyvernBattlePack.scd": "96311d31cf371dbab0897059374b6dbce2746e5a5bc3b73344225299f51cb809"
+    }
+}

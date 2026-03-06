@@ -2,6 +2,7 @@
 
 import logging
 import shutil
+import zipfile
 from pathlib import Path
 
 from launcher import config
@@ -115,6 +116,19 @@ def run_setup(repo_init_dir: Path) -> None:
             link_or_copy(scd, config.WOPC_GAMEDATA / scd.name)
     else:
         logger.warning("  WARNING: LOUD gamedata not found at %s", config.LOUD_GAMEDATA)
+
+    # Build wopc_patches.scd
+    wopc_patches_src = config.REPO_WOPC_PATCHES
+    wopc_patches_dst = config.WOPC_GAMEDATA / config.WOPC_PATCHES_SCD
+    if wopc_patches_src.exists():
+        logger.info("  building %s", config.WOPC_PATCHES_SCD)
+        with zipfile.ZipFile(wopc_patches_dst, "w", zipfile.ZIP_DEFLATED) as zf:
+            for file_path in wopc_patches_src.rglob("*"):
+                if file_path.is_file():
+                    arcname = file_path.relative_to(wopc_patches_src)
+                    zf.write(file_path, arcname)
+    else:
+        logger.warning("  WARNING: %s not found", wopc_patches_src)
 
     # Maps, sounds: symlink entire directories
     if config.LOUD_MAPS.exists():

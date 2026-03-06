@@ -64,7 +64,7 @@ mount_dir(SCFARoot .. '\\sounds', '/sounds')
 -- content, so our files take priority.
 local wopc_patches = WOPCRoot .. '\\gamedata\\wopc_patches.scd'
 -- Only mount if the patches SCD exists (Phase 3+)
--- mount_dir(wopc_patches, '/')
+mount_dir(wopc_patches, '/')
 
 -- =========================================================================
 -- 6. User maps

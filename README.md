@@ -35,12 +35,15 @@ WOPC creates an isolated game directory at `C:\ProgramData\WOPC\` containing:
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 0 | **Current** | Project foundation - launcher, init file, repo structure |
-| 1 | Planned | Validate LOUD gameplay works from WOPC directory |
-| 2 | Planned | Integrate FAF binary patches - patched exe with engine improvements |
-| 3 | Planned | WOPC Lua overlay - compatibility patches, new features |
-| 4 | Planned | Multiplayer support - content manifests, version checking |
+| 0 | Complete | Project foundation - launcher, init file, repo structure |
+| 1 | Complete | Validate LOUD gameplay works from WOPC directory |
+| 2 | Complete | Integrate FAF binary patches - patched exe with engine improvements |
+| 3 | Complete | WOPC Lua overlay - compatibility patches, new features |
+| 4 | Complete | Multiplayer support - content manifests, version checking |
 | 5 | Planned | First C++ engine patch - pathfinding improvement |
+| 6 | Planned | WOPC Advanced Launcher - GUI, discrete mod selection |
+| 7 | Planned | Roguelike Campaign - persistent, generative co-op mode |
+| 8 | Planned | Deep C++ Refactoring - rendering optimizations, simulation speed |
 
 See [docs/architecture.md](docs/architecture.md) for the full technical plan.
 

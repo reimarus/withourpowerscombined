@@ -7,7 +7,8 @@ Usage:
     wopc status       Check game installation, print paths
     wopc setup        Create WOPC directory, copy/symlink content
     wopc launch       Start the game
-    wopc validate     Verify WOPC directory integrity
+    wopc validate     Verify WOPC directory integrity (or pass manifest.json to check hashes)
+    wopc manifest     Generate manifest.json of current WOPC installation hashes
     wopc patch        Build patched exe from FAF binary patches
       --clean         Force rebuild from scratch
       --check         Verify toolchain without building
@@ -153,11 +154,18 @@ def cmd_launch() -> int:
     return 0
 
 
-def cmd_validate() -> int:
+def cmd_validate(args: list[str] | None = None) -> int:
     """Validate the WOPC directory integrity."""
     if not WOPC_ROOT.exists():
         logger.error("ERROR: WOPC not set up at %s", WOPC_ROOT)
         return 1
+
+    # If user provided a manifest JSON, run the hash verify instead of basic validation
+    if args and len(args) > 0:
+        manifest_path = Path(args[0])
+        from launcher.manifest_builder import verify_manifest
+
+        return verify_manifest(manifest_path)
 
     logger.info("WOPC Validation\n")
     errors = 0
@@ -218,6 +226,19 @@ def cmd_validate() -> int:
 
     logger.info("\n%s", "All checks passed." if errors == 0 else f"{errors} error(s) found.")
     return 0 if errors == 0 else 1
+
+
+def cmd_manifest() -> int:
+    """Generate the multiplayer sync manifest."""
+    if not WOPC_ROOT.exists():
+        logger.error("ERROR: WOPC not set up at %s", WOPC_ROOT)
+        return 1
+
+    from launcher.manifest_builder import generate_manifest
+
+    output = Path("manifest.json")
+    generate_manifest(output)
+    return 0
 
 
 def cmd_patch(args: list[str]) -> int:
@@ -284,7 +305,8 @@ def main() -> int:
         "status": cmd_status,
         "setup": cmd_setup,
         "launch": cmd_launch,
-        "validate": cmd_validate,
+        "validate": lambda: cmd_validate(cmd_args),
+        "manifest": cmd_manifest,
     }
 
     # Commands that accept extra arguments

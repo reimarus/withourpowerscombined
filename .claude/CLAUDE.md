@@ -63,6 +63,10 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 8. CodeRabbit reviews PR automatically
 9. Merge only when CI is green
 
+## Cross-AI Handoff
+
+When transitioning phases or receiving the development branch from Antigravity (Gemini), I will read `.gemini/GEMINI.md` to understand the overarching architectural context and `docs/architecture.md` for specific planned features before executing code. Gemini designs the engine and maps the territory; I build it flawlessly. Both of us read the project documentation and maintain cross-communication through task checklists.
+
 ## Architecture
 
 ```
