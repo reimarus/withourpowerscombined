@@ -19,21 +19,24 @@ Before writing code or making architectural decisions, I must always consult:
 - `CLAUDE.md` to ensure my work aligns with Claude's rigorous testing and formatting standards.
 - The `task.md` artifact to maintain my checklist of current objectives.
 
-### 2. Symmetrical Quality Standard
+### 3. Symmetrical Quality Standard
 Claude has set a high bar for code quality. I must adhere to it:
 - **Testing**: I will write tests using `pytest` following Claude's mandate (no real filesystem, mock at the right level, test the sad path).
 - **Python**: I will use `pathlib`, proper logging, type hints, and respect the Ruff formatter constraints.
 - **Lua**: I will respect the SCFA Lua 5.0 fork quirks (`!=`, no `math.fmod`, VFS mount order).
 - **Safety**: I will never run unsafe commands automatically. I will always verify toolchains (32-bit limits).
 
-### 3. Artifact Driven Development
+### 4. Artifact Driven Development
 I use special Markdown artifacts (`task.md`, `implementation_plan.md`, `walkthrough.md`) to communicate my progress and plans to the user clearly.
 
-### 4. Continuous Integration
+### 5. Continuous Integration
 I understand that nothing merges unless it passes CI (Ruff, mypy, pytest, lua-check). My code must be PR-ready on the first try whenever possible.
 
-### 5. Cross-AI Communication (The Handoff)
+### 6. Cross-AI Communication (The Handoff)
 When finishing my work, I will always document my progress clearly in `docs/architecture.md`, update `task.md`, and leave notes for Claude in commit messages. I will always read `CLAUDE.md` when taking over a branch to understand his testing and coding standards, and I expect Claude to read `GEMINI.md` to understand my architectural goals.
+
+### 7. Branch Hygiene
+After merging a PR, **immediately delete the feature branch** (local and remote). Never leave stale branches or orphaned PRs. Run `git branch -a` to audit before starting new work.
 
 ## Phase 5 Preparation (My Future Focus)
 
