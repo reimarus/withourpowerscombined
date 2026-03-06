@@ -4,6 +4,7 @@ WOPC Launcher - With Our Powers Combined
 Supreme Commander: Forged Alliance with LOUD gameplay + FAF engine patches.
 
 Usage:
+    wopc gui          Launch the graphical UI (default)
     wopc status       Check game installation, print paths
     wopc setup        Create WOPC directory, copy/symlink content
     wopc launch       Start the game
@@ -287,6 +288,14 @@ def cmd_patch(args: list[str]) -> int:
     return 0
 
 
+def cmd_gui() -> int:
+    """Launch the WOPC graphical user interface."""
+    from launcher.gui.app import launch_gui
+
+    launch_gui()
+    return 0
+
+
 def main() -> int:
     """CLI entry point."""
     # Parse --verbose/-v flag
@@ -295,8 +304,7 @@ def main() -> int:
     setup_logging(verbose=verbose)
 
     if len(args) < 1:
-        logger.info(__doc__)
-        return 0
+        return cmd_gui()
 
     cmd = args[0].lower()
     cmd_args = args[1:]
@@ -307,6 +315,7 @@ def main() -> int:
         "launch": cmd_launch,
         "validate": lambda: cmd_validate(cmd_args),
         "manifest": cmd_manifest,
+        "gui": cmd_gui,
     }
 
     # Commands that accept extra arguments

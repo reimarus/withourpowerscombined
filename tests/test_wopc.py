@@ -16,12 +16,16 @@ def _init_logging():
 class TestMain:
     """Test the main() CLI dispatch."""
 
-    def test_no_args_returns_0(self):
-        """Running with no args prints usage and returns 0."""
+    def test_no_args_launches_gui(self, mocker):
+        """Running with no args launches the GUI and returns 0."""
+        import sys
+
         from launcher.wopc import main
 
-        with patch("sys.argv", ["wopc"]):
-            assert main() == 0
+        mock_gui = mocker.patch("launcher.wopc.cmd_gui", return_value=0)
+        mocker.patch.object(sys, "argv", ["wopc.py"])
+        assert main() == 0
+        mock_gui.assert_called_once()
 
     def test_unknown_command_returns_1(self):
         """Unknown command returns 1."""
