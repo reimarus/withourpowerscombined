@@ -44,8 +44,12 @@ from launcher.config import (
 from launcher.log import setup_logging
 
 # Resolve paths relative to this script (for finding repo init/ dir)
-SCRIPT_DIR = Path(__file__).parent.resolve()
-REPO_ROOT = SCRIPT_DIR.parent
+if getattr(sys, "frozen", False):
+    REPO_ROOT = Path(getattr(sys, "_MEIPASS", "")).resolve()
+else:
+    SCRIPT_DIR = Path(__file__).parent.resolve()
+    REPO_ROOT = SCRIPT_DIR.parent
+
 INIT_DIR = REPO_ROOT / "init"
 
 logger = logging.getLogger("wopc.cli")

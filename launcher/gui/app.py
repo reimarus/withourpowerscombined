@@ -1,7 +1,12 @@
 import logging
+import sys
 import threading
+from typing import Any
 
-import customtkinter as ctk  # type: ignore[import-untyped]
+try:
+    import customtkinter as ctk  # type: ignore[import-untyped]
+except ImportError:
+    ctk = None  # type: ignore[assignment]
 
 from launcher import config, prefs
 from launcher.gui.worker import SetupWorker
@@ -9,10 +14,14 @@ from launcher.wopc import cmd_launch
 
 logger = logging.getLogger("wopc.gui")
 
-# Set the default color theme and appearance for the entire application
-ctk.set_appearance_mode("Dark")
-# We'll use the built-in dark-blue theme as a sleek base
-ctk.set_default_color_theme("dark-blue")
+if ctk is not None:
+    # Set the default color theme and appearance for the entire application
+    ctk.set_appearance_mode("Dark")
+    # We'll use the built-in dark-blue theme as a sleek base
+    ctk.set_default_color_theme("dark-blue")
+    BaseApp: Any = ctk.CTk
+else:
+    BaseApp = object  # type: ignore[misc, no-redef]
 
 # Custom colors for our WOPC aesthetic
 COLOR_BG = "#1A1A1A"
@@ -22,7 +31,7 @@ COLOR_READY = "#00FF66"  # Neon green for PLAY state
 COLOR_WARN = "#FFB300"  # Orange for UPDATE/INSTALL state
 
 
-class WopcApp(ctk.CTk):
+class WopcApp(BaseApp):  # type: ignore
     """The main Graphical User Interface for the WOPC Launcher."""
 
     def __init__(self) -> None:
@@ -134,7 +143,7 @@ class WopcApp(ctk.CTk):
         self.mods_scroll = ctk.CTkScrollableFrame(mods_tab, fg_color="transparent")
         self.mods_scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        self.mod_checkboxes = {}
+        self.mod_checkboxes: dict[str, Any] = {}
 
     def _build_maps_tab(self) -> None:
         """Construct the Map selector tab."""
@@ -186,11 +195,15 @@ class WopcApp(ctk.CTk):
 
     def log(self, message: str) -> None:
         """Add a message to the GUI text box."""
-        self.log_textbox.configure(state="normal")
-        self.log_textbox.insert("end", message + "\n")
-        self.log_textbox.see("end")
-        self.log_textbox.configure(state="disabled")
-        logger.info(message)
+
+        def _update():
+            self.log_textbox.configure(state="normal")
+            self.log_textbox.insert("end", message + "\n")
+            self.log_textbox.see("end")
+            self.log_textbox.configure(state="disabled")
+            logger.info(message)
+
+        self.after(0, _update)
 
     def _check_installation_status(self) -> None:
         """Check directories and update UI states appropriately."""
@@ -251,22 +264,37 @@ class WopcApp(ctk.CTk):
 
     def _on_setup_complete(self, success: bool) -> None:
         """Callback executed when the SetupWorker finishes."""
-        self.primary_btn.configure(state="normal")
-        if success:
-            self._check_installation_status()
-        else:
-            self.primary_btn.configure(text="INSTALL FAILED", fg_color=COLOR_WARN)
+
+        def _update():
+            self.primary_btn.configure(state="normal")
+            if success:
+                self._check_installation_status()
+            else:
+                self.log("Installation failed. Check logs and retry.")
+                self.primary_btn.configure(
+                    text="INSTALL / UPDATE",
+                    state="normal",
+                    fg_color=COLOR_WARN,
+                    hover_color="#CC8F00",
+                    text_color="black",
+                )
+
+        self.after(0, _update)
 
     def _launch_game(self) -> None:
         """Run the game in a background thread."""
         ret = cmd_launch()
         if ret == 0:
-            self.log("Game exited normally.")
+            self.log("Game process started successfully.")
         else:
-            self.log("Game exited with an error.")
+            self.log("Game failed to launch.")
 
 
 def launch_gui() -> None:
     """Instantiate and run the WOPC graphical application."""
+    if ctk is None:
+        logger.error("FATAL: customtkinter is not installed. Run 'pip install customtkinter'.")
+        sys.exit(1)
+
     app = WopcApp()
     app.mainloop()

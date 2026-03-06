@@ -27,6 +27,12 @@ def main():
         # Ensure we collect CustomTkinter assets
         "--collect-all",
         "customtkinter",
+        "--add-data",
+        f"{repo_root / 'init'};init",
+        "--add-data",
+        f"{repo_root / 'gamedata'};gamedata",
+        "--add-data",
+        f"{repo_root / 'vendor'};vendor",
         str(wopc_script),
     ]
 
