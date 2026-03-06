@@ -140,9 +140,11 @@ class TestRunSetup:
         run_setup(repo_init_dir)
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
-        # The fake LOUD has lua.scd and units.scd
+        # The fake LOUD has lua.scd and units.scd, plus our wopc_patches.scd and faf_ui.scd
         scds = list(wopc_gd.glob("*.scd"))
-        assert len(scds) >= 2
+        assert len(scds) >= 4
+        assert (wopc_gd / "faf_ui.scd").exists()
+        assert (wopc_gd / "wopc_patches.scd").exists()
 
     def test_creates_usermods_dir(self, patched_config, repo_init_dir):
         """Creates or copies usermods directory."""

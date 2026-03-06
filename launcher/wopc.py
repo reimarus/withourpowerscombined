@@ -22,6 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from launcher import prefs
 from launcher.config import (
     FA_PATCHES_DIR,
     GAME_EXE,
@@ -141,10 +142,23 @@ def cmd_launch() -> int:
         "/nomovie",
     ]
 
+    active_map = prefs.get_active_map()
+    if active_map:
+        cmd.extend(["/map", active_map])
+
+    enabled_mods = prefs.get_enabled_mods()
+    if enabled_mods:
+        # FAF engine reads multiple mods as comma-separated
+        cmd.extend(["/mod", ",".join(enabled_mods)])
+
     logger.info("Launching WOPC...")
     logger.info("  Exe:  %s", exe_path)
     logger.info("  Init: %s", init_path)
     logger.info("  Log:  %s", WOPC_BIN / GAME_LOG)
+    if active_map:
+        logger.info("  Map:  %s", active_map)
+    if enabled_mods:
+        logger.info("  Mods: %s", ", ".join(enabled_mods))
 
     try:
         subprocess.Popen(cmd, cwd=str(WOPC_BIN))

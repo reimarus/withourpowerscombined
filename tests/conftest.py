@@ -78,6 +78,16 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
     patch_build = tmp_path / "patch_build"
     vendor = tmp_path / "vendor"
 
+    # Fake Submodules
+    faf_ui = vendor / "faf_ui"
+    (faf_ui / "lua").mkdir(parents=True)
+    (faf_ui / "lua" / "ui").mkdir()
+    (faf_ui / "lua" / "ui" / "file.lua").write_bytes(b"\x00")
+
+    wopc_patches = scfa / "repo_patches"
+    wopc_patches.mkdir()
+    (wopc_patches / "patch_file.lua").write_bytes(b"\x00")
+
     config_patches = {
         "SCFA_STEAM": scfa,
         "SCFA_BIN": scfa / "bin",
@@ -99,6 +109,8 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "FA_PATCHES_DIR": vendor / "FA-Binary-Patches",
         "FA_PATCHER_DIR": vendor / "fa-python-binary-patcher",
         "PATCH_MANIFEST": tmp_path / "wopc_patches.toml",
+        "REPO_FAF_UI": vendor / "faf_ui",
+        "FAF_UI_SCD": "faf_ui.scd",
     }
 
     with patch.multiple("launcher.config", **config_patches):  # type: ignore[call-overload]

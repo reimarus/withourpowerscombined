@@ -117,6 +117,23 @@ def run_setup(repo_init_dir: Path) -> None:
     else:
         logger.warning("  WARNING: LOUD gamedata not found at %s", config.LOUD_GAMEDATA)
 
+    # Build faf_ui.scd
+    faf_ui_src = config.REPO_FAF_UI
+    faf_ui_dst = config.WOPC_GAMEDATA / config.FAF_UI_SCD
+    if faf_ui_src.exists():
+        logger.info("  building %s", config.FAF_UI_SCD)
+        with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_DEFLATED) as zf:
+            # The FAF UI repo has many files, but the engine only cares about specific dirs
+            for target_dir in ["lua", "modules", "ui", "loc"]:
+                dir_path = faf_ui_src / target_dir
+                if dir_path.exists():
+                    for file_path in dir_path.rglob("*"):
+                        if file_path.is_file():
+                            arcname = file_path.relative_to(faf_ui_src)
+                            zf.write(file_path, arcname)
+    else:
+        logger.warning("  WARNING: %s not found. Did you initialize submodules?", faf_ui_src)
+
     # Build wopc_patches.scd
     wopc_patches_src = config.REPO_WOPC_PATCHES
     wopc_patches_dst = config.WOPC_GAMEDATA / config.WOPC_PATCHES_SCD

@@ -58,10 +58,16 @@ mount_dir(SCFARoot .. '\\movies', '/movies')
 mount_dir(SCFARoot .. '\\sounds', '/sounds')
 
 -- =========================================================================
--- 5. WOPC patches overlay (our custom Lua fixes — shadows everything above)
+-- 5. FAF UI Integration (shadows vanilla and LOUD)
+-- =========================================================================
+local faf_ui = WOPCRoot .. '\\gamedata\\faf_ui.scd'
+mount_dir(faf_ui, '/')
+
+-- =========================================================================
+-- 6. WOPC patches overlay (our custom Lua fixes — shadows everything above)
 -- =========================================================================
 -- This SCD is built from gamedata/wopc_patches/ and mounted AFTER all LOUD
--- content, so our files take priority.
+-- and FAF content, so our files take priority.
 local wopc_patches = WOPCRoot .. '\\gamedata\\wopc_patches.scd'
 -- Only mount if the patches SCD exists (Phase 3+)
 mount_dir(wopc_patches, '/')

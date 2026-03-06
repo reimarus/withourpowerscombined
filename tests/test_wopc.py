@@ -134,6 +134,8 @@ class TestCmdLaunch:
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="SCMP_002"),
+            patch("launcher.wopc.prefs.get_enabled_mods", return_value=["BrewLAN"]),
         ):
             result = cmd_launch()
             assert result == 0
@@ -141,6 +143,10 @@ class TestCmdLaunch:
             # Verify exe is first arg
             call_args = mock_popen.call_args[0][0]
             assert "SupremeCommander.exe" in call_args[0]
+            assert "/map" in call_args
+            assert "SCMP_002" in call_args
+            assert "/mod" in call_args
+            assert "BrewLAN" in call_args
 
     @patch("subprocess.Popen", side_effect=OSError("access denied"))
     def test_launch_handles_oserror(self, mock_popen, tmp_path):
@@ -156,6 +162,8 @@ class TestCmdLaunch:
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.prefs.get_active_map", return_value=""),
+            patch("launcher.wopc.prefs.get_enabled_mods", return_value=[]),
         ):
             result = cmd_launch()
             assert result == 1

@@ -106,6 +106,10 @@ PATCH_MANIFEST = _REPO_ROOT / "wopc_patches.toml"
 REPO_WOPC_PATCHES = _REPO_ROOT / "gamedata" / "wopc_patches"
 WOPC_PATCHES_SCD = "wopc_patches.scd"
 
+# FAF UI Intergration (Phase 6)
+REPO_FAF_UI = VENDOR_DIR / "faf-ui"
+FAF_UI_SCD = "faf_ui.scd"
+
 # FAF distributes a specific base exe that the binary patches are built against.
 # The Steam SupremeCommander.exe has different code addresses, so hooks would
 # target wrong locations.  We download FAF's exe once and cache it locally.

@@ -3,7 +3,7 @@ import threading
 
 import customtkinter as ctk  # type: ignore[import-untyped]
 
-from launcher import config
+from launcher import config, prefs
 from launcher.gui.worker import SetupWorker
 from launcher.wopc import cmd_launch
 
@@ -71,14 +71,38 @@ class WopcApp(ctk.CTk):
         self.version_label.grid(row=5, column=0, padx=20, pady=20, sticky="s")
 
     def _build_main_view(self) -> None:
-        """Construct the central content area and primary action button."""
+        """Construct the central content area with tabbed navigation."""
         self.main_content = ctk.CTkFrame(self, fg_color="transparent")
         self.main_content.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=20, pady=20)
         self.main_content.grid_rowconfigure(0, weight=1)
         self.main_content.grid_columnconfigure(0, weight=1)
 
-        # Container for the big button to center it
-        self.center_frame = ctk.CTkFrame(self.main_content, fg_color="transparent")
+        # Tab View
+        self.tabview = ctk.CTkTabview(self.main_content)
+        self.tabview.grid(row=0, column=0, sticky="nsew")
+        self.tabview.add("Play")
+        self.tabview.add("Mods")
+        self.tabview.add("Maps")
+
+        self._build_play_tab()
+        self._build_mods_tab()
+        self._build_maps_tab()
+
+        # Log Window at the bottom
+        self.log_textbox = ctk.CTkTextbox(
+            self.main_content, height=120, fg_color=COLOR_PANEL, text_color="white"
+        )
+        self.log_textbox.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        self.log_textbox.insert("0.0", "Welcome to the WOPC Launcher...\\n")
+        self.log_textbox.configure(state="disabled")
+
+    def _build_play_tab(self) -> None:
+        """Construct the main Play tab."""
+        play_tab = self.tabview.tab("Play")
+        play_tab.grid_rowconfigure(0, weight=1)
+        play_tab.grid_columnconfigure(0, weight=1)
+
+        self.center_frame = ctk.CTkFrame(play_tab, fg_color="transparent")
         self.center_frame.grid(row=0, column=0)
 
         self.primary_btn = ctk.CTkButton(
@@ -94,12 +118,71 @@ class WopcApp(ctk.CTk):
         )
         self.primary_btn.pack(pady=20)
 
-        self.log_textbox = ctk.CTkTextbox(
-            self.main_content, height=150, fg_color=COLOR_PANEL, text_color="white"
+        # Summary Status
+        self.play_summary = ctk.CTkLabel(
+            self.center_frame, text="Active Mods: 0", text_color="gray"
         )
-        self.log_textbox.grid(row=1, column=0, sticky="ew")
-        self.log_textbox.insert("0.0", "Welcome to the WOPC Launcher...\n")
-        self.log_textbox.configure(state="disabled")
+        self.play_summary.pack()
+
+    def _build_mods_tab(self) -> None:
+        """Construct the Mod manager tab."""
+        mods_tab = self.tabview.tab("Mods")
+        mods_tab.grid_rowconfigure(0, weight=1)
+        mods_tab.grid_columnconfigure(0, weight=1)
+
+        # Scrollable frame for mod list
+        self.mods_scroll = ctk.CTkScrollableFrame(mods_tab, fg_color="transparent")
+        self.mods_scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+        self.mod_checkboxes = {}
+
+    def _build_maps_tab(self) -> None:
+        """Construct the Map selector tab."""
+        maps_tab = self.tabview.tab("Maps")
+        label = ctk.CTkLabel(maps_tab, text="Map Selection Coming Soon...")
+        label.pack(pady=50)
+
+    def _refresh_mods_list(self) -> None:
+        """Read available mods from disk and update the Mods tab."""
+        # Clear existing checkboxes
+        for cb in self.mod_checkboxes.values():
+            cb.destroy()
+        self.mod_checkboxes.clear()
+
+        if not config.WOPC_USERMODS.exists():
+            return
+
+        enabled_mods = prefs.get_enabled_mods()
+
+        # Find all mod folders or SCDs
+        available = []
+        for d in config.WOPC_USERMODS.iterdir():
+            if d.is_dir() or d.name.endswith(".scd") or d.name.endswith(".zip"):
+                available.append(d.name)
+
+        available.sort()
+
+        for idx, mod_name in enumerate(available):
+            is_enabled = mod_name in enabled_mods
+
+            # Create a localized callback using default arguments to capture `mod_name` correctly
+            def on_toggle(name=mod_name):
+                cb = self.mod_checkboxes[name]
+                prefs.set_mod_state(name, bool(cb.get()))
+                self._update_play_summary()
+
+            cb = ctk.CTkCheckBox(self.mods_scroll, text=mod_name, command=on_toggle)
+            if is_enabled:
+                cb.select()
+            cb.grid(row=idx, column=0, pady=5, padx=10, sticky="w")
+            self.mod_checkboxes[mod_name] = cb
+
+        self._update_play_summary()
+
+    def _update_play_summary(self) -> None:
+        """Update the label on the play tab showing the active config."""
+        enabled = len(prefs.get_enabled_mods())
+        self.play_summary.configure(text=f"Active Mods: {enabled}")
 
     def log(self, message: str) -> None:
         """Add a message to the GUI text box."""
@@ -141,9 +224,14 @@ class WopcApp(ctk.CTk):
             self.log("WOPC is not deployed. Click Install to begin.")
         else:
             self.primary_btn.configure(
-                text="PLAY WOPC", fg_color=COLOR_READY, hover_color="#00CC52", text_color="black"
+                text="PLAY WOPC",
+                fg_color=COLOR_READY,
+                hover_color="#00CC52",
+                text_color="black",
+                state="normal",
             )
             self.log("All systems ready.")
+            self._refresh_mods_list()
 
     def _on_primary_click(self) -> None:
         """Handle main button action depending on current state."""
