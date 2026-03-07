@@ -1,34 +1,17 @@
-#!/usr/bin/env python3
-"""
-WOPC Launcher - With Our Powers Combined
-Supreme Commander: Forged Alliance with LOUD gameplay + FAF engine patches.
-
-Usage:
-    wopc status       Check game installation, print paths
-    wopc setup        Create WOPC directory, copy/symlink content
-    wopc launch       Start the game
-    wopc validate     Verify WOPC directory integrity (or pass manifest.json to check hashes)
-    wopc manifest     Generate manifest.json of current WOPC installation hashes
-    wopc patch        Build patched exe from FAF binary patches
-      --clean         Force rebuild from scratch
-      --check         Verify toolchain without building
-      --dry-run       Show what would be built
-"""
-
 import hashlib
 import logging
 import subprocess
 import sys
 from pathlib import Path
 
+from launcher import prefs
 from launcher.config import (
     FA_PATCHES_DIR,
     GAME_EXE,
     GAME_LOG,
-    LOUD_GAMEDATA,
-    LOUD_ROOT,
     PATCH_BUILD_DIR,
     PATCH_MANIFEST,
+    REPO_BUNDLED_GAMEDATA,
     SCFA_BIN,
     SCFA_STEAM,
     VERSION,
@@ -41,9 +24,31 @@ from launcher.config import (
 )
 from launcher.log import setup_logging
 
+HELP_TEXT = """
+WOPC Launcher - With Our Powers Combined
+Standalone Supreme Commander: Forged Alliance client replacing LOUD and FAF.
+
+Usage:
+    wopc gui          Launch the graphical UI (default)
+    wopc status       Check game installation, print paths
+    wopc setup        Create WOPC directory, copy/symlink content
+    wopc launch       Start the game
+    wopc validate     Verify WOPC directory integrity (or pass manifest.json to check hashes)
+    wopc manifest     Generate manifest.json of current WOPC installation hashes
+    wopc patch        Build patched exe from FAF binary patches
+      --clean         Force rebuild from scratch
+      --check         Verify toolchain without building
+      --dry-run       Show what would be built
+"""
+
+
 # Resolve paths relative to this script (for finding repo init/ dir)
-SCRIPT_DIR = Path(__file__).parent.resolve()
-REPO_ROOT = SCRIPT_DIR.parent
+if getattr(sys, "frozen", False):
+    REPO_ROOT = Path(sys.executable).parent.resolve()
+else:
+    SCRIPT_DIR = Path(__file__).parent.resolve()
+    REPO_ROOT = SCRIPT_DIR.parent
+
 INIT_DIR = REPO_ROOT / "init"
 
 logger = logging.getLogger("wopc.cli")
@@ -58,12 +63,12 @@ def cmd_status() -> int:
     logger.info("Steam SCFA:  %s", SCFA_STEAM)
     logger.info("  Status:    %s", "FOUND" if scfa_ok else "NOT FOUND")
 
-    # Check LOUD
-    loud_ok = LOUD_ROOT.exists() and (LOUD_ROOT / "gamedata" / "lua.scd").exists()
-    logger.info("\nLOUD:        %s", LOUD_ROOT)
-    logger.info("  Status:    %s", "FOUND" if loud_ok else "NOT FOUND")
-    if loud_ok:
-        scds = list(LOUD_GAMEDATA.glob("*.scd"))
+    # Check bundled assets
+    bundled_ok = REPO_BUNDLED_GAMEDATA.exists()
+    logger.info("\nBundled:     %s", REPO_BUNDLED_GAMEDATA)
+    logger.info("  Status:    %s", "FOUND" if bundled_ok else "NOT FOUND")
+    if bundled_ok:
+        scds = list(REPO_BUNDLED_GAMEDATA.glob("*.scd"))
         logger.info("  SCDs:      %d files", len(scds))
 
     # Check WOPC
@@ -93,9 +98,8 @@ def cmd_status() -> int:
             "\nERROR: SCFA not found. Set SCFA_STEAM environment variable to your install path."
         )
         return 1
-    if not loud_ok:
-        logger.error("\nERROR: LOUD not found. Install LOUD first.")
-        return 1
+    if not bundled_ok:
+        logger.warning("\nWARNING: Bundled assets not found in repo.")
     return 0
 
 
@@ -105,9 +109,8 @@ def cmd_setup() -> int:
     if not SCFA_STEAM.exists():
         logger.error("ERROR: SCFA not found at %s", SCFA_STEAM)
         return 1
-    if not LOUD_ROOT.exists():
-        logger.error("ERROR: LOUD not found at %s", LOUD_ROOT)
-        return 1
+    if not REPO_BUNDLED_GAMEDATA.exists():
+        logger.warning("WARNING: Bundled assets not found in repo.")
     if not INIT_DIR.exists():
         logger.error("ERROR: init/ directory not found at %s", INIT_DIR)
         return 1
@@ -121,15 +124,17 @@ def cmd_setup() -> int:
 def cmd_launch() -> int:
     """Launch the game from the WOPC directory."""
     exe_path = WOPC_BIN / GAME_EXE
-    init_path = WOPC_BIN / "init_wopc.lua"
 
     if not exe_path.exists():
         logger.error("ERROR: Game exe not found at %s", exe_path)
         logger.error("Run 'wopc setup' first.")
         return 1
-    if not init_path.exists():
-        logger.error("ERROR: Init file not found at %s", init_path)
-        return 1
+
+    # Regenerate init_wopc.lua from current preferences (content packs, mods)
+    from launcher.init_generator import generate_init_lua
+
+    init_path = generate_init_lua()
+    logger.info("Regenerated %s", init_path)
 
     cmd = [
         str(exe_path),
@@ -140,10 +145,37 @@ def cmd_launch() -> int:
         "/nomovie",
     ]
 
+    active_map = prefs.get_active_map()
+    if active_map:
+        # Find the _scenario.lua file inside the map directory
+        map_dir = WOPC_MAPS / active_map
+        scenario_file = None
+        if map_dir.exists():
+            for f in map_dir.iterdir():
+                if f.name.endswith("_scenario.lua"):
+                    scenario_file = f.name
+                    break
+
+        if scenario_file:
+            # The engine expects the VFS path, which is /maps/<folder>/<scenario.lua>
+            vfs_path = f"/maps/{active_map}/{scenario_file}"
+            cmd.extend(["/map", vfs_path])
+        else:
+            logger.warning("Could not find _scenario.lua in %s", map_dir)
+
+    enabled_mods = prefs.get_enabled_mods()
+    if enabled_mods:
+        # FAF engine reads multiple mods as comma-separated
+        cmd.extend(["/mod", ",".join(enabled_mods)])
+
     logger.info("Launching WOPC...")
     logger.info("  Exe:  %s", exe_path)
     logger.info("  Init: %s", init_path)
     logger.info("  Log:  %s", WOPC_BIN / GAME_LOG)
+    if active_map:
+        logger.info("  Map:  %s", active_map)
+    if enabled_mods:
+        logger.info("  Mods: %s", ", ".join(enabled_mods))
 
     try:
         subprocess.Popen(cmd, cwd=str(WOPC_BIN))
@@ -287,19 +319,34 @@ def cmd_patch(args: list[str]) -> int:
     return 0
 
 
+def cmd_gui() -> int:
+    """Launch the WOPC graphical user interface."""
+    from launcher.gui.app import launch_gui
+
+    launch_gui()
+    return 0
+
+
 def main() -> int:
     """CLI entry point."""
     # Parse --verbose/-v flag
-    verbose = "--verbose" in sys.argv or "-v" in sys.argv
-    args = [a for a in sys.argv[1:] if a not in ("--verbose", "-v")]
+    raw_args: list[str] = sys.argv
+    verbose: bool = "--verbose" in raw_args or "-v" in raw_args
+    args: list[str] = []
+
+    # Avoid Pyre __getitem__ slice linting errors by iterating directly
+    for i in range(1, len(raw_args)):
+        val = raw_args[i]
+        if val not in ("--verbose", "-v"):
+            args.append(val)
+
     setup_logging(verbose=verbose)
 
     if len(args) < 1:
-        logger.info(__doc__)
-        return 0
+        return cmd_gui()
 
-    cmd = args[0].lower()
-    cmd_args = args[1:]
+    cmd: str = args[0].lower()
+    cmd_args: list[str] = args[1:]
 
     commands = {
         "status": cmd_status,
@@ -307,6 +354,7 @@ def main() -> int:
         "launch": cmd_launch,
         "validate": lambda: cmd_validate(cmd_args),
         "manifest": cmd_manifest,
+        "gui": cmd_gui,
     }
 
     # Commands that accept extra arguments
@@ -317,7 +365,7 @@ def main() -> int:
         return commands[cmd]()
     else:
         logger.error("Unknown command: %s", cmd)
-        logger.info(__doc__)
+        logger.info(HELP_TEXT)
         return 1
 
 

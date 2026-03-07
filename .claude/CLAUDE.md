@@ -59,9 +59,10 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 4. `ruff check launcher/ tests/` — clean
 5. `mypy launcher/` — clean
 6. `git commit` — pre-commit hooks auto-run (ruff, trailing whitespace, large file check)
-7. `git push` + `gh pr create` — CI runs 4 jobs (lint, typecheck, test, lua-check)
-8. CodeRabbit reviews PR automatically
-9. Merge only when CI is green
+7. `python build_exe.py` — rebuild `dist/WOPC-Launcher.exe` and smoke-test launch
+8. `git push` + `gh pr create` — CI runs 4 jobs (lint, typecheck, test, lua-check)
+9. CodeRabbit reviews PR automatically
+10. Merge only when CI is green
 
 ## Cross-AI Handoff
 

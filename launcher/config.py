@@ -19,9 +19,6 @@ SCFA_STEAM = Path(
     )
 )
 
-# LOUD lives inside the SCFA directory
-LOUD_ROOT = SCFA_STEAM / "LOUD"
-
 # --- WOPC deployed directory ---
 
 WOPC_ROOT = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "WOPC"
@@ -32,15 +29,9 @@ WOPC_SOUNDS = WOPC_ROOT / "sounds"
 WOPC_USERMODS = WOPC_ROOT / "usermods"
 WOPC_USERMAPS = WOPC_ROOT / "usermaps"
 
-# --- Source directories in SCFA/LOUD ---
+# --- Source directories in SCFA ---
 
 SCFA_BIN = SCFA_STEAM / "bin"
-LOUD_BIN = LOUD_ROOT / "bin"
-LOUD_GAMEDATA = LOUD_ROOT / "gamedata"
-LOUD_MAPS = LOUD_ROOT / "maps"
-LOUD_SOUNDS = LOUD_ROOT / "sounds"
-LOUD_USERMODS = LOUD_ROOT / "usermods"
-LOUD_USERMAPS = LOUD_ROOT / "usermaps"
 
 # --- Files to copy from SCFA/bin/ to WOPC/bin/ ---
 
@@ -78,12 +69,7 @@ BIN_FILES = [
     "splash.png",
 ]
 
-# --- Files from LOUD/bin/ to copy to WOPC/bin/ ---
-
-LOUD_BIN_FILES = [
-    "CommonDataPath.lua",
-    "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd",
-]
+# --- Files from SCFA/bin/ to copy to WOPC/bin/ ---
 
 # --- Init files from our repo to copy to WOPC/bin/ ---
 
@@ -102,9 +88,21 @@ FA_PATCHER_DIR = VENDOR_DIR / "fa-python-binary-patcher"
 PATCH_BUILD_DIR = _REPO_ROOT / "patches" / "build"
 PATCH_MANIFEST = _REPO_ROOT / "wopc_patches.toml"
 
+# Bundled standalone assets (from LFS or release zip)
+REPO_BUNDLED = _REPO_ROOT / "bundled"
+REPO_BUNDLED_BIN = REPO_BUNDLED / "bin"
+REPO_BUNDLED_GAMEDATA = REPO_BUNDLED / "gamedata"
+REPO_BUNDLED_MAPS = REPO_BUNDLED / "maps"
+REPO_BUNDLED_SOUNDS = REPO_BUNDLED / "sounds"
+REPO_BUNDLED_USERMODS = REPO_BUNDLED / "usermods"
+
 # WOPC Overlay Content
 REPO_WOPC_PATCHES = _REPO_ROOT / "gamedata" / "wopc_patches"
 WOPC_PATCHES_SCD = "wopc_patches.scd"
+
+# FAF UI Intergration (Phase 6)
+REPO_FAF_UI = VENDOR_DIR / "faf-ui"
+FAF_UI_SCD = "faf_ui.scd"
 
 # FAF distributes a specific base exe that the binary patches are built against.
 # The Steam SupremeCommander.exe has different code addresses, so hooks would

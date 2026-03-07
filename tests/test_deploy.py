@@ -133,16 +133,31 @@ class TestRunSetup:
         # Setup should still complete without raising
         run_setup(repo_init_dir)
 
-    def test_symlinks_gamedata_scds(self, patched_config, repo_init_dir):
-        """Symlinks or copies each SCD file from LOUD gamedata."""
+    def test_copies_bundled_gamedata_scds(self, patched_config, repo_init_dir):
+        """Copies each SCD file from bundled gamedata."""
         from launcher.deploy import run_setup
 
         run_setup(repo_init_dir)
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
-        # The fake LOUD has lua.scd and units.scd
+        # The fake bundled dir has lua.scd and units.scd, plus our wopc_patches.scd and faf_ui.scd
         scds = list(wopc_gd.glob("*.scd"))
-        assert len(scds) >= 2
+        assert len(scds) >= 4
+        assert (wopc_gd / "faf_ui.scd").exists()
+        assert (wopc_gd / "wopc_patches.scd").exists()
+
+    def test_copies_scfa_maps(self, patched_config, repo_init_dir):
+        """Copies SCFA stock maps to WOPC maps directory."""
+        from launcher.deploy import run_setup
+
+        scfa_maps = patched_config["SCFA_STEAM"] / "maps"
+        scfa_maps.mkdir(parents=True)
+        (scfa_maps / "SCMP_001").mkdir()
+
+        run_setup(repo_init_dir)
+
+        wopc_maps = patched_config["WOPC_MAPS"]
+        assert (wopc_maps / "SCMP_001").exists()
 
     def test_creates_usermods_dir(self, patched_config, repo_init_dir):
         """Creates or copies usermods directory."""
