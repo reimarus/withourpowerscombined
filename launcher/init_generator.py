@@ -19,6 +19,11 @@ logger = logging.getLogger("wopc.init_generator")
 
 # SCDs that must ALWAYS be mounted (core engine requirements).
 # These cannot be toggled off without breaking the game.
+#
+# NOTE: faf_ui.scd and wopc_patches.scd are NOT listed here because they
+# require special mount ordering — they must mount AFTER vanilla SCFA
+# content so they shadow it correctly.  They are handled explicitly in
+# the generated template below.
 CORE_SCDS = frozenset(
     {
         "lua.scd",
@@ -27,10 +32,12 @@ CORE_SCDS = frozenset(
         "env.scd",
         "projectiles.scd",
         "textures.scd",
-        "wopc_patches.scd",
-        "faf_ui.scd",
     }
 )
+
+# SCDs with fixed mount positions that must NOT appear in the toggleable
+# content packs list or in the early gamedata block.
+_FIXED_POSITION_SCDS = frozenset({"faf_ui.scd", "wopc_patches.scd"})
 
 # Human-friendly names for content packs shown in the launcher UI.
 CONTENT_PACK_LABELS: dict[str, str] = {
@@ -51,14 +58,16 @@ CONTENT_PACK_LABELS: dict[str, str] = {
 def get_toggleable_scds() -> list[str]:
     """Return a sorted list of gamedata SCD names the user can toggle.
 
-    Core SCDs (lua.scd, wopc_patches.scd, etc.) are excluded because
-    disabling them would break the game.
+    Core SCDs (lua.scd, etc.) and fixed-position SCDs (faf_ui.scd,
+    wopc_patches.scd) are excluded because disabling them would break
+    the game or corrupt VFS mount ordering.
     """
     if not config.WOPC_GAMEDATA.exists():
         return []
 
     all_scds = sorted(f.name for f in config.WOPC_GAMEDATA.iterdir() if f.suffix == ".scd")
-    return [s for s in all_scds if s not in CORE_SCDS]
+    non_toggleable = CORE_SCDS | _FIXED_POSITION_SCDS
+    return [s for s in all_scds if s not in non_toggleable]
 
 
 def get_enabled_packs() -> list[str]:
@@ -103,14 +112,9 @@ def generate_init_lua() -> Path:
 
     gamedata_block = "\n".join(gamedata_mounts)
 
-    # Enabled user mods
-    enabled_mods = prefs.get_enabled_mods()
-    if enabled_mods:
-        usermods_block = "\n".join(
-            f"mount_dir(WOPCRoot .. '\\\\usermods\\\\{mod}', '/')" for mod in enabled_mods
-        )
-    else:
-        usermods_block = "-- No user mods enabled"
+    # User mods are mounted via the engine's mount_mods() function which
+    # handles mod metadata, dependencies, and ordering automatically.
+    # Individual mod toggling is not yet supported (requires engine work).
 
     lua_content = f"""\
 -- =============================================================================
@@ -126,6 +130,7 @@ def generate_init_lua() -> Path:
 --   3. Content pack SCDs        (brewlan.scd, blackops.scd, etc. — toggleable)
 --   4. Bundled maps and sounds
 --   5. Vanilla SCFA content     (fonts, textures, effects, env, etc.)
+--  5.5 FAF UI                   (shadows vanilla UI)
 --   6. WOPC patches overlay     (our Lua fixes/enhancements)
 --   7. User maps
 --   8. User mods                (loaded LAST — shadow everything above)
@@ -171,6 +176,12 @@ mount_dir(SCFARoot .. '\\\\movies', '/movies')
 mount_dir(SCFARoot .. '\\\\sounds', '/sounds')
 
 -- =========================================================================
+-- 5.5. FAF UI Integration (shadows vanilla SCFA content)
+-- =========================================================================
+local faf_ui = WOPCRoot .. '\\\\gamedata\\\\faf_ui.scd'
+mount_dir(faf_ui, '/')
+
+-- =========================================================================
 -- 6. WOPC patches overlay (shadows everything above)
 -- =========================================================================
 local wopc_patches = WOPCRoot .. '\\\\gamedata\\\\wopc_patches.scd'
@@ -182,9 +193,9 @@ mount_dir(wopc_patches, '/')
 mount_dir(WOPCRoot .. '\\\\usermaps', '/maps')
 
 -- =========================================================================
--- 8. User mods
+-- 8. User mods (loaded LAST — shadow everything above)
 -- =========================================================================
-{usermods_block}
+mount_mods(WOPCRoot .. '\\\\usermods')
 
 -- =========================================================================
 -- Hook paths and protocols

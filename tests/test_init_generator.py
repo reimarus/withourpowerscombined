@@ -16,7 +16,9 @@ def gamedata_dir(tmp_path: Path) -> Path:
     # Core SCDs
     (gd / "lua.scd").write_bytes(b"x" * 100)
     (gd / "loc_US.scd").write_bytes(b"x" * 50)
+    # Fixed-position SCDs (mounted explicitly after vanilla SCFA)
     (gd / "wopc_patches.scd").write_bytes(b"x" * 30)
+    (gd / "faf_ui.scd").write_bytes(b"x" * 40)
     # Toggleable content packs
     (gd / "brewlan.scd").write_bytes(b"x" * 2000)
     (gd / "blackops.scd").write_bytes(b"x" * 1500)
@@ -33,13 +35,15 @@ def prefs_file(tmp_path: Path) -> Path:
 class TestGetToggleableScds:
     """Tests for get_toggleable_scds()."""
 
-    def test_excludes_core_scds(self, gamedata_dir: Path) -> None:
+    def test_excludes_core_and_fixed_position_scds(self, gamedata_dir: Path) -> None:
         with patch("launcher.init_generator.config") as mock_config:
             mock_config.WOPC_GAMEDATA = gamedata_dir
             result = init_generator.get_toggleable_scds()
         # Core SCDs should not appear
         assert "lua.scd" not in result
+        # Fixed-position SCDs should not appear (they need special mount order)
         assert "wopc_patches.scd" not in result
+        assert "faf_ui.scd" not in result
         # Toggleable ones should
         assert "brewlan.scd" in result
         assert "blackops.scd" in result
@@ -111,7 +115,6 @@ class TestGenerateInitLua:
 
             parser = configparser.ConfigParser()
             mock_prefs.load_prefs.return_value = parser
-            mock_prefs.get_enabled_mods.return_value = []
 
             result = init_generator.generate_init_lua()
 
@@ -138,7 +141,6 @@ class TestGenerateInitLua:
             parser.add_section("ContentPacks")
             parser.set("ContentPacks", "brewlan.scd", "False")
             mock_prefs.load_prefs.return_value = parser
-            mock_prefs.get_enabled_mods.return_value = []
 
             result = init_generator.generate_init_lua()
 
@@ -147,7 +149,8 @@ class TestGenerateInitLua:
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\brewlan.scd', '/')" not in content
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\blackops.scd', '/')" in content
 
-    def test_includes_enabled_user_mods(self, gamedata_dir: Path, tmp_path: Path) -> None:
+    def test_faf_ui_mounts_after_vanilla_scfa(self, gamedata_dir: Path, tmp_path: Path) -> None:
+        """faf_ui.scd must mount AFTER vanilla SCFA content to shadow it."""
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
@@ -162,9 +165,61 @@ class TestGenerateInitLua:
 
             parser = configparser.ConfigParser()
             mock_prefs.load_prefs.return_value = parser
-            mock_prefs.get_enabled_mods.return_value = ["BetterPathing"]
 
             result = init_generator.generate_init_lua()
 
         content = result.read_text()
-        assert "BetterPathing" in content
+        # faf_ui should NOT be in the early gamedata block
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\faf_ui.scd', '/')" not in content
+        # faf_ui should appear via explicit local variable after vanilla SCFA
+        vanilla_pos = content.index("Vanilla SCFA content (fonts")
+        faf_ui_mount_pos = content.index("mount_dir(faf_ui, '/')")
+        wopc_patches_mount_pos = content.index("mount_dir(wopc_patches, '/')")
+        assert vanilla_pos < faf_ui_mount_pos < wopc_patches_mount_pos
+
+    def test_wopc_patches_not_double_mounted(self, gamedata_dir: Path, tmp_path: Path) -> None:
+        """wopc_patches.scd should only appear once — in the fixed step 6 position."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+
+        with (
+            patch("launcher.init_generator.config") as mock_config,
+            patch("launcher.init_generator.prefs") as mock_prefs,
+        ):
+            mock_config.WOPC_GAMEDATA = gamedata_dir
+            mock_config.WOPC_BIN = bin_dir
+
+            import configparser
+
+            parser = configparser.ConfigParser()
+            mock_prefs.load_prefs.return_value = parser
+
+            result = init_generator.generate_init_lua()
+
+        content = result.read_text()
+        # Should NOT be in the early gamedata block
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\wopc_patches.scd', '/')" not in content
+        # Should appear once via the explicit local variable
+        assert content.count("wopc_patches") >= 2  # variable + mount_dir
+
+    def test_uses_mount_mods_for_usermods(self, gamedata_dir: Path, tmp_path: Path) -> None:
+        """User mods should use engine mount_mods(), not individual mount_dir() calls."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+
+        with (
+            patch("launcher.init_generator.config") as mock_config,
+            patch("launcher.init_generator.prefs") as mock_prefs,
+        ):
+            mock_config.WOPC_GAMEDATA = gamedata_dir
+            mock_config.WOPC_BIN = bin_dir
+
+            import configparser
+
+            parser = configparser.ConfigParser()
+            mock_prefs.load_prefs.return_value = parser
+
+            result = init_generator.generate_init_lua()
+
+        content = result.read_text()
+        assert "mount_mods(WOPCRoot .. '\\\\usermods')" in content
