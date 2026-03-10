@@ -2,6 +2,20 @@
 
 This is a game people play with friends. Bugs crash the party. Every line of code must earn its place.
 
+## Session Startup (MANDATORY)
+
+**Before doing ANY work in a new session, read these files:**
+1. `C:\Users\roskv\wopc\.claude\CLAUDE.md` — this file (code standards, architecture)
+2. `C:\Users\roskv\wopc\.claude\QUICKSTART_STATE.md` — session recovery breadcrumbs
+3. `C:\Users\roskv\wopc\docs\architecture.md` — system architecture and VFS design
+4. `C:\Users\roskv\.claude\projects\C--Users-roskv-loudmod\memory\MEMORY.md` — cross-session memory
+5. Any `.claude/plans/*.md` files — active implementation plans
+
+**Before executing any implementation plan:**
+- Write or update the plan in `.claude/plans/`
+- **Commit the plan FIRST** before writing any code
+- Plans are committed artifacts, not throwaway notes
+
 ## Project
 
 **WOPC** (With Our Powers Combined) merges LOUD gameplay with FAF engine patches for Supreme Commander: Forged Alliance.
