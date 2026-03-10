@@ -106,11 +106,48 @@ wopc setup
   → Detects patched exe and deploys it (falls back to stock if not built)
 ```
 
+### Quick-Start System (bypass lobby, launch directly into match)
+
+The WOPC launcher can launch games directly — no in-game lobby UI needed.
+
+**Flow:**
+```
+Python launcher (wopc.py)
+  → writes wopc_game_config.lua (map, players, AI, options)
+  → passes /wopcquickstart /wopcconfig <path> on command line
+  → engine loads init_wopc.lua → mounts VFS → loads uimain.lua
+
+uimain.lua (our patched copy in lua.scd)
+  → SetupUI() — cursor, skin, layout (called by engine C++)
+  → StartHostLobbyUI() — detects /wopcquickstart flag
+  → calls quickstart.lua:Launch()
+
+quickstart.lua
+  → reads config via GetCommandLineArg("/wopcconfig")
+  → creates LobbyComm via lobbyComm.lua:CreateLobbyComm()
+  → builds gameInfo table (GameOptions + PlayerOptions)
+  → calls comm:LaunchGame(gameInfo) → engine enters simulation
+```
+
+**Key files:**
+| File | Role |
+|------|------|
+| `launcher/wopc.py` | Writes config, passes /wopcquickstart + /wopcconfig |
+| `launcher/game_config.py` | Generates wopc_game_config.lua (Lua table) |
+| `launcher/deploy.py` | `_patch_scd()` patches lua.scd with our uimain.lua |
+| `gamedata/wopc_patches/lua/ui/uimain.lua` | Full FAF copy + quickstart hook |
+| `gamedata/wopc_patches/lua/wopc/quickstart.lua` | LobbyComm-based game launcher |
+
+**Critical discoveries (hard-won):**
+- `InitFileDir` is only in the init Lua state, NOT the UI state. Use command-line args.
+- `OwnerID` in PlayerOptions must be a **string** (peer ID), not a number.
+- `moho.lobby_methods.LaunchGame` is the actual C++ entry point.
+
 ## Phase Roadmap
 - **Phase 0** ✅ Foundation — launcher, init, CI, tests
 - **Phase 1** ✅ Game launches from WOPC directory
 - **Phase 2** ✅ FAF binary patches integration
-- **Phase 3** → WOPC Lua overlay
+- **Phase 3** → WOPC Lua overlay (quickstart system done, LOUD content packaging next)
 - **Phase 4** → Multiplayer support
 - **Phase 5** → C++ pathfinding patch
 
@@ -120,6 +157,13 @@ wopc setup
 - `deploy.py` generates `wopc_paths.lua` with escaped backslashes for Lua string literals.
 - Symlinks on Windows may need admin. `link_or_copy()` handles the fallback silently.
 - The game exe expects `/init init_wopc.lua` as a command-line argument. `InitFileDir` is set by the engine to the directory containing the init file.
+- **VFS has TWO search orders (critical!):**
+  - **Engine C++ file loading** (uimain.lua, etc.): **first-added = highest priority** — earlier mounts win
+  - **Lua `import()` function**: **last-added = highest priority** — later mounts shadow earlier ones
+  - This means VFS overlays (wopc_patches.scd) work for Lua `import()` but NOT for engine-loaded files
+  - To override engine-loaded files like uimain.lua, you must **patch lua.scd directly** using `_patch_scd()` in deploy.py
+  - Mount order in init_wopc.lua: (1) icons → (2) loc_US → (3) lua.scd → (4) maps/sounds → (5) vanilla SCFA → (6) faf_ui.scd → (7) wopc_patches.scd → (8) usermaps → (9) usermods
+- **`InitFileDir` is NOT available in the UI Lua state.** It only exists during init file execution. Use `GetCommandLineArg()` to pass paths from the launcher.
 - **Patcher uses module-level config.** `patcher.py` uses `from launcher import config` then `config.SCFA_BIN`, same pattern as `deploy.py`. Mock with `patch("launcher.patcher.config")` in tests.
 - **Patcher staging is disposable.** `patches/build/staging/` is a temp copy — never modify the submodule sources directly.
 - **Toolchain must be 32-bit.** SCFA is a 32-bit game. The patcher compiles with `-m32` flags. x64 compilers will produce incompatible code.
