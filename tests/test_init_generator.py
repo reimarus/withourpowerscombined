@@ -35,16 +35,17 @@ def prefs_file(tmp_path: Path) -> Path:
 class TestGetToggleableScds:
     """Tests for get_toggleable_scds()."""
 
-    def test_excludes_core_and_fixed_position_scds(self, gamedata_dir: Path) -> None:
+    def test_excludes_fixed_position_scds(self, gamedata_dir: Path) -> None:
         with patch("launcher.init_generator.config") as mock_config:
             mock_config.WOPC_GAMEDATA = gamedata_dir
             result = init_generator.get_toggleable_scds()
-        # Core SCDs should not appear
-        assert "lua.scd" not in result
         # Fixed-position SCDs should not appear (they need special mount order)
         assert "wopc_patches.scd" not in result
         assert "faf_ui.scd" not in result
-        # Toggleable ones should
+        # LOUD SCDs (lua.scd, loc_US.scd) are now toggleable content packs
+        assert "lua.scd" in result
+        assert "loc_US.scd" in result
+        # Other toggleable content packs
         assert "brewlan.scd" in result
         assert "blackops.scd" in result
         assert "TotalMayhem.scd" in result
@@ -118,7 +119,7 @@ class TestGenerateInitLua:
     """Tests for generate_init_lua()."""
 
     def test_generates_faf_only_by_default(self, gamedata_dir: Path, tmp_path: Path) -> None:
-        """With no ContentPacks section, only core SCDs are mounted (FAF-only mode)."""
+        """With no ContentPacks section, no gamedata SCDs are mounted (FAF-only mode)."""
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
@@ -139,12 +140,16 @@ class TestGenerateInitLua:
         assert result.exists()
         content = result.read_text()
         assert "AUTO-GENERATED" in content
-        # Core SCDs are always mounted
-        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\lua.scd', '/')" in content
-        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\loc_US.scd', '/')" in content
-        # Content packs are NOT mounted in FAF-only mode
+        # No LOUD content packs mounted in FAF-only mode (CORE_SCDS is empty)
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\lua.scd', '/')" not in content
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\loc_US.scd', '/')" not in content
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\brewlan.scd', '/')" not in content
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\blackops.scd', '/')" not in content
+        # Vanilla SCFA gameplay assets ARE mounted from SCFARoot
+        assert "mount_dir(SCFARoot .. '\\\\gamedata\\\\units.scd', '/')" in content
+        assert "mount_dir(SCFARoot .. '\\\\gamedata\\\\loc_us.scd', '/')" in content
+        assert "mount_dir(SCFARoot .. '\\\\gamedata\\\\objects.scd', '/')" in content
+        assert "mount_dir(SCFARoot .. '\\\\gamedata\\\\mods.scd', '/')" in content
         # faf_ui and wopc_patches still present via fixed mounts
         assert "mount_dir(faf_ui, '/')" in content
         assert "mount_dir(wopc_patches, '/')" in content
@@ -222,7 +227,7 @@ class TestGenerateInitLua:
         # faf_ui should NOT be in the early gamedata block
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\faf_ui.scd', '/')" not in content
         # faf_ui should appear via explicit local variable after vanilla SCFA
-        vanilla_pos = content.index("Vanilla SCFA content (fonts")
+        vanilla_pos = content.index("Vanilla SCFA content (assets")
         faf_ui_mount_pos = content.index("mount_dir(faf_ui, '/')")
         wopc_patches_mount_pos = content.index("mount_dir(wopc_patches, '/')")
         assert vanilla_pos < faf_ui_mount_pos < wopc_patches_mount_pos
