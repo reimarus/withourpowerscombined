@@ -97,8 +97,17 @@ end
 function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvider)
     LOG("WOPC QuickStart: Loading game configuration...")
 
-    -- Load the config file written by the Python launcher
-    local configPath = InitFileDir .. "\\wopc_game_config.lua"
+    -- Load the config file written by the Python launcher.
+    -- Path is passed on the command line as /wopcconfig <path>.
+    -- (InitFileDir is only available in the init Lua state, not the UI state.)
+    local configArg = GetCommandLineArg("/wopcconfig", 1)
+    if not configArg then
+        LOG("WOPC QuickStart: ERROR — /wopcconfig not on command line")
+        FallbackToLobby(protocol, port, playerName, gameName, mapFile, natTraversalProvider)
+        return
+    end
+    local configPath = configArg[1]
+    LOG("WOPC QuickStart: Config path = " .. tostring(configPath))
     local ok, cfg = pcall(dofile, configPath)
     if not ok or not cfg then
         LOG("WOPC QuickStart: Failed to load config from " .. configPath)

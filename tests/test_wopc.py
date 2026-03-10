@@ -153,6 +153,7 @@ class TestCmdLaunch:
             assert "SupremeCommander.exe" in call_args[0]
             assert "/hostgame" in call_args
             assert "/wopcquickstart" in call_args
+            assert "/wopcconfig" in call_args
             assert "/maps/SCMP_002/SCMP_002_scenario.lua" in call_args
             assert "/mod" in call_args
             assert "BrewLAN" in call_args

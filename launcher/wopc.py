@@ -186,6 +186,8 @@ def cmd_launch() -> int:
                 "WOPC",
                 vfs_path,
                 "/wopcquickstart",
+                "/wopcconfig",
+                str(config_path),
             ]
         )
     else:
