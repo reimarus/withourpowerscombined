@@ -16,6 +16,12 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 - **Commit the plan FIRST** before writing any code
 - Plans are committed artifacts, not throwaway notes
 
+**Session utilities** (see `.claude/utils/UTILS.md` for full list):
+- `python .claude/utils/run_checks.py` — pytest + ruff + mypy in one pass
+- `python .claude/utils/rebuild_exe.py` — rebuild launcher exe
+- `python .claude/utils/deploy_and_launch.py` — deploy + launch game
+- `python .claude/utils/read_game_log.py --errors` — quick log analysis
+
 ## Project
 
 **WOPC** (With Our Powers Combined) merges LOUD gameplay with FAF engine patches for Supreme Commander: Forged Alliance.
@@ -162,7 +168,7 @@ quickstart.lua
 |------|------|
 | `launcher/wopc.py` | Writes config, passes /wopcquickstart + /wopcconfig |
 | `launcher/game_config.py` | Generates wopc_game_config.lua (Lua table) |
-| `launcher/deploy.py` | `_patch_scd()` patches lua.scd with our uimain.lua |
+| `launcher/deploy.py` | `_patch_scd()` patches faf_ui.scd + lua.scd with our uimain.lua |
 | `gamedata/wopc_patches/lua/ui/uimain.lua` | Full FAF copy + quickstart hook |
 | `gamedata/wopc_patches/lua/wopc/quickstart.lua` | LobbyComm-based game launcher |
 
@@ -189,8 +195,8 @@ quickstart.lua
   - **Engine C++ file loading** (uimain.lua, etc.): **first-added = highest priority** — earlier mounts win
   - **Lua `import()` function**: **last-added = highest priority** — later mounts shadow earlier ones
   - This means VFS overlays (wopc_patches.scd) work for Lua `import()` but NOT for engine-loaded files
-  - To override engine-loaded files like uimain.lua, you must **patch lua.scd directly** using `_patch_scd()` in deploy.py
-  - Mount order in init_wopc.lua: (1) icons → (2) loc_US → (3) lua.scd → (4) maps/sounds → (5) vanilla SCFA → (6) faf_ui.scd → (7) wopc_patches.scd → (8) usermaps → (9) usermods
+  - To override engine-loaded files like uimain.lua, you must **patch the SCD directly** using `_patch_scd()` in deploy.py (patches both faf_ui.scd and lua.scd)
+  - Mount order in init_wopc.lua: (1) icons → (2) content packs (LOUD, disabled by default) → (3) maps/sounds → (4) vanilla SCFA (units, textures, loc, etc.) → (5) faf_ui.scd → (6) wopc_patches.scd → (7) usermaps → (8) usermods
 - **`InitFileDir` is NOT available in the UI Lua state.** It only exists during init file execution. Use `GetCommandLineArg()` to pass paths from the launcher.
 - **Patcher uses module-level config.** `patcher.py` uses `from launcher import config` then `config.SCFA_BIN`, same pattern as `deploy.py`. Mock with `patch("launcher.patcher.config")` in tests.
 - **Patcher staging is disposable.** `patches/build/staging/` is a temp copy — never modify the submodule sources directly.

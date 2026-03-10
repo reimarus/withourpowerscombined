@@ -169,18 +169,28 @@ def run_setup(repo_init_dir: Path) -> None:
     else:
         logger.warning("  WARNING: %s not found", wopc_patches_src)
 
-    # Patch lua.scd with WOPC engine-level overrides.
+    # Patch SCDs with WOPC engine-level overrides.
     # The SCFA engine's C++ code loads files like uimain.lua using
     # first-added search order (earliest mount = highest priority),
     # which is the OPPOSITE of Lua's import() function.
-    # Since lua.scd is mounted early, we must patch it in place so the
-    # engine picks up our modified uimain.lua.
-    lua_scd_path = config.WOPC_GAMEDATA / "lua.scd"
-    if lua_scd_path.exists() and wopc_patches_src.exists():
+    # We must patch the SCD files in place so the engine picks up
+    # our modified uimain.lua (with quickstart hook).
+    if wopc_patches_src.exists():
         uimain_src = wopc_patches_src / "lua" / "ui" / "uimain.lua"
         if uimain_src.exists():
-            _patch_scd(lua_scd_path, "lua/ui/uimain.lua", uimain_src)
-            logger.info("  patched lua.scd with WOPC uimain.lua")
+            # Patch faf_ui.scd — in FAF-only mode this is the first (and only)
+            # SCD providing uimain.lua, so the engine C++ doscript finds it.
+            if faf_ui_dst.exists():
+                _patch_scd(faf_ui_dst, "lua/ui/uimain.lua", uimain_src)
+                logger.info("  patched faf_ui.scd with WOPC uimain.lua")
+
+            # Also patch LOUD's lua.scd if present — when LOUD content packs
+            # are enabled, lua.scd is mounted before faf_ui.scd, so the engine
+            # would find LOUD's uimain.lua first without this patch.
+            lua_scd_path = config.WOPC_GAMEDATA / "lua.scd"
+            if lua_scd_path.exists():
+                _patch_scd(lua_scd_path, "lua/ui/uimain.lua", uimain_src)
+                logger.info("  patched lua.scd with WOPC uimain.lua")
 
     # Maps, sounds: copy entire directories
     if config.REPO_BUNDLED_MAPS.exists():
