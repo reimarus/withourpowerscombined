@@ -41,9 +41,13 @@ local function BuildGameInfo(cfg)
         end
     end
 
-    -- Build player options array
+    -- Build player options array.
+    -- Types must match what the C++ engine expects in moho.lobby_methods.LaunchGame.
+    -- Key insight: OwnerID is a string (peer ID), not a number.
+    -- Fields like Team, Faction, StartSpot, PlayerColor are numbers.
     local playerOptions = {}
     for i, p in cfg.Players do
+        local isHuman = p.Human != false
         playerOptions[i] = {
             Team = p.Team or 1,
             PlayerColor = p.PlayerColor or i,
@@ -52,18 +56,11 @@ local function BuildGameInfo(cfg)
             Ready = true,
             Faction = p.Faction or 5,          -- 5 = random
             PlayerName = p.PlayerName or ("Player " .. i),
-            AIPersonality = p.AIPersonality or "",
-            Human = p.Human != false,           -- default true
+            AIPersonality = p.AIPersonality or '',
+            Human = isHuman,
             Civilian = false,
-            OwnerID = (p.Human != false) and 0 or false,
-            BadMap = false,
-            ObserverListIndex = -1,
-            MEAN = 0,
-            DEV = 0,
-            PL = 0,
-            NG = 0,
-            Country = false,
-            PlayerClan = "",
+            -- OwnerID must be a string (peer ID). Use "0" for host, tostring(i) for others.
+            OwnerID = isHuman and tostring(i - 1) or tostring(i - 1),
         }
     end
 
@@ -71,10 +68,7 @@ local function BuildGameInfo(cfg)
         GameOptions = options,
         PlayerOptions = playerOptions,
         Observers = {},
-        ClosedSlots = {},
-        SpawnMex = {},
         GameMods = {},
-        AutoTeams = {},
     }
 end
 
@@ -150,7 +144,8 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
 
     if not launchOk then
         LOG("WOPC QuickStart: LaunchGame failed: " .. tostring(launchErr))
-        LOG("WOPC QuickStart: Falling back to lobby UI")
-        FallbackToLobby(protocol, port, playerName, gameName, mapFile, natTraversalProvider)
+        -- Cannot fall back to lobby here — port is already bound by our LobbyComm.
+        -- Just log the error; the user will see the error in WOPC.log.
+        LOG("WOPC QuickStart: Cannot recover. Check WOPC.log for details.")
     end
 end
