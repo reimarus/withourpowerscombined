@@ -10,6 +10,32 @@ from launcher import config
 logger = logging.getLogger("wopc.deploy")
 
 
+def _patch_scd(scd_path: Path, arcname: str, replacement: Path) -> bool:
+    """Replace a single file inside an SCD (ZIP) archive.
+
+    Rewrites the archive to a temp file, then atomically replaces the original.
+    Returns True on success, False if the SCD couldn't be patched.
+    """
+    tmp_path = scd_path.with_suffix(".tmp")
+    try:
+        with (
+            zipfile.ZipFile(scd_path, "r") as zr,
+            zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zw,
+        ):
+            for info in zr.infolist():
+                if info.filename == arcname:
+                    zw.write(replacement, arcname)
+                else:
+                    zw.writestr(info, zr.read(info))
+        tmp_path.replace(scd_path)
+    except (zipfile.BadZipFile, OSError) as exc:
+        logger.warning("  WARNING: Could not patch %s: %s", scd_path.name, exc)
+        if tmp_path.exists():
+            tmp_path.unlink()
+        return False
+    return True
+
+
 def link_or_copy(src: Path, dst: Path) -> None:
     """Create a symlink, falling back to copy if symlinks need admin."""
     if dst.exists() or dst.is_symlink():
@@ -120,7 +146,6 @@ def run_setup(repo_init_dir: Path) -> None:
     if faf_ui_src.exists():
         logger.info("  building %s", config.FAF_UI_SCD)
         with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_DEFLATED) as zf:
-            # The FAF UI repo has many files, but the engine only cares about specific dirs
             for target_dir in ["lua", "modules", "ui", "loc"]:
                 dir_path = faf_ui_src / target_dir
                 if dir_path.exists():
@@ -143,6 +168,19 @@ def run_setup(repo_init_dir: Path) -> None:
                     zf.write(file_path, arcname)
     else:
         logger.warning("  WARNING: %s not found", wopc_patches_src)
+
+    # Patch lua.scd with WOPC engine-level overrides.
+    # The SCFA engine's C++ code loads files like uimain.lua using
+    # first-added search order (earliest mount = highest priority),
+    # which is the OPPOSITE of Lua's import() function.
+    # Since lua.scd is mounted early, we must patch it in place so the
+    # engine picks up our modified uimain.lua.
+    lua_scd_path = config.WOPC_GAMEDATA / "lua.scd"
+    if lua_scd_path.exists() and wopc_patches_src.exists():
+        uimain_src = wopc_patches_src / "lua" / "ui" / "uimain.lua"
+        if uimain_src.exists():
+            _patch_scd(lua_scd_path, "lua/ui/uimain.lua", uimain_src)
+            logger.info("  patched lua.scd with WOPC uimain.lua")
 
     # Maps, sounds: copy entire directories
     if config.REPO_BUNDLED_MAPS.exists():

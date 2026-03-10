@@ -22,6 +22,7 @@ from launcher.config import (
     WOPC_SOUNDS,
     WOPC_USERMODS,
 )
+from launcher.game_config import write_game_config
 from launcher.log import setup_logging
 
 HELP_TEXT = """
@@ -146,6 +147,7 @@ def cmd_launch() -> int:
     ]
 
     active_map = prefs.get_active_map()
+    vfs_path = None
     if active_map:
         # Find the _scenario.lua file inside the map directory
         map_dir = WOPC_MAPS / active_map
@@ -159,9 +161,35 @@ def cmd_launch() -> int:
         if scenario_file:
             # The engine expects the VFS path, which is /maps/<folder>/<scenario.lua>
             vfs_path = f"/maps/{active_map}/{scenario_file}"
-            cmd.extend(["/map", vfs_path])
         else:
             logger.warning("Could not find _scenario.lua in %s", map_dir)
+
+    if vfs_path:
+        # Write the game config for quickstart.lua to read at runtime.
+        # This includes player info, AI opponents, and game options.
+        player_name = prefs.get_player_name()
+        config_path = write_game_config(
+            scenario_file=vfs_path,
+            player_name=player_name,
+        )
+        logger.info("Wrote game config: %s", config_path)
+
+        # Use /hostgame to trigger StartHostLobbyUI in the engine.
+        # Our uimain.lua override checks for /wopcquickstart and
+        # bypasses the lobby UI, launching directly into the game.
+        cmd.extend(
+            [
+                "/hostgame",
+                "udp",
+                "15000",
+                player_name,
+                "WOPC",
+                vfs_path,
+                "/wopcquickstart",
+            ]
+        )
+    else:
+        logger.warning("No map selected — launching to main menu")
 
     enabled_mods = prefs.get_enabled_mods()
     if enabled_mods:

@@ -118,7 +118,7 @@ class TestCmdLaunch:
 
     @patch("subprocess.Popen")
     def test_launch_calls_popen(self, mock_popen, tmp_path):
-        """Launches game with correct arguments."""
+        """Launches game with correct arguments including quickstart."""
         from launcher.wopc import cmd_launch
 
         wopc_bin = tmp_path / "bin"
@@ -138,7 +138,12 @@ class TestCmdLaunch:
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
             patch("launcher.wopc.prefs.get_active_map", return_value="SCMP_002"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="Player"),
             patch("launcher.wopc.prefs.get_enabled_mods", return_value=["BrewLAN"]),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ),
         ):
             result = cmd_launch()
             assert result == 0
@@ -146,7 +151,8 @@ class TestCmdLaunch:
             # Verify exe is first arg
             call_args = mock_popen.call_args[0][0]
             assert "SupremeCommander.exe" in call_args[0]
-            assert "/map" in call_args
+            assert "/hostgame" in call_args
+            assert "/wopcquickstart" in call_args
             assert "/maps/SCMP_002/SCMP_002_scenario.lua" in call_args
             assert "/mod" in call_args
             assert "BrewLAN" in call_args
