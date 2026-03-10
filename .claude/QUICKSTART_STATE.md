@@ -2,14 +2,23 @@
 > Last updated: 2026-03-10
 > If session runs out of tokens, a new session can pick up from here.
 
-## Current State: QUICKSTART WORKS! Sim init fails on missing LOUD content.
+## Current State: QUICKSTART WORKS END-TO-END (GUI → game). Sim init fails on missing LOUD content.
 
-### Quickstart flow (VERIFIED WORKING):
-1. Python launcher writes `wopc_game_config.lua` + passes `/wopcquickstart /wopcconfig <path>`
-2. Engine loads our patched uimain.lua from lua.scd (via `_patch_scd()`)
-3. `StartHostLobbyUI()` detects `/wopcquickstart`, calls `quickstart.Launch()`
-4. quickstart.lua reads config, creates LobbyComm, builds gameInfo, calls `LaunchGame()`
-5. Engine enters simulation — loads simInit.lua
+### End-to-end verified (GUI launcher → game):
+1. **Build exe:** `python build_exe.py` → `dist/WOPC-Launcher.exe` (~18 MB)
+2. **Run exe:** `dist/WOPC-Launcher.exe` (or dev: `from launcher.gui.app import launch_gui; launch_gui()`)
+3. User selects map (Caldera) → clicks PLAY MATCH
+4. Python writes `wopc_game_config.lua` + passes `/wopcquickstart /wopcconfig <path>`
+5. Engine loads patched uimain.lua → detects quickstart → calls quickstart.Launch()
+6. quickstart.lua reads config, creates LobbyComm, calls LaunchGame()
+7. Engine enters simulation → loads map → loads blueprints → hits LOUD content blocker
+
+### IMPORTANT: Rebuilding the exe
+After ANY code changes to `launcher/`, `init/`, or `gamedata/`:
+```
+python build_exe.py    # rebuilds dist/WOPC-Launcher.exe
+```
+The exe bundles Python + assets at build time. Stale exe = old code!
 
 ### Current blocker: Missing LOUD gameplay content
 The sim crashes at `buffdefinitions.lua` because LOUD-specific categories (like `MOBILE`) aren't defined.
@@ -21,6 +30,8 @@ This is because `bundled/gamedata/*.scd` (LOUD gameplay content) isn't in the re
 2. `fe7b66e` — Refactor init_generator and add player_name preference
 3. `7c111de` — Fix quickstart: pass config path via /wopcconfig command-line arg
 4. `98a500f` — Fix quickstart: OwnerID must be string, not number
+5. `03e8a17` — Update quickstart breadcrumbs
+6. `c8ba228` — Document quickstart architecture + VFS dual search order
 
 ### Key fixes applied:
 - uimain.lua: full FAF copy (303 lines) with WOPC quickstart hook in StartHostLobbyUI

@@ -72,14 +72,21 @@ When transitioning phases or receiving the development branch from Antigravity (
 
 ```
 C:\Users\roskv\wopc\          (repo)
-  launcher/                    Python CLI
+  launcher/                    Python CLI + GUI
     wopc.py                    Entry point (status/setup/launch/validate/patch)
     config.py                  Path constants, file lists, version
     deploy.py                  Creates C:\ProgramData\WOPC\ game directory
+    game_config.py             Generates wopc_game_config.lua (quickstart config)
     log.py                     Logging configuration
     toolchain.py               Compiler discovery (Clang, GCC, LD)
     manifest.py                Patch manifest parsing (wopc_patches.toml)
     patcher.py                 Build orchestration for patched exe
+    gui/                       GUI launcher (customtkinter)
+      app.py                   WopcApp — main window, map selector, PLAY MATCH
+      worker.py                SetupWorker — async setup in background thread
+      wopc.ico                 Application icon
+  build_exe.py                 PyInstaller build script → dist/WOPC-Launcher.exe
+  dist/WOPC-Launcher.exe       Built GUI launcher (rebuild after code changes!)
   init/                        Lua init files (deployed to WOPC\bin\)
     init_wopc.lua              VFS mount order
     CommonDataPath.lua         VFS helper functions
@@ -91,6 +98,13 @@ C:\Users\roskv\wopc\          (repo)
   gamedata/wopc_patches/       WOPC Lua overlay (Phase 3+)
   tests/                       pytest suite
 ```
+
+### GUI Launcher
+
+**Build:** `python build_exe.py` → `dist/WOPC-Launcher.exe` (~18 MB)
+**Run (dev):** `.venv/Scripts/python.exe -c "from launcher.gui.app import launch_gui; launch_gui()"`
+**Run (built):** `dist/WOPC-Launcher.exe`
+**IMPORTANT:** The exe bundles Python code at build time. After ANY code changes to `launcher/`, `init/`, or `gamedata/`, you MUST rebuild with `python build_exe.py` before testing the exe. Running from dev mode (`launch_gui()`) always uses current source.
 
 ### Patch Build Flow
 
