@@ -17,6 +17,7 @@ PREFS_FILE = config.WOPC_ROOT / "wopc_prefs.ini"
 DEFAULT_PREFS = {
     "Game": {
         "active_map": "",
+        "player_name": "Player",
     },
     "Mods": {
         # Mods are stored as keys with boolean values (Enabled/Disabled)
@@ -81,6 +82,12 @@ def set_active_map(map_path: str) -> None:
         parser.add_section("Game")
     parser.set("Game", "active_map", str(map_path))
     save_prefs(parser)
+
+
+def get_player_name() -> str:
+    """Return the player's display name."""
+    parser = load_prefs()
+    return parser.get("Game", "player_name", fallback="Player")
 
 
 def get_enabled_mods() -> list[str]:

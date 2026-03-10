@@ -65,6 +65,23 @@ class TestGetToggleableScds:
 class TestPackState:
     """Tests for set_pack_state() and get_enabled_packs()."""
 
+    def test_faf_only_default(self, gamedata_dir: Path) -> None:
+        """No ContentPacks section → empty list (FAF-only mode)."""
+        with (
+            patch("launcher.init_generator.config") as mock_config,
+            patch("launcher.init_generator.prefs") as mock_prefs,
+        ):
+            mock_config.WOPC_GAMEDATA = gamedata_dir
+
+            import configparser
+
+            parser = configparser.ConfigParser()
+            mock_prefs.load_prefs.return_value = parser
+
+            result = init_generator.get_enabled_packs()
+
+        assert result == []
+
     def test_toggle_pack_off(self, gamedata_dir: Path, prefs_file: Path) -> None:
         with (
             patch("launcher.init_generator.config") as mock_config,
@@ -100,7 +117,8 @@ class TestPackState:
 class TestGenerateInitLua:
     """Tests for generate_init_lua()."""
 
-    def test_generates_file(self, gamedata_dir: Path, tmp_path: Path) -> None:
+    def test_generates_faf_only_by_default(self, gamedata_dir: Path, tmp_path: Path) -> None:
+        """With no ContentPacks section, only core SCDs are mounted (FAF-only mode)."""
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
@@ -121,8 +139,40 @@ class TestGenerateInitLua:
         assert result.exists()
         content = result.read_text()
         assert "AUTO-GENERATED" in content
-        assert "brewlan.scd" in content
-        assert "lua.scd" in content
+        # Core SCDs are always mounted
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\lua.scd', '/')" in content
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\loc_US.scd', '/')" in content
+        # Content packs are NOT mounted in FAF-only mode
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\brewlan.scd', '/')" not in content
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\blackops.scd', '/')" not in content
+        # faf_ui and wopc_patches still present via fixed mounts
+        assert "mount_dir(faf_ui, '/')" in content
+        assert "mount_dir(wopc_patches, '/')" in content
+
+    def test_generates_with_enabled_packs(self, gamedata_dir: Path, tmp_path: Path) -> None:
+        """With ContentPacks section, enabled SCDs are mounted."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+
+        with (
+            patch("launcher.init_generator.config") as mock_config,
+            patch("launcher.init_generator.prefs") as mock_prefs,
+        ):
+            mock_config.WOPC_GAMEDATA = gamedata_dir
+            mock_config.WOPC_BIN = bin_dir
+
+            import configparser
+
+            parser = configparser.ConfigParser()
+            parser.add_section("ContentPacks")
+            # All default to True when section exists
+            mock_prefs.load_prefs.return_value = parser
+
+            result = init_generator.generate_init_lua()
+
+        content = result.read_text()
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\brewlan.scd', '/')" in content
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\lua.scd', '/')" in content
 
     def test_omits_disabled_packs(self, gamedata_dir: Path, tmp_path: Path) -> None:
         bin_dir = tmp_path / "bin"

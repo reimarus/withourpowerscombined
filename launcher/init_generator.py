@@ -17,23 +17,12 @@ from launcher import config, prefs
 
 logger = logging.getLogger("wopc.init_generator")
 
-# SCDs that must ALWAYS be mounted (core engine requirements).
-# These cannot be toggled off without breaking the game.
-#
-# NOTE: faf_ui.scd and wopc_patches.scd are NOT listed here because they
-# require special mount ordering — they must mount AFTER vanilla SCFA
-# content so they shadow it correctly.  They are handled explicitly in
-# the generated template below.
-CORE_SCDS = frozenset(
-    {
-        "lua.scd",
-        "loc_US.scd",
-        "effects.scd",
-        "env.scd",
-        "projectiles.scd",
-        "textures.scd",
-    }
-)
+# The two root modules — always mounted, never toggleable.
+# These provide the base Lua engine and localization that everything else
+# builds on.  Vanilla SCFA assets (effects, textures, etc.) come from Steam
+# at step 5.  faf_ui.scd and wopc_patches.scd have fixed mount positions
+# after vanilla SCFA and are handled explicitly in the template below.
+CORE_SCDS = frozenset({"lua.scd", "loc_US.scd"})
 
 # SCDs with fixed mount positions that must NOT appear in the toggleable
 # content packs list or in the early gamedata block.
@@ -75,7 +64,7 @@ def get_enabled_packs() -> list[str]:
 
     parser = prefs.load_prefs()
     if not parser.has_section("ContentPacks"):
-        return get_toggleable_scds()  # default: all enabled
+        return []  # default: FAF-only mode (no LOUD content packs)
     enabled = []
     for scd_name in get_toggleable_scds():
         if parser.getboolean("ContentPacks", scd_name, fallback=True):
@@ -126,14 +115,14 @@ def generate_init_lua() -> Path:
 --
 -- Mount order determines content priority (later mounts shadow earlier ones):
 --   1. Bundled strategic icons  (from WOPC/bin/)
---   2. Core gamedata SCDs       (lua.scd, effects.scd, etc.)
---   3. Content pack SCDs        (brewlan.scd, blackops.scd, etc. — toggleable)
+--   2. Root modules             (lua.scd, loc_US.scd)
+--   3. Content pack SCDs        (LOUD mods — toggleable, disabled by default)
 --   4. Bundled maps and sounds
 --   5. Vanilla SCFA content     (fonts, textures, effects, env, etc.)
---  5.5 FAF UI                   (shadows vanilla UI)
---   6. WOPC patches overlay     (our Lua fixes/enhancements)
---   7. User maps
---   8. User mods                (loaded LAST — shadow everything above)
+--   6. FAF UI                   (shadows vanilla UI + game logic)
+--   7. WOPC patches overlay     (our Lua fixes/enhancements)
+--   8. User maps
+--   9. User mods                (loaded LAST — shadow everything above)
 -- =============================================================================
 
 do
@@ -152,7 +141,7 @@ dofile(InitFileDir.."\\\\wopc_paths.lua");
 mount_dir(InitFileDir .. '\\\\BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd', '/')
 
 -- =========================================================================
--- 2-3. Gamedata SCDs (core + enabled content packs)
+-- 2-3. Root modules + enabled content packs
 -- =========================================================================
 {gamedata_block}
 
@@ -176,24 +165,24 @@ mount_dir(SCFARoot .. '\\\\movies', '/movies')
 mount_dir(SCFARoot .. '\\\\sounds', '/sounds')
 
 -- =========================================================================
--- 5.5. FAF UI Integration (shadows vanilla SCFA content)
+-- 6. FAF UI (shadows vanilla SCFA + game logic)
 -- =========================================================================
 local faf_ui = WOPCRoot .. '\\\\gamedata\\\\faf_ui.scd'
 mount_dir(faf_ui, '/')
 
 -- =========================================================================
--- 6. WOPC patches overlay (shadows everything above)
+-- 7. WOPC patches overlay (shadows everything above)
 -- =========================================================================
 local wopc_patches = WOPCRoot .. '\\\\gamedata\\\\wopc_patches.scd'
 mount_dir(wopc_patches, '/')
 
 -- =========================================================================
--- 7. User maps
+-- 8. User maps
 -- =========================================================================
 mount_dir(WOPCRoot .. '\\\\usermaps', '/maps')
 
 -- =========================================================================
--- 8. User mods (loaded LAST — shadow everything above)
+-- 9. User mods (loaded LAST — shadow everything above)
 -- =========================================================================
 mount_mods(WOPCRoot .. '\\\\usermods')
 
