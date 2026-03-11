@@ -4,9 +4,13 @@
 
 1. **Supreme Commander: Forged Alliance** installed via Steam
 2. **LOUD mod** installed (follow LOUD's installation guide first)
-3. **Python 3.10+** installed and on PATH
+3. **Python 3.12+** installed and on PATH (for development only — players just need the exe)
 
-## Installation
+## For Players
+
+Download `WOPC-Launcher.exe` from the latest release and run it. The launcher handles setup, map selection, and game launch — no Python or command-line knowledge needed.
+
+## For Developers
 
 ### 1. Clone the repository
 
@@ -15,33 +19,53 @@ git clone https://github.com/reimarus/withourpowerscombined.git
 cd withourpowerscombined
 ```
 
-### 2. Check your installation
+### 2. Set up the dev environment
 
 ```bash
-cd launcher
-python wopc.py status
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".[dev,gui]"
 ```
 
-This will detect your Steam SCFA installation and LOUD mod, and print the paths it found. Verify they are correct.
+This installs the `wopc` CLI command and all development dependencies (pytest, ruff, mypy, pyinstaller, customtkinter).
 
-### 3. Set up the WOPC game directory
+### 3. Check your installation
 
 ```bash
-python wopc.py setup
+wopc status
+```
+
+This detects your Steam SCFA installation and LOUD mod and prints the paths it found. Verify they are correct.
+
+### 4. Set up the WOPC game directory
+
+```bash
+wopc setup
 ```
 
 This creates `C:\ProgramData\WOPC\` and:
 - Copies the game executable and DLLs from your Steam installation
-- Symlinks (or copies) LOUD's gamedata, maps, sounds, and usermods
-- Copies the init file and VFS helpers
+- Builds `faf_ui.scd` from FAF source (merged with vanilla lua.scd)
+- Builds `wopc_patches.scd` from the WOPC Lua overlay
+- Symlinks (or copies) maps, sounds, and usermods
+- Copies init files and VFS helpers
 
-### 4. Launch the game
+### 5. Launch the game
 
+**GUI (recommended):**
 ```bash
-python wopc.py launch
+# Dev mode (uses live source — no rebuild needed):
+python -c "from launcher.gui.app import launch_gui; launch_gui()"
+
+# Or build and run the exe:
+python build_exe.py
+dist\WOPC-Launcher.exe
 ```
 
-The game starts with LOUD gameplay running from the isolated WOPC directory.
+**CLI:**
+```bash
+wopc launch
+```
 
 ## Troubleshooting
 
@@ -71,12 +95,13 @@ Creating symlinks on Windows may require administrator privileges. If you see "A
 Check the log file at `C:\ProgramData\WOPC\bin\WOPC.log` for error messages.
 
 Common issues:
-- Missing DLL: re-run `python wopc.py setup` to copy all required DLLs
+- Missing DLL: re-run `wopc setup` to copy all required DLLs
 - Init file error: check that `init_wopc.lua` paths match your installation
+- AI import errors: re-run `wopc setup` to rebuild `faf_ui.scd` with vanilla files merged
 
-## Development Setup (Phase 2+)
+## C++ Toolchain Setup (Binary Patching)
 
-To build FAF binary patches, you'll need the C++ toolchain:
+To build FAF binary patches, you'll need the 32-bit C++ toolchain:
 
 ```bash
 # Install MSYS2 (provides mingw-w64-i686-gcc for 32-bit compilation)
@@ -87,4 +112,15 @@ pacman -S mingw-w64-i686-gcc
 
 # Install LLVM/clang (for fa-python-binary-patcher)
 winget install LLVM.LLVM
+```
+
+## Developer Utilities
+
+Session utility scripts are available to speed up common operations. See `docs/utils-list.md` for the full catalog, or run directly:
+
+```bash
+python .claude/utils/run_checks.py          # pytest + ruff + mypy
+python .claude/utils/rebuild_exe.py         # rebuild dist/WOPC-Launcher.exe
+python .claude/utils/deploy_and_launch.py   # deploy + launch game
+python .claude/utils/read_game_log.py --errors  # check for errors in game log
 ```

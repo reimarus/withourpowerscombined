@@ -8,8 +8,11 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 1. `C:\Users\roskv\wopc\.claude\CLAUDE.md` — this file (code standards, architecture)
 2. `C:\Users\roskv\wopc\.claude\QUICKSTART_STATE.md` — session recovery breadcrumbs
 3. `C:\Users\roskv\wopc\docs\architecture.md` — system architecture and VFS design
-4. `C:\Users\roskv\.claude\projects\C--Users-roskv-loudmod\memory\MEMORY.md` — cross-session memory
-5. Any `.claude/plans/*.md` files — active implementation plans
+4. `C:\Users\roskv\wopc\docs\plan.md` — current implementation plan (what are we working on?)
+5. `C:\Users\roskv\wopc\docs\utils-list.md` — available developer utilities
+6. All other `C:\Users\roskv\wopc\docs\*.md` files — setup guide, vision, patching
+7. `C:\Users\roskv\.claude\projects\C--Users-roskv-loudmod\memory\MEMORY.md` — cross-session memory
+8. Any `.claude/plans/*.md` files — active implementation plans
 
 **Before executing any implementation plan:**
 - Write or update the plan in `.claude/plans/`

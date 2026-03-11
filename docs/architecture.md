@@ -35,17 +35,26 @@ withourpowerscombined/
   gamedata/wopc_patches/        WOPC Lua overlay (packed to wopc_patches.scd)
     lua/ui/uimain.lua           Full FAF uimain.lua + WOPC quickstart hook
     lua/wopc/quickstart.lua     LobbyComm-based game launcher (bypasses lobby UI)
+    lua/ai/gridreclaim.lua      Stub — FAF AI import (not in vanilla or FAF source)
+    lua/ai/sorianutilities.lua  Stub — FAF AI import (not in vanilla or FAF source)
   bundled/gamedata/             LOUD content SCDs (not in git — from releases)
   wopc_patches.toml             Patch manifest (exclude list)
   patches/build/                Build output (gitignored)
   tests/                        pytest suite (105+ tests, ~78% coverage)
   dist/                         Built executables (gitignored)
-  .claude/                      Session state
+    WOPC-Launcher.exe           Single-file GUI launcher (~18 MB, see below)
+  .claude/                      Session state + developer tooling
     CLAUDE.md                   Code standards and architecture reference
     QUICKSTART_STATE.md         Session recovery breadcrumbs
     plans/                      Implementation plans (committed before execution)
+    utils/                      Session utility scripts (see docs/utils-list.md)
   docs/
     architecture.md             This file
+    setup-guide.md              Installation and development setup
+    utils-list.md               Utility script catalog
+    plan.md                     Current implementation plan (living doc)
+    vision.md                   Long-term project vision
+    patching.md                 Binary patching architecture
 ```
 
 ## Deployed Game Directory
@@ -63,7 +72,7 @@ C:\ProgramData\WOPC\
     BrewLAN-*.scd               Strategic icons
     WOPC.log                    Game log output
   gamedata\
-    faf_ui.scd                  FAF Lua code (built from vendor/faf-ui/)
+    faf_ui.scd                  FAF Lua code (vendor/faf-ui/ merged with vanilla lua.scd)
     wopc_patches.scd            Our Lua overlay (built from gamedata/wopc_patches/)
     lua.scd                     LOUD Lua override (only mounted when LOUD packs enabled)
     loc_US.scd                  LOUD localization (only mounted when LOUD packs enabled)
@@ -119,6 +128,25 @@ GUI "PLAY MATCH" click
 - **Build:** `python build_exe.py` → `dist/WOPC-Launcher.exe` (~18 MB)
 - **Dev run:** `.venv/Scripts/python.exe -c "from launcher.gui.app import launch_gui; launch_gui()"`
 - **IMPORTANT:** Must rebuild exe after code changes to `launcher/`, `init/`, or `gamedata/`.
+
+### `dist/WOPC-Launcher.exe`
+
+The built executable is a single-file PyInstaller bundle (~18 MB) that includes:
+- All Python source from `launcher/` (CLI + GUI)
+- CustomTkinter theme assets (bundled via `--collect-all customtkinter`)
+- `init/` directory (init_wopc.lua template, CommonDataPath.lua)
+- `gamedata/` directory (wopc_patches sources including uimain.lua, quickstart.lua, AI stubs)
+- Application icon (`launcher/gui/wopc.ico`)
+
+**Build command:** `python build_exe.py` (the only supported way — never invoke PyInstaller directly)
+
+**How it works at runtime:**
+1. PyInstaller extracts bundled assets to a temp directory (`sys._MEIPASS`)
+2. The launcher code references `_MEIPASS` to find init/ and gamedata/ assets
+3. `deploy.py` copies these bundled assets to `C:\ProgramData\WOPC\` during setup
+4. The exe is fully self-contained — no Python installation needed on the player's machine
+
+**When to rebuild:** After ANY change to `launcher/`, `init/`, or `gamedata/`. The exe bundles code at build time — a stale exe runs old code. During development, use dev mode instead to skip rebuilds.
 
 ## Key Design Decisions
 
