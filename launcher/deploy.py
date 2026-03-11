@@ -216,6 +216,13 @@ def run_setup(repo_init_dir: Path) -> None:
                 _patch_scd(lua_scd_path, "lua/ui/uimain.lua", uimain_src)
                 logger.info("  patched lua.scd with WOPC uimain.lua")
 
+        # Patch any other files that the engine C++ loads via doscript
+        # (first-added priority). These have bugs in FAF source that we fix.
+        structure_src = wopc_patches_src / "lua" / "sim" / "units" / "StructureUnit.lua"
+        if structure_src.exists() and faf_ui_dst.exists():
+            _patch_scd(faf_ui_dst, "lua/sim/units/StructureUnit.lua", structure_src)
+            logger.info("  patched faf_ui.scd with fixed StructureUnit.lua")
+
     # Maps, sounds: copy entire directories
     if config.REPO_BUNDLED_MAPS.exists():
         shutil.copytree(config.REPO_BUNDLED_MAPS, config.WOPC_MAPS, dirs_exist_ok=True)
