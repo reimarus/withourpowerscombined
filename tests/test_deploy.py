@@ -146,6 +146,22 @@ class TestRunSetup:
         assert (wopc_gd / "faf_ui.scd").exists()
         assert (wopc_gd / "wopc_patches.scd").exists()
 
+    def test_faf_ui_scd_includes_textures(self, patched_config, repo_init_dir):
+        """faf_ui.scd must contain FAF texture files."""
+        import zipfile
+
+        from launcher.deploy import run_setup
+
+        run_setup(repo_init_dir)
+
+        faf_ui_scd = patched_config["WOPC_GAMEDATA"] / "faf_ui.scd"
+        with zipfile.ZipFile(faf_ui_scd, "r") as zf:
+            texture_entries = [n for n in zf.namelist() if n.startswith("textures/")]
+            assert len(texture_entries) >= 1, "faf_ui.scd should contain texture files"
+            # Arcnames must be lowercase (FAF import() requirement)
+            for name in texture_entries:
+                assert name == name.lower(), f"Non-lowercase arcname: {name}"
+
     def test_copies_scfa_maps(self, patched_config, repo_init_dir):
         """Copies SCFA stock maps to WOPC maps directory."""
         from launcher.deploy import run_setup

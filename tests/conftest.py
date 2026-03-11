@@ -83,6 +83,8 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
     (faf_ui / "lua").mkdir(parents=True)
     (faf_ui / "lua" / "ui").mkdir()
     (faf_ui / "lua" / "ui" / "file.lua").write_bytes(b"\x00")
+    (faf_ui / "textures" / "ui" / "common").mkdir(parents=True)
+    (faf_ui / "textures" / "ui" / "common" / "test.dds").write_bytes(b"\x00" * 128)
 
     wopc_patches = scfa / "repo_patches"
     wopc_patches.mkdir()
@@ -110,6 +112,8 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "PATCH_MANIFEST": tmp_path / "wopc_patches.toml",
         "REPO_FAF_UI": vendor / "faf_ui",
         "FAF_UI_SCD": "faf_ui.scd",
+        "REPO_WOPC_PATCHES": wopc_patches,
+        "WOPC_PATCHES_SCD": "wopc_patches.scd",
     }
 
     with patch.multiple("launcher.config", **config_patches):  # type: ignore[call-overload]
