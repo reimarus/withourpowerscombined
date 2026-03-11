@@ -1,18 +1,20 @@
 -- =============================================================================
--- init_wopc.lua — WOPC init file
+-- init_wopc.lua — WOPC init file (STATIC FALLBACK)
 -- With Our Powers Combined: Standalone gameplay + FAF engine patches
 --
--- This file is the /init argument passed to SupremeCommander.exe.
--- It defines the VFS mount order for the WOPC game directory.
+-- This file is copied by `wopc setup` and overwritten by the launcher's
+-- init_generator before each game launch.  It exists as a fallback if the
+-- user launches the exe directly without the launcher.
 --
--- Mount order determines content priority (later mounts shadow earlier ones):
+-- Mount order determines content priority (first-added = highest priority
+-- for the engine's VFS file lookup — earlier mounts shadow later ones):
 --   1. Bundled strategic icons  (from WOPC/bin/)
---   2. Bundled gamedata SCDs    (lua.scd, units.scd, brewlan.scd, etc.)
---   3. Bundled maps and sounds
---   4. Vanilla SCFA content     (fonts, textures, effects, env, etc.)
---   5. WOPC patches overlay     (our Lua fixes/enhancements)
+--   2. Bundled maps and sounds
+--   3. WOPC patches overlay     (our Lua fixes — highest priority for '/')
+--   4. FAF UI + Lua engine      (FAF game logic — shadows vanilla)
+--   5. Vanilla SCFA content     (fonts, textures, effects, units, loc, etc.)
 --   6. User maps
---   7. User mods                (loaded LAST — shadow everything above)
+--   7. User mods                (separate namespace via mount_mods)
 -- =============================================================================
 
 do
@@ -31,21 +33,31 @@ dofile(InitFileDir.."\\wopc_paths.lua");
 mount_dir(InitFileDir .. '\\BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd', '/')
 
 -- =========================================================================
--- 2. Bundled gamedata (Core gameplay content)
--- =========================================================================
-mount_dir(WOPCRoot .. '\\gamedata\\*.scd', '/')
-
--- =========================================================================
--- 3. Bundled maps and sounds
+-- 2. Bundled maps and sounds
 -- =========================================================================
 mount_dir(WOPCRoot .. '\\maps', '/maps')
 mount_dir(WOPCRoot .. '\\sounds', '/sounds')
 
 -- =========================================================================
--- 4. Vanilla SCFA content (fonts, textures, effects, etc.)
---    These paths point back to the Steam SCFA installation.
---    The setup script places a marker file so we know where SCFA lives,
---    but the standard layout is two directories up from WOPC root.
+-- 3. WOPC patches overlay (first-added = highest VFS priority)
+-- =========================================================================
+local wopc_patches = WOPCRoot .. '\\gamedata\\wopc_patches.scd'
+mount_dir(wopc_patches, '/')
+
+-- =========================================================================
+-- 4. FAF Lua engine + UI (shadows vanilla for all game logic + unit scripts)
+-- Must be mounted BEFORE vanilla SCDs so the engine's VFS finds FAF's
+-- files first (first-added = highest priority in SCFA's VFS).
+-- =========================================================================
+local faf_ui = WOPCRoot .. '\\gamedata\\faf_ui.scd'
+mount_dir(faf_ui, '/')
+
+-- =========================================================================
+-- 5. Vanilla SCFA content (assets + gameplay data from Steam install)
+-- Mounted AFTER FAF so FAF's files take priority.  Vanilla provides
+-- assets that FAF doesn't replace (unmodified units, textures, etc.).
+-- FAF replaces lua.scd, mohodata.scd, moholua.scd, and schook.scd
+-- with its own code in faf_ui.scd — those are NOT mounted here.
 -- =========================================================================
 mount_dir(SCFARoot .. '\\fonts', '/fonts')
 mount_dir(SCFARoot .. '\\gamedata\\textures.scd', '/')
@@ -54,23 +66,12 @@ mount_dir(SCFARoot .. '\\gamedata\\env.scd', '/')
 mount_dir(SCFARoot .. '\\gamedata\\projectiles.scd', '/')
 mount_dir(SCFARoot .. '\\gamedata\\props.scd', '/')
 mount_dir(SCFARoot .. '\\gamedata\\meshes.scd', '/')
+mount_dir(SCFARoot .. '\\gamedata\\units.scd', '/')
+mount_dir(SCFARoot .. '\\gamedata\\objects.scd', '/')
+mount_dir(SCFARoot .. '\\gamedata\\mods.scd', '/')
+mount_dir(SCFARoot .. '\\gamedata\\loc_us.scd', '/')
 mount_dir(SCFARoot .. '\\movies', '/movies')
 mount_dir(SCFARoot .. '\\sounds', '/sounds')
-
--- =========================================================================
--- 5. FAF UI Integration (shadows vanilla and bundled content)
--- =========================================================================
-local faf_ui = WOPCRoot .. '\\gamedata\\faf_ui.scd'
-mount_dir(faf_ui, '/')
-
--- =========================================================================
--- 6. WOPC patches overlay (our custom Lua fixes — shadows everything above)
--- =========================================================================
--- This SCD is built from gamedata/wopc_patches/ and mounted AFTER all bundled
--- and FAF content, so our files take priority.
-local wopc_patches = WOPCRoot .. '\\gamedata\\wopc_patches.scd'
--- Only mount if the patches SCD exists (Phase 3+)
-mount_dir(wopc_patches, '/')
 
 -- =========================================================================
 -- 6. User maps
@@ -78,7 +79,7 @@ mount_dir(wopc_patches, '/')
 mount_dir(WOPCRoot .. '\\usermaps', '/maps')
 
 -- =========================================================================
--- 7. User mods (loaded LAST — shadow everything, including maps)
+-- 7. User mods (separate namespace — loaded via mount_mods)
 -- =========================================================================
 mount_mods(WOPCRoot .. '\\usermods')
 

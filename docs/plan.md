@@ -10,22 +10,22 @@
 
 ---
 
-## Active Plan: Merge vanilla lua.scd into faf_ui.scd
+## Active Plan: Fix match loading — ZIP case normalization
 
-**Source:** `.claude/plans/merge-vanilla-lua-into-faf-ui.md`
-**Branch:** `feature/phase-6-advanced-launcher`
-**Goal:** Resolve AI import errors by merging vanilla lua.scd files into the faf_ui.scd build.
+**Source:** `.claude/plans/calm-doodling-honey.md`
+**Branch:** `fix/match-loading-bugs`
+**Goal:** Fix commander spawn failures and UI errors by normalizing filenames to lowercase in all SCD builds.
+
+### Root Cause
+
+833 of 1264 files in `faf_ui.scd` have mixed-case names (e.g., `lua/sim/Unit.lua`). FAF's `import()` lowercases all paths (line 116: `name = name:lower()`), but ZIP lookups are case-sensitive. Result: imports silently fail → nil → cascade of errors (no Unit class, no StructureUnit, no commanders, broken weapons).
 
 ### Steps
 
-- [x] Modify `deploy.py` to merge vanilla `lua.scd` files into `faf_ui.scd` during build
-- [x] Create stub files for FAF-specific AI imports (`gridreclaim.lua`, `sorianutilities.lua`)
-- [x] Tests pass (105), ruff clean
-- [ ] Verify rebuilt `faf_ui.scd` contains vanilla AI files
-- [ ] Launch game and confirm AI import errors are resolved
-- [ ] Commit implementation
-- [ ] Update QUICKSTART_STATE.md
-
-### Context
-
-FAF's source repo (`vendor/faf-ui/`) only contains FAF's modifications (1157 files), not the merged distribution. The real FAF distribution includes vanilla `lua.scd` files (102 files — mostly AI). Our `deploy.py` now merges these during the `faf_ui.scd` build step, with FAF files taking priority over vanilla duplicates.
+- [ ] Normalize filenames to lowercase in faf_ui.scd build (`deploy.py` lines 156-159)
+- [ ] Normalize vanilla lua.scd merged files to lowercase (`deploy.py` line 175)
+- [ ] Normalize wopc_patches.scd build (`deploy.py` lines 189-192)
+- [ ] Update `_patch_scd()` calls to use lowercase arcnames
+- [ ] Update tests
+- [ ] Verify 0 mixed-case files in built faf_ui.scd
+- [ ] Deploy + launch game — commanders spawn, no import errors

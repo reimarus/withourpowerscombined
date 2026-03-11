@@ -6,4 +6,4 @@
 	url = https://github.com/FAForever/fa-python-binary-patcher.git
 [submodule "vendor/faf-ui"]
 	path = vendor/faf-ui
-	url = https://github.com/FAForever/fa.git
+	url = https://github.com/reimarus/fa.git

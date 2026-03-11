@@ -204,8 +204,8 @@ class TestGenerateInitLua:
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\brewlan.scd', '/')" not in content
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\blackops.scd', '/')" in content
 
-    def test_faf_ui_mounts_after_vanilla_scfa(self, gamedata_dir: Path, tmp_path: Path) -> None:
-        """faf_ui.scd must mount AFTER vanilla SCFA content to shadow it."""
+    def test_faf_ui_mounts_before_vanilla_scfa(self, gamedata_dir: Path, tmp_path: Path) -> None:
+        """faf_ui.scd must mount BEFORE vanilla (first-added = highest VFS priority)."""
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
@@ -226,11 +226,14 @@ class TestGenerateInitLua:
         content = result.read_text()
         # faf_ui should NOT be in the early gamedata block
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\faf_ui.scd', '/')" not in content
-        # faf_ui should appear via explicit local variable after vanilla SCFA
-        vanilla_pos = content.index("Vanilla SCFA content (assets")
+        # WOPC patches and faf_ui must appear BEFORE vanilla SCFA mounts
+        # (first-added = highest priority in SCFA's VFS)
+        # Use a mount_dir line unique to the vanilla section to avoid matching
+        # the header comment which also mentions "Vanilla SCFA content".
+        vanilla_pos = content.index("mount_dir(SCFARoot")
         faf_ui_mount_pos = content.index("mount_dir(faf_ui, '/')")
         wopc_patches_mount_pos = content.index("mount_dir(wopc_patches, '/')")
-        assert vanilla_pos < faf_ui_mount_pos < wopc_patches_mount_pos
+        assert wopc_patches_mount_pos < faf_ui_mount_pos < vanilla_pos
 
     def test_wopc_patches_not_double_mounted(self, gamedata_dir: Path, tmp_path: Path) -> None:
         """wopc_patches.scd should only appear once — in the fixed step 6 position."""
