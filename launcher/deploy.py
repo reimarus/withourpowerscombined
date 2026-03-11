@@ -164,6 +164,7 @@ def run_setup(repo_init_dir: Path) -> None:
                 "env",
                 "meshes",
                 "schook",
+                "textures",
             ]:
                 dir_path = faf_ui_src / target_dir
                 if dir_path.exists():
