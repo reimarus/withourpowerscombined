@@ -40,6 +40,7 @@ local function BuildGameInfo(cfg)
         GameSpeed = 'normal',
         FogOfWar = 'explored',
         UnitCap = '1500',
+        Share = 'FullShare',
         PrebuiltUnits = 'Off',
         NoRushOption = 'Off',
         RestrictedCategories = {},
