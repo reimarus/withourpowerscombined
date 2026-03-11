@@ -10,22 +10,23 @@
 
 ---
 
-## Active Plan: Fix match loading — ZIP case normalization
+## Active Plan: Fix FAF GUI — missing panels and broken layout
 
 **Source:** `.claude/plans/calm-doodling-honey.md`
-**Branch:** `fix/match-loading-bugs`
-**Goal:** Fix commander spawn failures and UI errors by normalizing filenames to lowercase in all SCD builds.
+**Branch:** TBD
+**Goal:** Package FAF textures into faf_ui.scd so UI panels render correctly.
 
 ### Root Cause
 
-833 of 1264 files in `faf_ui.scd` have mixed-case names (e.g., `lua/sim/Unit.lua`). FAF's `import()` lowercases all paths (line 116: `name = name:lower()`), but ZIP lookups are case-sensitive. Result: imports silently fail → nil → cascade of errors (no Unit class, no StructureUnit, no commanders, broken weapons).
+`deploy.py` builds `faf_ui.scd` from 10 directories but omits `textures/` (3,801 files — DDS textures, PNG assets, skinnable layout Lua files). FAF's UI code references paths like `/textures/ui/common/game/resource-bars/...` that don't exist in the VFS. Vanilla `textures.scd` provides partial fallback but lacks FAF's custom borders, panels, faction skins, and icons. Result: blank panels, invisible controls, wrong layout.
 
 ### Steps
 
-- [ ] Normalize filenames to lowercase in faf_ui.scd build (`deploy.py` lines 156-159)
-- [ ] Normalize vanilla lua.scd merged files to lowercase (`deploy.py` line 175)
-- [ ] Normalize wopc_patches.scd build (`deploy.py` lines 189-192)
-- [ ] Update `_patch_scd()` calls to use lowercase arcnames
-- [ ] Update tests
-- [ ] Verify 0 mixed-case files in built faf_ui.scd
-- [ ] Deploy + launch game — commanders spawn, no import errors
+- [ ] Add `"textures"` to `target_dir` list in `launcher/deploy.py` (~line 156)
+- [ ] Add fake textures dir + missing config keys to test fixture (`tests/conftest.py`)
+- [ ] Add test verifying textures included in faf_ui.scd (`tests/test_deploy.py`)
+- [ ] Run tests + lint
+- [ ] Delete `C:\ProgramData\WOPC\gamedata\`, run `wopc setup`
+- [ ] Verify faf_ui.scd contains texture entries (~900 MB, was 609 MB)
+- [ ] Rebuild launcher exe: `python build_exe.py`
+- [ ] Launch match — UI panels visible with proper FAF styling
