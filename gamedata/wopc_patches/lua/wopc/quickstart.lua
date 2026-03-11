@@ -12,6 +12,18 @@
 
 local LobbyComm = import("/lua/ui/lobby/lobbyComm.lua")
 
+--- Resolve faction 5 (random) to a real faction (1-4).
+--- The lobby normally does this before LaunchGame; we must do it ourselves.
+--- SCFA Lua has no math.random — use the engine's Random() global.
+---@param faction number
+---@return number
+local function ResolveFaction(faction)
+    if faction == 5 then
+        return Random(1, 4)
+    end
+    return faction
+end
+
 --- Build the flat gameInfo table that LobbyComm:LaunchGame() expects.
 ---@param cfg table  The config table loaded from wopc_game_config.lua
 ---@return table gameInfo
@@ -48,13 +60,14 @@ local function BuildGameInfo(cfg)
     local playerOptions = {}
     for i, p in cfg.Players do
         local isHuman = p.Human != false
+        local faction = ResolveFaction(p.Faction or 1)
         playerOptions[i] = {
             Team = p.Team or 1,
             PlayerColor = p.PlayerColor or i,
             ArmyColor = p.PlayerColor or i,
             StartSpot = p.StartSpot or i,
             Ready = true,
-            Faction = p.Faction or 5,          -- 5 = random
+            Faction = faction,
             PlayerName = p.PlayerName or ("Player " .. i),
             AIPersonality = p.AIPersonality or '',
             Human = isHuman,

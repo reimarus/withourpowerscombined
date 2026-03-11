@@ -141,11 +141,15 @@ def run_setup(repo_init_dir: Path) -> None:
         logger.warning("  WARNING: Bundled gamedata not found at %s", config.REPO_BUNDLED_GAMEDATA)
 
     # Build faf_ui.scd
+    # This merges FAF source files with vanilla lua.scd files that FAF
+    # doesn't replace.  The real FAF distribution (.nx2 files) does the
+    # same thing — our faf_ui.scd is the equivalent single-file package.
     faf_ui_src = config.REPO_FAF_UI
     faf_ui_dst = config.WOPC_GAMEDATA / config.FAF_UI_SCD
     if faf_ui_src.exists():
         logger.info("  building %s", config.FAF_UI_SCD)
         with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_DEFLATED) as zf:
+            # 1. Add FAF source files (these take priority over vanilla)
             for target_dir in ["lua", "modules", "ui", "loc"]:
                 dir_path = faf_ui_src / target_dir
                 if dir_path.exists():
@@ -153,6 +157,26 @@ def run_setup(repo_init_dir: Path) -> None:
                         if file_path.is_file():
                             arcname = file_path.relative_to(faf_ui_src)
                             zf.write(file_path, arcname)
+
+            # 2. Merge vanilla lua.scd files that FAF doesn't replace.
+            # FAF's simInit.lua imports AI files (lua/AI/*) that exist in
+            # vanilla lua.scd but not in FAF's source repo.  Without these,
+            # the sim crashes on import errors.
+            vanilla_lua_scd = config.SCFA_STEAM / "gamedata" / "lua.scd"
+            if vanilla_lua_scd.exists():
+                existing = {name.replace("\\", "/").lower() for name in zf.namelist()}
+                merged = 0
+                with zipfile.ZipFile(vanilla_lua_scd, "r") as vanilla_zf:
+                    for info in vanilla_zf.infolist():
+                        if info.is_dir():
+                            continue
+                        normalized = info.filename.replace("\\", "/").lower()
+                        if normalized not in existing:
+                            zf.writestr(info, vanilla_zf.read(info))
+                            merged += 1
+                logger.info("  merged %d vanilla lua.scd files into %s", merged, config.FAF_UI_SCD)
+            else:
+                logger.warning("  WARNING: vanilla lua.scd not found at %s", vanilla_lua_scd)
     else:
         logger.warning("  WARNING: %s not found. Did you initialize submodules?", faf_ui_src)
 

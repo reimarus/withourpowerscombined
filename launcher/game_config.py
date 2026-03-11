@@ -52,7 +52,7 @@ def write_game_config(
     Path to the generated file.
     """
     if ai_opponents is None:
-        ai_opponents = [{"name": "AI: Normal", "faction": "random", "ai": "medium", "team": 1}]
+        ai_opponents = [{"name": "AI: Normal", "faction": "random", "ai": "medium", "team": 2}]
 
     output = WOPC_BIN / "wopc_game_config.lua"
 
