@@ -2,182 +2,179 @@
 
 ## Overview
 
-WOPC merges LOUD's gameplay (545 modified Lua files, 888MB of content packs, complete AI overhaul) with FAF's binary-patched engine (66 hooks + 53 C++ code sections). The result is a self-contained game distribution at `C:\ProgramData\WOPC\` that leaves both Steam SCFA and LOUD installations untouched.
+WOPC (With Our Powers Combined) is a standalone Supreme Commander: Forged Alliance game distribution. It merges FAF's engine patches and UI with LOUD's gameplay content into a single launcher. The game deploys to `C:\ProgramData\WOPC\` leaving Steam SCFA untouched.
 
-## Directory Layout
-
-### Repository (github.com/reimarus/withourpowerscombined)
+## Repository Layout
 
 ```
 withourpowerscombined/
-  launcher/
-    wopc.py              Main CLI entry point
-    config.py            Path constants and version info
-    setup.py             WOPC directory creation and file copying
-  init/
-    init_wopc.lua        Custom init file (replaces LoudDataPath.lua)
-    CommonDataPath.lua   VFS helper functions (from LOUD)
-  patches/               FAF binary patches (Phase 2)
-    hooks/               ASM hooks into ForgedAlliance.exe
-    section/             C++ code sections
-    include/             moho.h, global.h, LuaAPI.h
-  gamedata/
-    wopc_patches/        Our Lua overlay (zipped to .scd on build)
-  tools/
-    setup_toolchain.py   Installs MSYS2/clang/gcc for binary patching
+  launcher/                     Python CLI + GUI
+    wopc.py                     Entry point (status/setup/launch/validate/patch)
+    config.py                   Path constants, file lists, version
+    deploy.py                   Creates C:\ProgramData\WOPC\ game directory
+    game_config.py              Generates wopc_game_config.lua (quickstart config)
+    init_generator.py           Dynamic init_wopc.lua generation (per-launch)
+    prefs.py                    User preferences (active map, mods, player name)
+    map_scanner.py              Map directory scanner
+    log.py                      Logging configuration
+    toolchain.py                Compiler discovery (Clang, GCC, LD)
+    manifest.py                 Patch manifest parsing (wopc_patches.toml)
+    patcher.py                  Build orchestration for patched exe
+    gui/                        GUI launcher (customtkinter)
+      app.py                    WopcApp — main window, map selector, PLAY MATCH
+      worker.py                 SetupWorker — async setup in background thread
+      wopc.ico                  Application icon
+  build_exe.py                  PyInstaller build → dist/WOPC-Launcher.exe (~18 MB)
+  init/                         Lua init files (deployed to WOPC\bin\)
+    init_wopc.lua               VFS mount order template (overwritten by init_generator)
+    CommonDataPath.lua          VFS helper functions (mount_dir, etc.)
+  vendor/                       Git submodules
+    faf-ui/                     FAF Lua codebase (1157 files — UI, sim, AI, etc.)
+    FA-Binary-Patches/          FAF C++ patches (66 hooks + 53 sections)
+    fa-python-binary-patcher/   Python patcher tool (compiles + injects)
+  gamedata/wopc_patches/        WOPC Lua overlay (packed to wopc_patches.scd)
+    lua/ui/uimain.lua           Full FAF uimain.lua + WOPC quickstart hook
+    lua/wopc/quickstart.lua     LobbyComm-based game launcher (bypasses lobby UI)
+    lua/ai/gridreclaim.lua      Stub — FAF AI import (not in vanilla or FAF source)
+    lua/ai/sorianutilities.lua  Stub — FAF AI import (not in vanilla or FAF source)
+  bundled/gamedata/             LOUD content SCDs (not in git — from releases)
+  wopc_patches.toml             Patch manifest (exclude list)
+  patches/build/                Build output (gitignored)
+  tests/                        pytest suite (105+ tests, ~78% coverage)
+  dist/                         Built executables (gitignored)
+    WOPC-Launcher.exe           Single-file GUI launcher (~18 MB, see below)
+  .claude/                      Session state + developer tooling
+    CLAUDE.md                   Code standards and architecture reference
+    QUICKSTART_STATE.md         Session recovery breadcrumbs
+    plans/                      Implementation plans (committed before execution)
+    utils/                      Session utility scripts (see docs/utils-list.md)
   docs/
-    architecture.md      This file
-    setup-guide.md       User-facing setup instructions
-    engine-analysis.md   SCFA engine reverse engineering notes
+    architecture.md             This file
+    setup-guide.md              Installation and development setup
+    utils-list.md               Utility script catalog
+    plan.md                     Current implementation plan (living doc)
+    vision.md                   Long-term project vision
+    patching.md                 Binary patching architecture
 ```
 
-### Deployed Game Directory (C:\ProgramData\WOPC)
+## Deployed Game Directory
 
 ```
 C:\ProgramData\WOPC\
   bin\
-    SupremeCommander.exe    Copied from Steam (Phase 0) or FAF-patched (Phase 2+)
-    init_wopc.lua           Our custom init file
-    CommonDataPath.lua      VFS helper functions
-    MohoEngine.dll          Core engine (copied from Steam)
-    *.dll                   All runtime DLLs from Steam SCFA/bin
-    game.dat                Engine configuration
+    ForgedAlliance.exe          Stock (Phase 0) or FAF-patched (Phase 2+)
+    init_wopc.lua               Generated per-launch by init_generator.py
+    CommonDataPath.lua          VFS helpers
+    wopc_paths.lua              SCFARoot path (generated by deploy.py)
+    wopc_game_config.lua        Quickstart config (generated per-launch)
+    MohoEngine.dll              Core engine DLL
+    *.dll                       Runtime DLLs from Steam SCFA/bin
+    BrewLAN-*.scd               Strategic icons
+    WOPC.log                    Game log output
   gamedata\
-    lua.scd                 LOUD core Lua (symlinked from LOUD)
-    units.scd               LOUD units (symlinked)
-    brewlan.scd             BrewLAN content (symlinked)
-    ... (17 SCD files)
-    wopc_patches.scd        Our overlay patches
-  maps\                     Symlinked from LOUD
-  sounds\                   Symlinked from LOUD
-  usermods\                 Copied from LOUD (BetterPathing etc.)
+    faf_ui.scd                  FAF Lua code (vendor/faf-ui/ merged with vanilla lua.scd)
+    wopc_patches.scd            Our Lua overlay (built from gamedata/wopc_patches/)
+    lua.scd                     LOUD Lua override (only mounted when LOUD packs enabled)
+    loc_US.scd                  LOUD localization (only mounted when LOUD packs enabled)
+    units.scd                   LOUD units (content pack, toggleable)
+    brewlan.scd                 BrewLAN (content pack, toggleable)
+    ... (additional LOUD content pack SCDs)
+  maps\                         Bundled maps
+  usermaps\                     User-added maps
+  sounds\                       Bundled sounds
+  usermods\                     User mods (BetterPathing, etc.)
 ```
 
-## Content Mount Order
+## VFS Content Mount Order
 
-SCFA's VFS (Virtual File System) loads content in a priority order. When multiple SCDs contain the same file path, the **last mount wins** (shadows earlier mounts). Our init file preserves LOUD's mount order:
+The init file (`init_wopc.lua`) is regenerated before each launch by `init_generator.py`.
 
-| Priority | Source | Content |
+**FAF-only mode (default):** No LOUD content packs enabled.
+
+| Position | Source | Content |
 |----------|--------|---------|
-| 1 (lowest) | Steam SCFA | Vanilla textures, effects, env, meshes, movies, sounds, fonts |
-| 2 | LOUD gamedata/*.scd | All 17 LOUD content packs (lua, units, brewlan, etc.) |
-| 3 | LOUD maps/sounds | LOUD-specific maps and sounds |
-| 4 | BrewLAN icons | Strategic icon overhaul |
-| 5 | **WOPC overlay** | wopc_patches.scd - our compatibility fixes and enhancements |
-| 6 | User mods | BetterPathing and other usermods |
-| 7 (highest) | User maps | Custom user maps |
+| 1 | WOPC/bin/ | Bundled strategic icons |
+| 2 | WOPC/gamedata/ | Content packs (none by default) |
+| 3 | WOPC/ | Bundled maps and sounds |
+| 4 | Steam SCFA | Vanilla: fonts, textures, effects, env, projectiles, props, meshes, units, loc, mods, objects, movies, sounds |
+| 5 | WOPC/gamedata/faf_ui.scd | **FAF Lua engine** — provides simInit, globalInit, BuffDefinitions, AI, UI, etc. |
+| 6 | WOPC/gamedata/wopc_patches.scd | **WOPC overlay** — uimain.lua quickstart hook, fixes |
+| 7 | WOPC/usermaps/ | User maps |
+| 8 | WOPC/usermods/ | User mods (highest priority) |
+
+**Key VFS rule:** For Lua `import()`, later mounts shadow earlier ones (last-added wins). For engine C++ `doscript`, first-added wins. Since we don't mount LOUD's `lua.scd` in FAF-only mode, `faf_ui.scd` is the sole source for system Lua files.
+
+## Quick-Start System
+
+The quickstart system bypasses the lobby UI, launching directly into a match:
+
+```
+GUI "PLAY MATCH" click
+  → Python: init_generator.py writes init_wopc.lua
+  → Python: game_config.py writes wopc_game_config.lua
+  → Python: launches ForgedAlliance.exe with:
+      /init init_wopc.lua /hostgame udp 15000 Player WOPC <map>
+      /wopcquickstart /wopcconfig <config_path>
+  → Engine: loads uimain.lua from wopc_patches.scd (via lua.scd patch)
+  → uimain.lua: detects /wopcquickstart flag
+  → quickstart.lua: reads config, creates LobbyComm, calls LaunchGame()
+  → Engine: enters simulation
+```
+
+**Critical:** `uimain.lua` is loaded by engine C++ (first-added priority). We must patch `lua.scd` via `deploy.py:_patch_scd()` to inject our version, since VFS overlays don't work for engine-loaded files.
+
+## GUI Launcher
+
+- **Build:** `python build_exe.py` → `dist/WOPC-Launcher.exe` (~18 MB)
+- **Dev run:** `.venv/Scripts/python.exe -c "from launcher.gui.app import launch_gui; launch_gui()"`
+- **IMPORTANT:** Must rebuild exe after code changes to `launcher/`, `init/`, or `gamedata/`.
+
+### `dist/WOPC-Launcher.exe`
+
+The built executable is a single-file PyInstaller bundle (~18 MB) that includes:
+- All Python source from `launcher/` (CLI + GUI)
+- CustomTkinter theme assets (bundled via `--collect-all customtkinter`)
+- `init/` directory (init_wopc.lua template, CommonDataPath.lua)
+- `gamedata/` directory (wopc_patches sources including uimain.lua, quickstart.lua, AI stubs)
+- Application icon (`launcher/gui/wopc.ico`)
+
+**Build command:** `python build_exe.py` (the only supported way — never invoke PyInstaller directly)
+
+**How it works at runtime:**
+1. PyInstaller extracts bundled assets to a temp directory (`sys._MEIPASS`)
+2. The launcher code references `_MEIPASS` to find init/ and gamedata/ assets
+3. `deploy.py` copies these bundled assets to `C:\ProgramData\WOPC\` during setup
+4. The exe is fully self-contained — no Python installation needed on the player's machine
+
+**When to rebuild:** After ANY change to `launcher/`, `init/`, or `gamedata/`. The exe bundles code at build time — a stale exe runs old code. During development, use dev mode instead to skip rebuilds.
 
 ## Key Design Decisions
 
-### Why Python for the launcher?
-
-- Python 3.12 is already installed on the target machine
-- No additional toolchain needed for Phase 0-1
-- `zipfile`, `shutil`, `subprocess`, `hashlib` provide everything needed
+### Why Python?
+- No additional toolchain needed for launcher/deployment
+- `zipfile`, `shutil`, `subprocess` provide everything needed
 - FAF's `fa-python-binary-patcher` is also Python
-- FAF's Java launcher is 100K+ lines - massive overkill for our needs
-- A GUI can be added later with tkinter or PyQt
+- GUI via CustomTkinter (bundled in exe via PyInstaller)
 
 ### Why C:\ProgramData\WOPC?
-
-- Follows FAF's precedent (they use `%PROGRAMDATA%\FAForever\`)
-- Not inside the Steam directory (non-destructive to SCFA)
-- Not inside LOUD directory (non-destructive to LOUD)
+- Follows FAF's precedent (`%PROGRAMDATA%\FAForever\`)
+- Non-destructive to Steam SCFA and LOUD
 - Writable without admin on Windows 10/11
-- Survives user profile resets
 
-### Why symlinks for content?
+### Why FAF-only mode first?
+- FAF's Lua codebase is a complete, tested game
+- LOUD content is an additive layer that can be toggled on
+- Simplifies debugging — known-good baseline
 
-- 888MB of SCD files cannot go in a git repo
-- LOUD is actively maintained - users get latest content automatically
-- Symlinks avoid disk space duplication
-- Fallback to file copy when symlinks require admin
+## Development Workflow
 
-### Why fork FA-Binary-Patches instead of using FAF's patcher directly?
-
-- FAF's patches were designed for FAF's Lua codebase
-- Some patches may conflict with LOUD's Lua (needs testing)
-- We want to add our own C++ patches alongside FAF's
-- Forking gives us control over which FAF patches to include
-
-## Phase Details
-
-### Phase 0: Foundation (Complete)
-
-Build the launcher and init file. The game launches from `C:\ProgramData\WOPC\` with LOUD content using the stock (unpatched) exe.
-
-### Phase 1: Validation (Complete)
-
-Play-test LOUD gameplay from the WOPC directory. Fix any path issues. Add content validation (checksums).
-
-### Phase 2: FAF Binary Patching (Complete)
-
-Install the C++ build toolchain (MSYS2 + mingw-w64-i686-gcc + clang). Fork FA-Binary-Patches. Build a FAF-patched exe. Test compatibility with LOUD content.
-
-**Potential conflicts to watch:**
-- `FAExtLoad.cpp` tries to load `FAExt.dll` - will fail gracefully (LoadLibrary returns NULL)
-- `FixCollisions.cpp` modifies projectile collision - LOUD's projectile Lua may differ
-- `PathfindingTweaks.cpp` exposes `SetNavigatorPersonalPosMaxDistance` - harmless addition
-- `TableFuncs.cxx` adds optimized table functions - backward compatible
-
-### Phase 3: WOPC Lua Overlay (Complete)
-
-Create `wopc_patches.scd` containing Lua files that:
-- Fix any LOUD/FAF incompatibilities found in Phase 2
-- Expose new FAF engine functions to LOUD's AI
-- Add WOPC-specific enhancements
-
-### Phase 4: Multiplayer (Complete)
-
-Content manifest system for multiplayer sync validation. Players compare checksums before connecting.
-
-### Phase 5: C++ Engine Patches
-
-The main event. Using FAF's binary patching infrastructure:
-
-1. **Proof of concept**: Hook `CAiNavigatorImpl::SetGoal()`, log pathfinding requests
-2. **"Don't stop, repath"**: Replace the A* "stop and wait on collision" branch with perpendicular repath
-3. **Personal space steering**: Add SC2-style unit repulsion at the C++ steering level
-4. **Flowfield pathfinding**: Replace A* entirely with a flowfield system (long-term goal)
-
-### Phase 6: WOPC Advanced Launcher
-
-Evolve the command-line script into a graphical interface:
-- Discrete selection of mod preferences
-- Toggling of experimental engine patches
-- Profile saving and sharing
-
-### Phase 7: Roguelike Campaign System
-
-Introduce a persistent, generative meta-campaign using our custom initialization hooks:
-- Randomized tech trees and AI threats
-- Persistent commander upgrades between skirmishes
-- Cooperative progression with friends
-
-### Phase 8: Deep C++ Refactoring
-
-Beyond pathfinding, push the engine to its absolute limits:
-- Rewrite rendering bottlenecks
-- Optimize simulation tick rate for 10,000+ unit fields
-- Expose new multi-threading capabilities to the Lua AI
-
-### Engine Architecture (from reverse engineering)
-
-SCFA runs on the Moho engine (GPG, ~2006). Original source is lost.
-
-**Pathfinding**: A* algorithm. Units compute a single fixed path. When blocked by another unit, the engine stops the unit and waits rather than recomputing. This is the root cause of all pathing issues.
-
-**Navigator Lua API** (exposed methods of `CAiNavigatorImpl`):
-- `SetGoal(vector)`, `SetDestUnit(entity)`, `AbortMove()`
-- `GetStatus()`, `GetGoalPos()`, `GetCurrentTargetPos()`
-- `HasGoodPath()`, `FollowingLeader()`, `AtGoal()`, `CanPathToGoal(vector)`
-- `IgnoreFormation()`, `BroadcastResumeTaskEvent()`, `SetSpeedThroughGoal(bool)`
-
-**FAF's binary patch infrastructure**:
-- FA_Patcher: C++ tool using TCC + AsmJit for code injection
-- fa-python-binary-patcher: Python alternative using clang + gcc
-- moho.h: Reverse-engineered engine structures
-- /hooks: ASM patches at specific exe addresses
-- /section: New C/C++ code sections injected into the exe
-
-**Supreme Commander 2 reference**: Used flowfield pathfinding (Eikonal equation, sector/portal decomposition). Documented in Game AI Pro Chapter 23 by Elijah Emerson. The target for Phase 5.
+1. Feature branch off `main`
+2. **Write plan** → commit to `.claude/plans/` before executing
+3. Write code + tests
+4. `pytest` — all pass, coverage >= 70%
+5. `ruff check launcher/ tests/` — clean
+6. `mypy launcher/` — clean
+7. Commit early, commit often (small atomic commits)
+8. `python build_exe.py` — rebuild exe after code changes
+9. `git push` + `gh pr create`
+10. CI runs 4 jobs (lint, typecheck, test, lua-check)

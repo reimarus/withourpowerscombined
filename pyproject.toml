@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wopc"
 version = "0.1.0"
-description = "LOUD gameplay + FAF engine patches for Supreme Commander: Forged Alliance"
+description = "Standalone gameplay + FAF engine patches for Supreme Commander: Forged Alliance"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.12"
@@ -32,6 +32,10 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "pre-commit>=3.7",
+    "pyinstaller>=6.0",
+]
+gui = [
+    "customtkinter>=5.2",
 ]
 
 # --- Tool configurations ---
@@ -90,7 +94,10 @@ markers = [
 
 [tool.coverage.run]
 source = ["launcher"]
-omit = ["tests/*"]
+omit = [
+    "tests/*",
+    "launcher/gui/app.py",  # GUI module — requires display, untestable in headless CI
+]
 
 [tool.coverage.report]
 fail_under = 70

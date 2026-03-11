@@ -20,20 +20,7 @@ def fake_scfa_tree(tmp_path: Path) -> Path:
     for name in ["SupremeCommander.exe", "MohoEngine.dll", "gpgcore.dll"]:
         (scfa_bin / name).write_bytes(b"\x00" * 64)
 
-    # Create LOUD structure
-    loud = scfa / "LOUD"
-    loud_gd = loud / "gamedata"
-    loud_gd.mkdir(parents=True)
-    (loud_gd / "lua.scd").write_bytes(b"\x00" * 32)
-    (loud_gd / "units.scd").write_bytes(b"\x00" * 32)
-
-    loud_bin = loud / "bin"
-    loud_bin.mkdir()
-    (loud_bin / "CommonDataPath.lua").write_text("-- fake")
-    (loud_bin / "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd").write_bytes(b"\x00")
-
-    for subdir in ["maps", "sounds", "usermods", "usermaps"]:
-        (loud / subdir).mkdir()
+    return scfa
 
     return scfa
 
@@ -70,24 +57,46 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
     constants so tests never touch real game installations.
     """
     scfa = fake_scfa_tree
-    loud = scfa / "LOUD"
+    # Bundled Standalone Assets
+    bundled = tmp_path / "bundled"
+    bundled_gd = bundled / "gamedata"
+    bundled_gd.mkdir(parents=True)
+    (bundled_gd / "lua.scd").write_bytes(b"\x00" * 32)
+    (bundled_gd / "units.scd").write_bytes(b"\x00" * 32)
+
+    bundled_bin = bundled / "bin"
+    bundled_bin.mkdir()
+    (bundled_bin / "CommonDataPath.lua").write_text("-- fake")
+    (bundled_bin / "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd").write_bytes(b"\x00")
+
+    for subdir in ["maps", "sounds", "usermods"]:
+        (bundled / subdir).mkdir()
+
     wopc = tmp_path / "WOPC_DEPLOY"
     wopc.mkdir(exist_ok=True)
 
-    # Patch build paths (Phase 2)
     patch_build = tmp_path / "patch_build"
     vendor = tmp_path / "vendor"
+
+    # Fake Submodules
+    faf_ui = vendor / "faf_ui"
+    (faf_ui / "lua").mkdir(parents=True)
+    (faf_ui / "lua" / "ui").mkdir()
+    (faf_ui / "lua" / "ui" / "file.lua").write_bytes(b"\x00")
+
+    wopc_patches = scfa / "repo_patches"
+    wopc_patches.mkdir()
+    (wopc_patches / "patch_file.lua").write_bytes(b"\x00")
 
     config_patches = {
         "SCFA_STEAM": scfa,
         "SCFA_BIN": scfa / "bin",
-        "LOUD_ROOT": loud,
-        "LOUD_BIN": loud / "bin",
-        "LOUD_GAMEDATA": loud / "gamedata",
-        "LOUD_MAPS": loud / "maps",
-        "LOUD_SOUNDS": loud / "sounds",
-        "LOUD_USERMODS": loud / "usermods",
-        "LOUD_USERMAPS": loud / "usermaps",
+        "REPO_BUNDLED": bundled,
+        "REPO_BUNDLED_BIN": bundled / "bin",
+        "REPO_BUNDLED_GAMEDATA": bundled / "gamedata",
+        "REPO_BUNDLED_MAPS": bundled / "maps",
+        "REPO_BUNDLED_SOUNDS": bundled / "sounds",
+        "REPO_BUNDLED_USERMODS": bundled / "usermods",
         "WOPC_ROOT": wopc,
         "WOPC_BIN": wopc / "bin",
         "WOPC_GAMEDATA": wopc / "gamedata",
@@ -99,9 +108,11 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "FA_PATCHES_DIR": vendor / "FA-Binary-Patches",
         "FA_PATCHER_DIR": vendor / "fa-python-binary-patcher",
         "PATCH_MANIFEST": tmp_path / "wopc_patches.toml",
+        "REPO_FAF_UI": vendor / "faf_ui",
+        "FAF_UI_SCD": "faf_ui.scd",
     }
 
-    with patch.multiple("launcher.config", **config_patches):
+    with patch.multiple("launcher.config", **config_patches):  # type: ignore[call-overload]
         yield config_patches
 
 

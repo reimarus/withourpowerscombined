@@ -1,0 +1,3 @@
+-- debugai.lua — WOPC stub
+-- FAF's SimCallbacks.lua imports this. Only exists in FAF's distribution
+-- build. Provides debug visualization for AI — not needed for gameplay.

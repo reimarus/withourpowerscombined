@@ -10,6 +10,32 @@ from launcher import config
 logger = logging.getLogger("wopc.deploy")
 
 
+def _patch_scd(scd_path: Path, arcname: str, replacement: Path) -> bool:
+    """Replace a single file inside an SCD (ZIP) archive.
+
+    Rewrites the archive to a temp file, then atomically replaces the original.
+    Returns True on success, False if the SCD couldn't be patched.
+    """
+    tmp_path = scd_path.with_suffix(".tmp")
+    try:
+        with (
+            zipfile.ZipFile(scd_path, "r") as zr,
+            zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zw,
+        ):
+            for info in zr.infolist():
+                if info.filename == arcname:
+                    zw.write(replacement, arcname)
+                else:
+                    zw.writestr(info, zr.read(info))
+        tmp_path.replace(scd_path)
+    except (zipfile.BadZipFile, OSError) as exc:
+        logger.warning("  WARNING: Could not patch %s: %s", scd_path.name, exc)
+        if tmp_path.exists():
+            tmp_path.unlink()
+        return False
+    return True
+
+
 def link_or_copy(src: Path, dst: Path) -> None:
     """Create a symlink, falling back to copy if symlinks need admin."""
     if dst.exists() or dst.is_symlink():
@@ -76,14 +102,12 @@ def run_setup(repo_init_dir: Path) -> None:
     if missing:
         logger.warning("  WARNING: missing files: %s", ", ".join(missing))
 
-    # --- Step 2: Copy LOUD bin files (icons SCD, CommonDataPath) ---
-    logger.info("\n[2/6] Copying LOUD bin files from %s", config.LOUD_BIN)
-    for fname in config.LOUD_BIN_FILES:
-        src = config.LOUD_BIN / fname
-        if src.exists():
-            copy_file(src, config.WOPC_BIN / fname)
-        else:
-            logger.warning("  WARNING: missing %s", fname)
+    # --- Step 2: Copy bundled bin files (icons SCD, etc) ---
+    logger.info("\n[2/6] Copying bundled bin files")
+    if config.REPO_BUNDLED_BIN.exists():
+        for f in config.REPO_BUNDLED_BIN.iterdir():
+            if f.is_file():
+                copy_file(f, config.WOPC_BIN / f.name)
 
     # --- Step 3: Copy init files from repo ---
     logger.info("\n[3/6] Copying init files from repo")
@@ -106,16 +130,55 @@ def run_setup(repo_init_dir: Path) -> None:
     )
     logger.info("  generated wopc_paths.lua (SCFA = %s)", config.SCFA_STEAM)
 
-    # --- Step 4: Symlink/copy LOUD content ---
-    logger.info("\n[4/6] Linking LOUD content")
+    # --- Step 4: Copy bundled content ---
+    logger.info("\n[4/6] Copying bundled content")
 
-    # Gamedata: symlink individual SCD files (not the directory itself,
-    # because we'll add wopc_patches.scd alongside them)
-    if config.LOUD_GAMEDATA.exists():
-        for scd in sorted(config.LOUD_GAMEDATA.glob("*.scd")):
-            link_or_copy(scd, config.WOPC_GAMEDATA / scd.name)
+    # Gamedata: copy individual SCD files
+    if config.REPO_BUNDLED_GAMEDATA.exists():
+        for scd in sorted(config.REPO_BUNDLED_GAMEDATA.glob("*.scd")):
+            copy_file(scd, config.WOPC_GAMEDATA / scd.name)
     else:
-        logger.warning("  WARNING: LOUD gamedata not found at %s", config.LOUD_GAMEDATA)
+        logger.warning("  WARNING: Bundled gamedata not found at %s", config.REPO_BUNDLED_GAMEDATA)
+
+    # Build faf_ui.scd
+    # This merges FAF source files with vanilla lua.scd files that FAF
+    # doesn't replace.  The real FAF distribution (.nx2 files) does the
+    # same thing — our faf_ui.scd is the equivalent single-file package.
+    faf_ui_src = config.REPO_FAF_UI
+    faf_ui_dst = config.WOPC_GAMEDATA / config.FAF_UI_SCD
+    if faf_ui_src.exists():
+        logger.info("  building %s", config.FAF_UI_SCD)
+        with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_DEFLATED) as zf:
+            # 1. Add FAF source files (these take priority over vanilla)
+            for target_dir in ["lua", "modules", "ui", "loc"]:
+                dir_path = faf_ui_src / target_dir
+                if dir_path.exists():
+                    for file_path in dir_path.rglob("*"):
+                        if file_path.is_file():
+                            arcname = file_path.relative_to(faf_ui_src)
+                            zf.write(file_path, arcname)
+
+            # 2. Merge vanilla lua.scd files that FAF doesn't replace.
+            # FAF's simInit.lua imports AI files (lua/AI/*) that exist in
+            # vanilla lua.scd but not in FAF's source repo.  Without these,
+            # the sim crashes on import errors.
+            vanilla_lua_scd = config.SCFA_STEAM / "gamedata" / "lua.scd"
+            if vanilla_lua_scd.exists():
+                existing = {name.replace("\\", "/").lower() for name in zf.namelist()}
+                merged = 0
+                with zipfile.ZipFile(vanilla_lua_scd, "r") as vanilla_zf:
+                    for info in vanilla_zf.infolist():
+                        if info.is_dir():
+                            continue
+                        normalized = info.filename.replace("\\", "/").lower()
+                        if normalized not in existing:
+                            zf.writestr(info, vanilla_zf.read(info))
+                            merged += 1
+                logger.info("  merged %d vanilla lua.scd files into %s", merged, config.FAF_UI_SCD)
+            else:
+                logger.warning("  WARNING: vanilla lua.scd not found at %s", vanilla_lua_scd)
+    else:
+        logger.warning("  WARNING: %s not found. Did you initialize submodules?", faf_ui_src)
 
     # Build wopc_patches.scd
     wopc_patches_src = config.REPO_WOPC_PATCHES
@@ -130,16 +193,54 @@ def run_setup(repo_init_dir: Path) -> None:
     else:
         logger.warning("  WARNING: %s not found", wopc_patches_src)
 
-    # Maps, sounds: symlink entire directories
-    if config.LOUD_MAPS.exists():
-        link_or_copy(config.LOUD_MAPS, config.WOPC_MAPS)
-    if config.LOUD_SOUNDS.exists():
-        link_or_copy(config.LOUD_SOUNDS, config.WOPC_SOUNDS)
+    # Patch SCDs with WOPC engine-level overrides.
+    # The SCFA engine's C++ code loads files like uimain.lua using
+    # first-added search order (earliest mount = highest priority),
+    # which is the OPPOSITE of Lua's import() function.
+    # We must patch the SCD files in place so the engine picks up
+    # our modified uimain.lua (with quickstart hook).
+    if wopc_patches_src.exists():
+        uimain_src = wopc_patches_src / "lua" / "ui" / "uimain.lua"
+        if uimain_src.exists():
+            # Patch faf_ui.scd — in FAF-only mode this is the first (and only)
+            # SCD providing uimain.lua, so the engine C++ doscript finds it.
+            if faf_ui_dst.exists():
+                _patch_scd(faf_ui_dst, "lua/ui/uimain.lua", uimain_src)
+                logger.info("  patched faf_ui.scd with WOPC uimain.lua")
+
+            # Also patch LOUD's lua.scd if present — when LOUD content packs
+            # are enabled, lua.scd is mounted before faf_ui.scd, so the engine
+            # would find LOUD's uimain.lua first without this patch.
+            lua_scd_path = config.WOPC_GAMEDATA / "lua.scd"
+            if lua_scd_path.exists():
+                _patch_scd(lua_scd_path, "lua/ui/uimain.lua", uimain_src)
+                logger.info("  patched lua.scd with WOPC uimain.lua")
+
+        # Patch any other files that the engine C++ loads via doscript
+        # (first-added priority). These have bugs in FAF source that we fix.
+        structure_src = wopc_patches_src / "lua" / "sim" / "units" / "StructureUnit.lua"
+        if structure_src.exists() and faf_ui_dst.exists():
+            _patch_scd(faf_ui_dst, "lua/sim/units/StructureUnit.lua", structure_src)
+            logger.info("  patched faf_ui.scd with fixed StructureUnit.lua")
+
+    # Maps, sounds: copy entire directories
+    if config.REPO_BUNDLED_MAPS.exists():
+        shutil.copytree(config.REPO_BUNDLED_MAPS, config.WOPC_MAPS, dirs_exist_ok=True)
+
+    # Copy SCFA stock maps (from Steam installation)
+    scfa_maps = config.SCFA_STEAM / "maps"
+    if scfa_maps.exists():
+        logger.info("  Copying SCFA stock maps from %s", scfa_maps)
+        shutil.copytree(scfa_maps, config.WOPC_MAPS, dirs_exist_ok=True)
+    else:
+        logger.warning("  WARNING: SCFA maps directory not found at %s", scfa_maps)
+    if config.REPO_BUNDLED_SOUNDS.exists():
+        shutil.copytree(config.REPO_BUNDLED_SOUNDS, config.WOPC_SOUNDS, dirs_exist_ok=True)
 
     # --- Step 5: Copy usermods (not symlink - user may add/remove mods) ---
     logger.info("\n[5/6] Copying user mods")
-    if config.LOUD_USERMODS.exists() and not config.WOPC_USERMODS.exists():
-        shutil.copytree(config.LOUD_USERMODS, config.WOPC_USERMODS)
+    if config.REPO_BUNDLED_USERMODS.exists() and not config.WOPC_USERMODS.exists():
+        shutil.copytree(config.REPO_BUNDLED_USERMODS, config.WOPC_USERMODS)
         logger.info(
             "  copied usermods/ (%d files)", sum(1 for _ in config.WOPC_USERMODS.rglob("*"))
         )
@@ -149,13 +250,10 @@ def run_setup(repo_init_dir: Path) -> None:
         config.WOPC_USERMODS.mkdir(parents=True, exist_ok=True)
         logger.info("  created empty usermods/")
 
-    # --- Step 6: Link/create usermaps ---
+    # --- Step 6: Setup user maps ---
     logger.info("\n[6/6] Setting up user maps")
-    if config.LOUD_USERMAPS.exists():
-        link_or_copy(config.LOUD_USERMAPS, config.WOPC_USERMAPS)
-    else:
-        config.WOPC_USERMAPS.mkdir(parents=True, exist_ok=True)
-        logger.info("  created empty usermaps/")
+    config.WOPC_USERMAPS.mkdir(parents=True, exist_ok=True)
+    logger.info("  ensured empty usermaps/ exists")
 
     logger.info("\n=== Setup complete ===")
     logger.info("Game directory: %s", config.WOPC_ROOT)

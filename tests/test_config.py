@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from launcher.config import BIN_FILES, GAME_EXE, INIT_FILES, LOUD_BIN_FILES
+from launcher.config import BIN_FILES, GAME_EXE, INIT_FILES
 
 
 class TestPathConstants:
@@ -41,11 +41,11 @@ class TestPathConstants:
         # Reload again to restore
         importlib.reload(launcher.config)
 
-    def test_loud_root_relative_to_scfa(self):
-        """LOUD_ROOT is always SCFA_STEAM/LOUD."""
-        from launcher.config import LOUD_ROOT, SCFA_STEAM
+    def test_repo_bundled_relative_to_repo(self):
+        """REPO_BUNDLED is relative to the repo root."""
+        from launcher.config import _REPO_ROOT, REPO_BUNDLED
 
-        assert LOUD_ROOT == SCFA_STEAM / "LOUD"
+        assert REPO_BUNDLED == _REPO_ROOT / "bundled"
 
     def test_wopc_root_uses_programdata(self):
         """WOPC_ROOT defaults to %PROGRAMDATA%/WOPC."""
@@ -69,10 +69,6 @@ class TestFileLists:
     def test_moho_engine_in_bin_files(self):
         """MohoEngine.dll is in BIN_FILES."""
         assert "MohoEngine.dll" in BIN_FILES
-
-    def test_loud_bin_files_has_common_data_path(self):
-        """CommonDataPath.lua is in LOUD_BIN_FILES."""
-        assert "CommonDataPath.lua" in LOUD_BIN_FILES
 
     def test_init_files_has_init_wopc(self):
         """init_wopc.lua is in INIT_FILES."""

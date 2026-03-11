@@ -33,7 +33,7 @@ def generate_manifest(output_path: Path) -> None:
     for fname in ["SupremeCommander.exe", "MohoEngine.dll", "init_wopc.lua"]:
         targets.append(config.WOPC_BIN / fname)
 
-    # 2. Gamedata SCDs (LOUD + WOPC Overlay)
+    # 2. Gamedata SCDs (Base Bundled Assets + WOPC Overlay)
     if config.WOPC_GAMEDATA.exists():
         targets.extend(list(config.WOPC_GAMEDATA.glob("*.scd")))
 
