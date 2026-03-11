@@ -149,19 +149,35 @@ def run_setup(repo_init_dir: Path) -> None:
     if faf_ui_src.exists():
         logger.info("  building %s", config.FAF_UI_SCD)
         with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_DEFLATED) as zf:
-            # 1. Add FAF source files (these take priority over vanilla)
-            for target_dir in ["lua", "modules", "ui", "loc"]:
+            # 1. Add FAF source files (these take priority over vanilla).
+            # Normalize arcnames to lowercase — FAF's import() lowercases all
+            # paths before lookup (import.lua line 116), but ZIP lookups are
+            # case-sensitive.  Without this, 833/1264 files are unreachable.
+            for target_dir in [
+                "lua",
+                "modules",
+                "ui",
+                "loc",
+                "units",
+                "projectiles",
+                "effects",
+                "env",
+                "meshes",
+                "schook",
+            ]:
                 dir_path = faf_ui_src / target_dir
                 if dir_path.exists():
                     for file_path in dir_path.rglob("*"):
                         if file_path.is_file():
-                            arcname = file_path.relative_to(faf_ui_src)
+                            rel = file_path.relative_to(faf_ui_src)
+                            arcname = str(rel).replace("\\", "/").lower()
                             zf.write(file_path, arcname)
 
             # 2. Merge vanilla lua.scd files that FAF doesn't replace.
             # FAF's simInit.lua imports AI files (lua/AI/*) that exist in
             # vanilla lua.scd but not in FAF's source repo.  Without these,
             # the sim crashes on import errors.
+            # Arcnames are lowercased to match step 1 normalization.
             vanilla_lua_scd = config.SCFA_STEAM / "gamedata" / "lua.scd"
             if vanilla_lua_scd.exists():
                 existing = {name.replace("\\", "/").lower() for name in zf.namelist()}
@@ -172,7 +188,7 @@ def run_setup(repo_init_dir: Path) -> None:
                             continue
                         normalized = info.filename.replace("\\", "/").lower()
                         if normalized not in existing:
-                            zf.writestr(info, vanilla_zf.read(info))
+                            zf.writestr(normalized, vanilla_zf.read(info))
                             merged += 1
                 logger.info("  merged %d vanilla lua.scd files into %s", merged, config.FAF_UI_SCD)
             else:
@@ -180,7 +196,7 @@ def run_setup(repo_init_dir: Path) -> None:
     else:
         logger.warning("  WARNING: %s not found. Did you initialize submodules?", faf_ui_src)
 
-    # Build wopc_patches.scd
+    # Build wopc_patches.scd (lowercase-normalized, same as faf_ui.scd)
     wopc_patches_src = config.REPO_WOPC_PATCHES
     wopc_patches_dst = config.WOPC_GAMEDATA / config.WOPC_PATCHES_SCD
     if wopc_patches_src.exists():
@@ -188,7 +204,8 @@ def run_setup(repo_init_dir: Path) -> None:
         with zipfile.ZipFile(wopc_patches_dst, "w", zipfile.ZIP_DEFLATED) as zf:
             for file_path in wopc_patches_src.rglob("*"):
                 if file_path.is_file():
-                    arcname = file_path.relative_to(wopc_patches_src)
+                    rel = file_path.relative_to(wopc_patches_src)
+                    arcname = str(rel).replace("\\", "/").lower()
                     zf.write(file_path, arcname)
     else:
         logger.warning("  WARNING: %s not found", wopc_patches_src)
@@ -218,9 +235,10 @@ def run_setup(repo_init_dir: Path) -> None:
 
         # Patch any other files that the engine C++ loads via doscript
         # (first-added priority). These have bugs in FAF source that we fix.
+        # Arcname must be lowercase to match our normalized SCD contents.
         structure_src = wopc_patches_src / "lua" / "sim" / "units" / "StructureUnit.lua"
         if structure_src.exists() and faf_ui_dst.exists():
-            _patch_scd(faf_ui_dst, "lua/sim/units/StructureUnit.lua", structure_src)
+            _patch_scd(faf_ui_dst, "lua/sim/units/structureunit.lua", structure_src)
             logger.info("  patched faf_ui.scd with fixed StructureUnit.lua")
 
     # Maps, sounds: copy entire directories
