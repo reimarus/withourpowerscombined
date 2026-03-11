@@ -1,9 +1,23 @@
-from launcher.gui.app import WopcApp, launch_gui
+import pytest
+
+try:
+    import customtkinter  # noqa: F401
+
+    HAS_CTK = True
+except ImportError:
+    HAS_CTK = False
+
 from launcher.gui.worker import SetupWorker
 
+# GUI tests require customtkinter — skip in headless CI where it's not installed
+pytestmark_ctk = pytest.mark.skipif(not HAS_CTK, reason="customtkinter not installed")
 
+
+@pytestmark_ctk
 def test_launch_gui_mocks_mainloop(mocker):
     """Test that launch_gui instantiates WopcApp and calls mainloop without rendering."""
+    from launcher.gui.app import WopcApp, launch_gui
+
     # Mock the CTk base class to prevent actual window creation in headless CI
     mock_ctk = mocker.patch("launcher.gui.app.ctk.CTk")
     mock_app_instance = mocker.MagicMock()
@@ -19,8 +33,11 @@ def test_launch_gui_mocks_mainloop(mocker):
     WopcApp.mainloop.assert_called_once()
 
 
+@pytestmark_ctk
 def test_wopc_app_initialization(mocker):
     """Test the GUI components are built correctly."""
+    from launcher.gui.app import WopcApp
+
     mocker.patch.object(WopcApp, "bind")
     mocker.patch("launcher.gui.app.ctk.CTk")
 

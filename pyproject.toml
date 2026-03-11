@@ -94,7 +94,10 @@ markers = [
 
 [tool.coverage.run]
 source = ["launcher"]
-omit = ["tests/*"]
+omit = [
+    "tests/*",
+    "launcher/gui/app.py",  # GUI module — requires display, untestable in headless CI
+]
 
 [tool.coverage.report]
 fail_under = 70

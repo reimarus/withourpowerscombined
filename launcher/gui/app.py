@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from launcher import init_generator, map_scanner
 
 if TYPE_CHECKING:
-    import customtkinter as ctk  # type: ignore[import-untyped]
+    import customtkinter as ctk  # type: ignore[import-untyped,import-not-found]
 
     BaseApp = ctk.CTk
 else:
@@ -81,7 +81,7 @@ class WopcApp(BaseApp):  # type: ignore
 
         if getattr(sys, "frozen", False):
             # PyInstaller extracts bundled data to _MEIPASS
-            base_dir = Path(sys._MEIPASS)
+            base_dir = Path(sys._MEIPASS)  # type: ignore[attr-defined]
         else:
             base_dir = Path(__file__).parent.parent.parent.resolve()
 
