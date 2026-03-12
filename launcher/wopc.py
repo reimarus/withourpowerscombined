@@ -168,9 +168,11 @@ def cmd_launch() -> int:
         # Write the game config for quickstart.lua to read at runtime.
         # This includes player info, AI opponents, and game options.
         player_name = prefs.get_player_name()
+        minimap_enabled = prefs.get_minimap_enabled()
         config_path = write_game_config(
             scenario_file=vfs_path,
             player_name=player_name,
+            game_options={"minimap_enabled": str(minimap_enabled)},
         )
         logger.info("Wrote game config: %s", config_path)
 

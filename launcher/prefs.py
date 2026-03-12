@@ -18,6 +18,7 @@ DEFAULT_PREFS = {
     "Game": {
         "active_map": "",
         "player_name": "Player",
+        "minimap_enabled": "True",
     },
     "Mods": {
         # Mods are stored as keys with boolean values (Enabled/Disabled)
@@ -101,6 +102,12 @@ def get_enabled_mods() -> list[str]:
         if parser.getboolean("Mods", mod_name, fallback=False):
             enabled.append(mod_name)
     return enabled
+
+
+def get_minimap_enabled() -> bool:
+    """Return whether the minimap should be visible on game launch."""
+    parser = load_prefs()
+    return parser.getboolean("Game", "minimap_enabled", fallback=True)
 
 
 def set_mod_state(mod_name: str, enabled: bool) -> None:
