@@ -148,6 +148,18 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
     -- Tell the engine we're hosting a game
     comm:HostGame()
 
+    -- Apply WOPC player settings to engine profile prefs.
+    -- These must be set before LaunchGame() transitions to game state,
+    -- because FAF UI modules read profile prefs at import time.
+    if cfg.GameOptions then
+        local Prefs = import('/lua/user/prefs.lua')
+        if cfg.GameOptions.minimap_enabled then
+            local enabled = (cfg.GameOptions.minimap_enabled == 'True')
+            Prefs.SetToCurrentProfile('stratview', enabled)
+            LOG('WOPC QuickStart: Set minimap visibility to ' .. tostring(enabled))
+        end
+    end
+
     -- Build the flat gameInfo and launch directly into the simulation
     local gameInfo = BuildGameInfo(cfg)
 

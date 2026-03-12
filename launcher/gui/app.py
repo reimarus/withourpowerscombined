@@ -304,6 +304,45 @@ class WopcApp(BaseApp):  # type: ignore
         self.mods_scroll.grid(row=3, column=0, sticky="nsew", padx=10)
         self.mod_checkboxes: dict[str, Any] = {}
 
+        # --- Player Settings Section ---
+        self.settings_header = ctk.CTkLabel(
+            self.mod_pane,
+            text="PLAYER SETTINGS",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        self.settings_header.grid(row=4, column=0, padx=20, pady=(15, 5), sticky="w")
+
+        # Faction selector
+        saved_faction = prefs.get_player_faction()
+        display_faction = "UEF" if saved_faction == "uef" else saved_faction.capitalize()
+        self.faction_var = ctk.StringVar(value=display_faction)
+        self.faction_label = ctk.CTkLabel(
+            self.mod_pane,
+            text="Faction:",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
+        )
+        self.faction_label.grid(row=5, column=0, padx=30, pady=(3, 0), sticky="w")
+        self.faction_menu = ctk.CTkOptionMenu(
+            self.mod_pane,
+            values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
+            variable=self.faction_var,
+            command=self._on_faction_change,
+            width=160,
+        )
+        self.faction_menu.grid(row=6, column=0, padx=30, pady=(0, 5), sticky="w")
+
+        # Minimap toggle
+        self.minimap_var = ctk.BooleanVar(value=prefs.get_minimap_enabled())
+        self.minimap_cb = ctk.CTkCheckBox(
+            self.mod_pane,
+            text="Show minimap on launch",
+            command=self._on_minimap_toggle,
+            variable=self.minimap_var,
+        )
+        self.minimap_cb.grid(row=7, column=0, padx=30, pady=3, sticky="w")
+
         # Summary Status
         self.play_summary = ctk.CTkLabel(
             self.mod_pane,
@@ -311,7 +350,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.play_summary.grid(row=4, column=0, padx=20, pady=10, sticky="w")
+        self.play_summary.grid(row=8, column=0, padx=20, pady=10, sticky="w")
 
     def _refresh_mods_list(self) -> None:
         """Read available mods and content packs from disk and update the UI."""
@@ -458,6 +497,18 @@ class WopcApp(BaseApp):  # type: ignore
 
             if is_active:
                 self.selected_map_label.configure(text=f"Selected Map: {info.display_name}")
+
+    def _on_faction_change(self, choice: str) -> None:
+        """Persist faction preference when dropdown changes."""
+        parser = prefs.load_prefs()
+        parser.set("Game", "player_faction", choice.lower())
+        prefs.save_prefs(parser)
+
+    def _on_minimap_toggle(self) -> None:
+        """Persist minimap visibility preference when checkbox is toggled."""
+        parser = prefs.load_prefs()
+        parser.set("Game", "minimap_enabled", str(self.minimap_var.get()))
+        prefs.save_prefs(parser)
 
     def _update_play_summary(self) -> None:
         """Update the label on the play tab showing the active config."""

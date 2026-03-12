@@ -96,9 +96,8 @@ REPO_BUNDLED_MAPS = REPO_BUNDLED / "maps"
 REPO_BUNDLED_SOUNDS = REPO_BUNDLED / "sounds"
 REPO_BUNDLED_USERMODS = REPO_BUNDLED / "usermods"
 
-# WOPC Overlay Content
+# WOPC Overlay Content (consolidated into faf_ui.scd during build)
 REPO_WOPC_PATCHES = _REPO_ROOT / "gamedata" / "wopc_patches"
-WOPC_PATCHES_SCD = "wopc_patches.scd"
 
 # FAF UI Intergration (Phase 6)
 REPO_FAF_UI = VENDOR_DIR / "faf-ui"

@@ -140,11 +140,24 @@ class TestRunSetup:
         run_setup(repo_init_dir)
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
-        # The fake bundled dir has lua.scd and units.scd, plus our wopc_patches.scd and faf_ui.scd
+        # The fake bundled dir has lua.scd and units.scd, plus our consolidated faf_ui.scd
         scds = list(wopc_gd.glob("*.scd"))
-        assert len(scds) >= 4
+        assert len(scds) >= 3
         assert (wopc_gd / "faf_ui.scd").exists()
-        assert (wopc_gd / "wopc_patches.scd").exists()
+
+    def test_faf_ui_scd_includes_wopc_patches(self, patched_config, repo_init_dir):
+        """faf_ui.scd must contain WOPC patch files (consolidated build)."""
+        import zipfile
+
+        from launcher.deploy import run_setup
+
+        run_setup(repo_init_dir)
+
+        faf_ui_scd = patched_config["WOPC_GAMEDATA"] / "faf_ui.scd"
+        with zipfile.ZipFile(faf_ui_scd, "r") as zf:
+            names = zf.namelist()
+            # The fake wopc_patches dir has patch_file.lua
+            assert "patch_file.lua" in names, "faf_ui.scd should contain WOPC patch files"
 
     def test_faf_ui_scd_includes_textures(self, patched_config, repo_init_dir):
         """faf_ui.scd must contain FAF texture files."""

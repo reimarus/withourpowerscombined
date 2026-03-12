@@ -20,7 +20,7 @@ def _patch_scd(scd_path: Path, arcname: str, replacement: Path) -> bool:
     try:
         with (
             zipfile.ZipFile(scd_path, "r") as zr,
-            zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zw,
+            zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_STORED) as zw,
         ):
             for info in zr.infolist():
                 if info.filename == arcname:
@@ -148,7 +148,7 @@ def run_setup(repo_init_dir: Path) -> None:
     faf_ui_dst = config.WOPC_GAMEDATA / config.FAF_UI_SCD
     if faf_ui_src.exists():
         logger.info("  building %s", config.FAF_UI_SCD)
-        with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_STORED) as zf:
             # 1. Add FAF source files (these take priority over vanilla).
             # Normalize arcnames to lowercase — FAF's import() lowercases all
             # paths before lookup (import.lua line 116), but ZIP lookups are
@@ -194,29 +194,35 @@ def run_setup(repo_init_dir: Path) -> None:
                 logger.info("  merged %d vanilla lua.scd files into %s", merged, config.FAF_UI_SCD)
             else:
                 logger.warning("  WARNING: vanilla lua.scd not found at %s", vanilla_lua_scd)
+
+            # 3. Add WOPC patches (override FAF + vanilla files where needed).
+            # These are our own fixes and additions — quickstart.lua, uimain.lua
+            # hook, StructureUnit fix, AI stubs, etc.  Written LAST so they
+            # overwrite any FAF or vanilla duplicate with the same arcname.
+            wopc_patches_src = config.REPO_WOPC_PATCHES
+            if wopc_patches_src.exists():
+                patched = 0
+                for file_path in wopc_patches_src.rglob("*"):
+                    if file_path.is_file() and file_path.name != ".gitkeep":
+                        rel = file_path.relative_to(wopc_patches_src)
+                        arcname = str(rel).replace("\\", "/").lower()
+                        zf.write(file_path, arcname)
+                        patched += 1
+                logger.info("  added %d WOPC patch files into %s", patched, config.FAF_UI_SCD)
+            else:
+                logger.warning("  WARNING: WOPC patches not found at %s", wopc_patches_src)
     else:
         logger.warning("  WARNING: %s not found. Did you initialize submodules?", faf_ui_src)
-
-    # Build wopc_patches.scd (lowercase-normalized, same as faf_ui.scd)
-    wopc_patches_src = config.REPO_WOPC_PATCHES
-    wopc_patches_dst = config.WOPC_GAMEDATA / config.WOPC_PATCHES_SCD
-    if wopc_patches_src.exists():
-        logger.info("  building %s", config.WOPC_PATCHES_SCD)
-        with zipfile.ZipFile(wopc_patches_dst, "w", zipfile.ZIP_DEFLATED) as zf:
-            for file_path in wopc_patches_src.rglob("*"):
-                if file_path.is_file():
-                    rel = file_path.relative_to(wopc_patches_src)
-                    arcname = str(rel).replace("\\", "/").lower()
-                    zf.write(file_path, arcname)
-    else:
-        logger.warning("  WARNING: %s not found", wopc_patches_src)
 
     # Patch SCDs with WOPC engine-level overrides.
     # The SCFA engine's C++ code loads files like uimain.lua using
     # first-added search order (earliest mount = highest priority),
     # which is the OPPOSITE of Lua's import() function.
-    # We must patch the SCD files in place so the engine picks up
-    # our modified uimain.lua (with quickstart hook).
+    # Even though the files are now inside faf_ui.scd (step 3 above),
+    # ZIP archives list entries in write order — the engine finds the
+    # FIRST matching entry, which is FAF's original from step 1.
+    # _patch_scd() replaces that first entry with our patched version.
+    wopc_patches_src = config.REPO_WOPC_PATCHES
     if wopc_patches_src.exists():
         uimain_src = wopc_patches_src / "lua" / "ui" / "uimain.lua"
         if uimain_src.exists():
