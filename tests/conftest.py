@@ -113,7 +113,6 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "REPO_FAF_UI": vendor / "faf_ui",
         "FAF_UI_SCD": "faf_ui.scd",
         "REPO_WOPC_PATCHES": wopc_patches,
-        "WOPC_PATCHES_SCD": "wopc_patches.scd",
     }
 
     with patch.multiple("launcher.config", **config_patches):  # type: ignore[call-overload]

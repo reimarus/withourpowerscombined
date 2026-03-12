@@ -26,7 +26,7 @@ CORE_SCDS: frozenset[str] = frozenset()
 
 # SCDs with fixed mount positions that must NOT appear in the toggleable
 # content packs list or in the early gamedata block.
-_FIXED_POSITION_SCDS = frozenset({"faf_ui.scd", "wopc_patches.scd"})
+_FIXED_POSITION_SCDS = frozenset({"faf_ui.scd"})
 
 # Human-friendly names for content packs shown in the launcher UI.
 # All of these are toggleable — disabled by default in FAF-only mode.
@@ -51,9 +51,9 @@ CONTENT_PACK_LABELS: dict[str, str] = {
 def get_toggleable_scds() -> list[str]:
     """Return a sorted list of gamedata SCD names the user can toggle.
 
-    Fixed-position SCDs (faf_ui.scd, wopc_patches.scd) are excluded
-    because they have explicit mount points in the init template and
-    disabling them would corrupt VFS mount ordering.
+    Fixed-position SCDs (faf_ui.scd) are excluded because they have
+    explicit mount points in the init template and disabling them
+    would corrupt VFS mount ordering.
     """
     if not config.WOPC_GAMEDATA.exists():
         return []
@@ -122,11 +122,10 @@ def generate_init_lua() -> Path:
 --   1. Bundled strategic icons  (from WOPC/bin/)
 --   2. Content pack SCDs        (LOUD mods — toggleable, disabled by default)
 --   3. Bundled maps and sounds
---   4. WOPC patches overlay     (our Lua fixes — highest priority for '/')
---   5. FAF UI + Lua engine      (FAF game logic — shadows vanilla)
---   6. Vanilla SCFA content     (fonts, textures, effects, units, loc, etc.)
---   7. User maps
---   8. User mods                (separate namespace via mount_mods)
+--   4. FAF UI + WOPC patches    (single SCD: FAF logic + our fixes)
+--   5. Vanilla SCFA content     (fonts, textures, effects, units, loc, etc.)
+--   6. User maps
+--   7. User mods                (separate namespace via mount_mods)
 -- =============================================================================
 
 do
@@ -156,21 +155,16 @@ mount_dir(WOPCRoot .. '\\\\maps', '/maps')
 mount_dir(WOPCRoot .. '\\\\sounds', '/sounds')
 
 -- =========================================================================
--- 4. WOPC patches overlay (first-added = highest VFS priority)
--- =========================================================================
-local wopc_patches = WOPCRoot .. '\\\\gamedata\\\\wopc_patches.scd'
-mount_dir(wopc_patches, '/')
-
--- =========================================================================
--- 5. FAF Lua engine + UI (shadows vanilla for all game logic + unit scripts)
--- Must be mounted BEFORE vanilla SCDs so the engine's VFS finds FAF's
+-- 4. FAF UI + WOPC patches (single consolidated SCD)
+-- Contains FAF game logic, our WOPC fixes, and vanilla gap-fills.
+-- Must be mounted BEFORE vanilla SCDs so the engine's VFS finds our
 -- files first (first-added = highest priority in SCFA's VFS).
 -- =========================================================================
 local faf_ui = WOPCRoot .. '\\\\gamedata\\\\faf_ui.scd'
 mount_dir(faf_ui, '/')
 
 -- =========================================================================
--- 6. Vanilla SCFA content (assets + gameplay data from Steam install)
+-- 5. Vanilla SCFA content (assets + gameplay data from Steam install)
 -- Mounted AFTER FAF so FAF's files take priority.  Vanilla provides
 -- assets that FAF doesn't replace (unmodified units, textures, etc.).
 -- FAF replaces lua.scd, mohodata.scd, moholua.scd, and schook.scd
@@ -191,12 +185,12 @@ mount_dir(SCFARoot .. '\\\\movies', '/movies')
 mount_dir(SCFARoot .. '\\\\sounds', '/sounds')
 
 -- =========================================================================
--- 7. User maps
+-- 6. User maps
 -- =========================================================================
 mount_dir(WOPCRoot .. '\\\\usermaps', '/maps')
 
 -- =========================================================================
--- 8. User mods (separate namespace — loaded via mount_mods)
+-- 7. User mods (separate namespace — loaded via mount_mods)
 -- =========================================================================
 mount_mods(WOPCRoot .. '\\\\usermods')
 
