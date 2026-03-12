@@ -19,6 +19,7 @@ DEFAULT_PREFS = {
         "active_map": "",
         "player_name": "Player",
         "minimap_enabled": "True",
+        "player_faction": "random",
     },
     "Mods": {
         # Mods are stored as keys with boolean values (Enabled/Disabled)
@@ -108,6 +109,12 @@ def get_minimap_enabled() -> bool:
     """Return whether the minimap should be visible on game launch."""
     parser = load_prefs()
     return parser.getboolean("Game", "minimap_enabled", fallback=True)
+
+
+def get_player_faction() -> str:
+    """Return the player's chosen faction (uef/aeon/cybran/seraphim/random)."""
+    parser = load_prefs()
+    return parser.get("Game", "player_faction", fallback="random")
 
 
 def set_mod_state(mod_name: str, enabled: bool) -> None:
