@@ -20,7 +20,7 @@ def _patch_scd(scd_path: Path, arcname: str, replacement: Path) -> bool:
     try:
         with (
             zipfile.ZipFile(scd_path, "r") as zr,
-            zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zw,
+            zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_STORED) as zw,
         ):
             for info in zr.infolist():
                 if info.filename == arcname:
@@ -148,7 +148,7 @@ def run_setup(repo_init_dir: Path) -> None:
     faf_ui_dst = config.WOPC_GAMEDATA / config.FAF_UI_SCD
     if faf_ui_src.exists():
         logger.info("  building %s", config.FAF_UI_SCD)
-        with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_STORED) as zf:
             # 1. Add FAF source files (these take priority over vanilla).
             # Normalize arcnames to lowercase — FAF's import() lowercases all
             # paths before lookup (import.lua line 116), but ZIP lookups are
