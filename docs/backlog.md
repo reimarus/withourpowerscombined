@@ -15,4 +15,4 @@ backlog of items for us to do over time.
    d. incoming artillary
 11. map preview in launcher
 12. mod manager
-13. 
+13. fix score board
