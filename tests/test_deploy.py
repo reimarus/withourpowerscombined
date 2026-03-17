@@ -205,15 +205,29 @@ class TestContentPackAcquisition:
         """Copies SCD from local LOUD install instead of downloading."""
         from launcher.deploy import _acquire_content_packs
 
-        # Set up a fake LOUD install with blackops.scd
+        # Set up a fake LOUD install with all content packs
         loud_gd = patched_config["LOUD_GAMEDATA"]
         loud_gd.mkdir(parents=True)
         loud_sounds = patched_config["LOUD_SOUNDS"]
         loud_sounds.mkdir(parents=True)
 
         (loud_gd / "blackops.scd").write_bytes(b"\x00" * 100)
+        (loud_gd / "TotalMayhem.scd").write_bytes(b"\x00" * 200)
         (loud_sounds / "blackopssb.xsb").write_bytes(b"\x01" * 10)
         (loud_sounds / "blackopswb.xwb").write_bytes(b"\x02" * 20)
+        for sfx in [
+            "tm_aeonweapons.xsb",
+            "tm_aeonweaponsounds.xwb",
+            "tm_aircrafts.xsb",
+            "tm_aircraftsounds.xwb",
+            "tm_cybranweapons.xsb",
+            "tm_cybranweaponsounds.xwb",
+            "tm_explosions.xsb",
+            "tm_explosionsounds.xwb",
+            "tm_uefweapons.xsb",
+            "tm_uefweaponsounds.xwb",
+        ]:
+            (loud_sounds / sfx).write_bytes(b"\x03" * 5)
 
         _acquire_content_packs()
 
@@ -221,8 +235,11 @@ class TestContentPackAcquisition:
         wopc_sounds = patched_config["WOPC_SOUNDS"]
         assert (wopc_gd / "blackops.scd").exists()
         assert (wopc_gd / "blackops.scd").stat().st_size == 100
+        assert (wopc_gd / "TotalMayhem.scd").exists()
+        assert (wopc_gd / "TotalMayhem.scd").stat().st_size == 200
         assert (wopc_sounds / "blackopssb.xsb").exists()
         assert (wopc_sounds / "blackopswb.xwb").exists()
+        assert (wopc_sounds / "tm_explosions.xsb").exists()
 
     def test_downloads_when_loud_not_installed(self, patched_config):
         """Downloads SCD from GitHub when LOUD is not available."""
@@ -233,25 +250,40 @@ class TestContentPackAcquisition:
         with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
             _acquire_content_packs()
 
-        # Should have been called for SCD + 2 sounds = 3 downloads
-        assert mock_retrieve.call_count == 3
+        # blackops: 1 SCD + 2 sounds = 3; TotalMayhem: 1 SCD + 10 sounds = 11
+        assert mock_retrieve.call_count == 14
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         assert (wopc_gd / "blackops.scd").exists()
+        assert (wopc_gd / "TotalMayhem.scd").exists()
 
     def test_skips_when_already_cached(self, patched_config):
         """Does not re-download when files already exist in WOPC."""
         from launcher.deploy import _acquire_content_packs
 
-        # Pre-populate WOPC with existing files
+        # Pre-populate WOPC with existing files for ALL content packs
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         wopc_gd.mkdir(parents=True, exist_ok=True)
         (wopc_gd / "blackops.scd").write_bytes(b"\x00" * 100)
+        (wopc_gd / "TotalMayhem.scd").write_bytes(b"\x00" * 100)
 
         wopc_sounds = patched_config["WOPC_SOUNDS"]
         wopc_sounds.mkdir(parents=True, exist_ok=True)
         (wopc_sounds / "blackopssb.xsb").write_bytes(b"\x01")
         (wopc_sounds / "blackopswb.xwb").write_bytes(b"\x02")
+        for sfx in [
+            "tm_aeonweapons.xsb",
+            "tm_aeonweaponsounds.xwb",
+            "tm_aircrafts.xsb",
+            "tm_aircraftsounds.xwb",
+            "tm_cybranweapons.xsb",
+            "tm_cybranweaponsounds.xwb",
+            "tm_explosions.xsb",
+            "tm_explosionsounds.xwb",
+            "tm_uefweapons.xsb",
+            "tm_uefweaponsounds.xwb",
+        ]:
+            (wopc_sounds / sfx).write_bytes(b"\x03")
 
         mock_retrieve = MagicMock()
         with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
@@ -276,19 +308,35 @@ class TestContentPackAcquisition:
 class TestExcludedModCleanup:
     """Test cleanup of previously-extracted excluded mods."""
 
-    def test_removes_excluded_mod_directory(self, patched_config):
-        """Removes BlackopsACUs from WOPC/mods/ during content pack acquisition."""
-        from launcher.deploy import _acquire_content_packs
-
-        # Pre-populate WOPC with existing blackops.scd + extracted BlackopsACUs
+    def _prepopulate_all_packs(self, patched_config):
+        """Pre-populate all content pack files so _acquire_content_packs skips downloads."""
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         wopc_gd.mkdir(parents=True, exist_ok=True)
         (wopc_gd / "blackops.scd").write_bytes(b"\x00" * 100)
-
+        (wopc_gd / "TotalMayhem.scd").write_bytes(b"\x00" * 100)
         wopc_sounds = patched_config["WOPC_SOUNDS"]
         wopc_sounds.mkdir(parents=True, exist_ok=True)
         (wopc_sounds / "blackopssb.xsb").write_bytes(b"\x01")
         (wopc_sounds / "blackopswb.xwb").write_bytes(b"\x02")
+        for sfx in [
+            "tm_aeonweapons.xsb",
+            "tm_aeonweaponsounds.xwb",
+            "tm_aircrafts.xsb",
+            "tm_aircraftsounds.xwb",
+            "tm_cybranweapons.xsb",
+            "tm_cybranweaponsounds.xwb",
+            "tm_explosions.xsb",
+            "tm_explosionsounds.xwb",
+            "tm_uefweapons.xsb",
+            "tm_uefweaponsounds.xwb",
+        ]:
+            (wopc_sounds / sfx).write_bytes(b"\x03")
+
+    def test_removes_excluded_mod_directory(self, patched_config):
+        """Removes BlackopsACUs from WOPC/mods/ during content pack acquisition."""
+        from launcher.deploy import _acquire_content_packs
+
+        self._prepopulate_all_packs(patched_config)
 
         wopc_mods = patched_config["WOPC_MODS"]
         wopc_mods.mkdir(parents=True, exist_ok=True)
@@ -304,14 +352,7 @@ class TestExcludedModCleanup:
         """No error when excluded mod dir doesn't exist."""
         from launcher.deploy import _acquire_content_packs
 
-        wopc_gd = patched_config["WOPC_GAMEDATA"]
-        wopc_gd.mkdir(parents=True, exist_ok=True)
-        (wopc_gd / "blackops.scd").write_bytes(b"\x00" * 100)
-
-        wopc_sounds = patched_config["WOPC_SOUNDS"]
-        wopc_sounds.mkdir(parents=True, exist_ok=True)
-        (wopc_sounds / "blackopssb.xsb").write_bytes(b"\x01")
-        (wopc_sounds / "blackopswb.xwb").write_bytes(b"\x02")
+        self._prepopulate_all_packs(patched_config)
 
         # No BlackopsACUs directory exists — should not raise
         _acquire_content_packs()

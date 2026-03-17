@@ -126,6 +126,21 @@ CONTENT_PACK_ASSETS: dict[str, dict] = {
             "blackopswb.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackopswb.xwb",
         },
     },
+    "TotalMayhem.scd": {
+        "url": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/TotalMayhem.scd",
+        "sounds": {
+            "tm_aeonweapons.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aeonweapons.xsb",
+            "tm_aeonweaponsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aeonweaponsounds.xwb",
+            "tm_aircrafts.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aircrafts.xsb",
+            "tm_aircraftsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aircraftsounds.xwb",
+            "tm_cybranweapons.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_cybranweapons.xsb",
+            "tm_cybranweaponsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_cybranweaponsounds.xwb",
+            "tm_explosions.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_explosions.xsb",
+            "tm_explosionsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_explosionsounds.xwb",
+            "tm_uefweapons.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_uefweapons.xsb",
+            "tm_uefweaponsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_uefweaponsounds.xwb",
+        },
+    },
 }
 
 # --- Game exe name and launch arguments ---
