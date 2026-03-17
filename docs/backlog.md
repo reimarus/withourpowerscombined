@@ -23,11 +23,11 @@ backlog of items for us to do over time.
 12. fix score board
 
 ## Architecture Refactors
-13. **Mod system consolidation** — Current mod handling is spread across prefs.py
-    (UID scanning), init_generator.py (VFS mounting), deploy.py (extraction),
-    game_config.py (UID serialization), and quickstart.lua (activation).
-    Consolidate into a single `launcher/mods.py` module that owns the full
-    lifecycle: discovery, extraction, activation, and state management.
+13. ~~**Mod system consolidation**~~ ✅ Done — `launcher/mods.py` now owns the
+    full mod lifecycle: discovery (ModInfo dataclass + UID parsing), content
+    pack management (labels, toggling), mod extraction from SCDs, UID-based
+    state management, and migration from folder-name prefs to UIDs.
+    Fixed critical bug where wopc.py mixed UIDs with folder names.
 14. **Content pack pipeline** — deploy.py `_acquire_content_packs()` handles
     download + extraction + mod extraction in one function. Should be a proper
     pipeline: download manager, SCD registry, mod extractor as separate concerns.
@@ -39,10 +39,10 @@ backlog of items for us to do over time.
     LobbyComm and bypasses FAF's lobby entirely. For real multiplayer, need:
     lobby discovery, peer-to-peer connection, mod/version sync validation,
     shared game config negotiation. This is the largest refactor.
-17. **User mod activation** — User mods (WOPC/usermods/) are toggled by folder
-    name in prefs but passed to GameMods by name, not UID. Should use UIDs
-    consistently like server mods. Also need proper dependency resolution
-    (mod A requires mod B).
+17. **User mod activation** — ~~User mods toggled by folder name~~ ✅ Fixed —
+    mods.py now uses UIDs consistently. Includes prefs migration from folder
+    names to UIDs. Still need: proper dependency resolution (mod A requires
+    mod B) and conflict detection in the launcher UI.
 18. **Game.prefs management** — SCFA's preference system (Game.prefs) is not
     managed by WOPC. We write active_mods at launch time but don't own the
     file. Need a clean strategy: either fully manage Game.prefs from the
