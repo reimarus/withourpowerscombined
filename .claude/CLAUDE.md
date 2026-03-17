@@ -102,13 +102,13 @@ C:\Users\roskv\wopc\          (repo)
     deploy.py                  Creates C:\ProgramData\WOPC\ game directory
     game_config.py             Generates wopc_game_config.lua (quickstart config)
     init_generator.py          init_wopc.lua template (delegates to mods.py)
-    prefs.py                   INI infrastructure (map, player, display prefs)
+    prefs.py                   INI prefs (map, player, display, launch mode)
     log.py                     Logging configuration
     toolchain.py               Compiler discovery (Clang, GCC, LD)
     manifest.py                Patch manifest parsing (wopc_patches.toml)
     patcher.py                 Build orchestration for patched exe
     gui/                       GUI launcher (customtkinter)
-      app.py                   WopcApp — main window, map selector, PLAY MATCH
+      app.py                   WopcApp — main window, map selector, mode selector (SOLO/HOST/JOIN)
       worker.py                SetupWorker — async setup in background thread
       wopc.ico                 Application icon
   build_exe.py                 PyInstaller build script → dist/WOPC-Launcher.exe
@@ -187,9 +187,10 @@ quickstart.lua
 - **Phase 0** ✅ Foundation — launcher, init, CI, tests
 - **Phase 1** ✅ Game launches from WOPC directory
 - **Phase 2** ✅ FAF binary patches integration
-- **Phase 3** → WOPC Lua overlay (quickstart system done, LOUD content packaging next)
-- **Phase 4** → Multiplayer support
-- **Phase 5** → C++ pathfinding patch
+- **Phase 3** ✅ WOPC Lua overlay (quickstart system + content packs)
+- **Phase 4** 🔧 Multiplayer support (Phase 1 done: SOLO/HOST/JOIN launch modes)
+- **Phase 5** → Player slot management + game options
+- **Phase 6** → C++ pathfinding patch
 
 ## Key Technical Gotchas
 

@@ -1,7 +1,7 @@
 import logging
 import sys
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from launcher import map_scanner, mods
 
@@ -114,7 +114,7 @@ class WopcApp(BaseApp):  # type: ignore
         """Construct the left sidebar navigation and status area."""
         self.sidebar = ctk.CTkFrame(self, fg_color=COLOR_BG, corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
-        self.sidebar.grid_rowconfigure(5, weight=1)
+        self.sidebar.grid_rowconfigure(9, weight=1)
 
         # Logo / Title
         self.logo_label = ctk.CTkLabel(
@@ -149,6 +149,51 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.status_wopc.grid(row=4, column=0, padx=20, pady=5, sticky="w")
 
+        # --- Launch Mode Selector ---
+        self.mode_label = ctk.CTkLabel(
+            self.sidebar,
+            text="LAUNCH MODE",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        self.mode_label.grid(row=5, column=0, padx=20, pady=(20, 5), sticky="w")
+
+        saved_mode = prefs.get_launch_mode()
+        self.mode_var = ctk.StringVar(value=saved_mode.upper())
+        self.mode_selector = ctk.CTkSegmentedButton(
+            self.sidebar,
+            values=["SOLO", "HOST", "JOIN"],
+            variable=self.mode_var,
+            command=self._on_mode_change,
+        )
+        self.mode_selector.grid(row=6, column=0, padx=20, pady=(0, 5), sticky="ew")
+
+        # Conditional widgets for HOST/JOIN modes
+        self.mode_widgets_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        self.mode_widgets_frame.grid(row=7, column=0, padx=20, sticky="ew")
+
+        self.port_label = ctk.CTkLabel(
+            self.mode_widgets_frame, text="Port:", text_color=COLOR_TEXT_MUTED
+        )
+        self.port_entry = ctk.CTkEntry(self.mode_widgets_frame, width=120, placeholder_text="15000")
+        self.port_entry.insert(0, prefs.get_host_port())
+        self.port_entry.bind("<FocusOut>", lambda e: prefs.set_host_port(self.port_entry.get()))
+
+        self.address_label = ctk.CTkLabel(
+            self.mode_widgets_frame, text="Host Address:", text_color=COLOR_TEXT_MUTED
+        )
+        self.address_entry = ctk.CTkEntry(
+            self.mode_widgets_frame, width=180, placeholder_text="192.168.1.50:15000"
+        )
+        saved_addr = prefs.get_join_address()
+        if saved_addr:
+            self.address_entry.insert(0, saved_addr)
+        self.address_entry.bind(
+            "<FocusOut>", lambda e: prefs.set_join_address(self.address_entry.get())
+        )
+
+        self._update_mode_widgets()
+
         # Play Button (Bottom of Sidebar)
         self.primary_btn = ctk.CTkButton(
             self.sidebar,
@@ -160,7 +205,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color="white",
             command=self._on_primary_click,
         )
-        self.primary_btn.grid(row=6, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.primary_btn.grid(row=8, column=0, padx=20, pady=(10, 10), sticky="ew")
 
         # Version tag
         self.version_label = ctk.CTkLabel(
@@ -169,7 +214,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=11),
         )
-        self.version_label.grid(row=7, column=0, padx=20, pady=(0, 20), sticky="w")
+        self.version_label.grid(row=10, column=0, padx=20, pady=(0, 20), sticky="w")
 
     def _build_main_lobby(self) -> None:
         """Construct the central matching routing/configuration area."""
@@ -201,8 +246,6 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_ACCENT,
             font=ctk.CTkFont(size=14, weight="bold"),
         )
-        self.selected_map_label.grid(row=0, column=0, pady=(10, 5), padx=20, sticky="w")
-
         self.selected_map_label.grid(row=0, column=0, pady=(10, 5), padx=20, sticky="w")
 
         # Map Filters
@@ -313,6 +356,24 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.settings_header.grid(row=4, column=0, padx=20, pady=(15, 5), sticky="w")
 
+        # Player name
+        self.name_label = ctk.CTkLabel(
+            self.mod_pane,
+            text="Name:",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
+        )
+        self.name_label.grid(row=5, column=0, padx=30, pady=(3, 0), sticky="w")
+        self.name_entry = ctk.CTkEntry(self.mod_pane, width=160, placeholder_text="Player")
+        saved_name = prefs.get_player_name()
+        if saved_name and saved_name != "Player":
+            self.name_entry.insert(0, saved_name)
+        self.name_entry.bind(
+            "<FocusOut>",
+            lambda e: prefs.set_player_name(self.name_entry.get()),
+        )
+        self.name_entry.grid(row=6, column=0, padx=30, pady=(0, 5), sticky="w")
+
         # Faction selector
         saved_faction = prefs.get_player_faction()
         display_faction = "UEF" if saved_faction == "uef" else saved_faction.capitalize()
@@ -323,7 +384,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.faction_label.grid(row=5, column=0, padx=30, pady=(3, 0), sticky="w")
+        self.faction_label.grid(row=7, column=0, padx=30, pady=(3, 0), sticky="w")
         self.faction_menu = ctk.CTkOptionMenu(
             self.mod_pane,
             values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
@@ -331,7 +392,7 @@ class WopcApp(BaseApp):  # type: ignore
             command=self._on_faction_change,
             width=160,
         )
-        self.faction_menu.grid(row=6, column=0, padx=30, pady=(0, 5), sticky="w")
+        self.faction_menu.grid(row=8, column=0, padx=30, pady=(0, 5), sticky="w")
 
         # Minimap toggle
         self.minimap_var = ctk.BooleanVar(value=prefs.get_minimap_enabled())
@@ -341,7 +402,7 @@ class WopcApp(BaseApp):  # type: ignore
             command=self._on_minimap_toggle,
             variable=self.minimap_var,
         )
-        self.minimap_cb.grid(row=7, column=0, padx=30, pady=3, sticky="w")
+        self.minimap_cb.grid(row=9, column=0, padx=30, pady=3, sticky="w")
 
         # Summary Status
         self.play_summary = ctk.CTkLabel(
@@ -350,7 +411,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.play_summary.grid(row=8, column=0, padx=20, pady=10, sticky="w")
+        self.play_summary.grid(row=10, column=0, padx=20, pady=10, sticky="w")
 
     def _refresh_mods_list(self) -> None:
         """Read available mods and content packs from disk and update the UI."""
@@ -500,6 +561,56 @@ class WopcApp(BaseApp):  # type: ignore
         parser.set("Game", "minimap_enabled", str(self.minimap_var.get()))
         prefs.save_prefs(parser)
 
+    # ------------------------------------------------------------------
+    # Launch mode helpers
+    # ------------------------------------------------------------------
+
+    _PLAY_LABELS: ClassVar[dict[str, str]] = {
+        "SOLO": "PLAY MATCH",
+        "HOST": "HOST GAME",
+        "JOIN": "JOIN GAME",
+    }
+
+    def _on_mode_change(self, mode: str) -> None:
+        """Respond to the SOLO / HOST / JOIN segmented button."""
+        prefs.set_launch_mode(mode.lower())
+        self._update_mode_widgets()
+        # Update the play button text (only when installation is ready)
+        btn_text = self.primary_btn.cget("text")
+        if btn_text in self._PLAY_LABELS.values():
+            self.primary_btn.configure(text=self._PLAY_LABELS.get(mode, "PLAY MATCH"))
+
+    def _update_mode_widgets(self) -> None:
+        """Show/hide conditional inputs for the current launch mode."""
+        mode = self.mode_var.get()  # "SOLO", "HOST", or "JOIN"
+
+        # Clear previous layout
+        self.port_label.grid_forget()
+        self.port_entry.grid_forget()
+        self.address_label.grid_forget()
+        self.address_entry.grid_forget()
+
+        if mode == "HOST":
+            self.port_label.grid(row=0, column=0, sticky="w", pady=(5, 0))
+            self.port_entry.grid(row=1, column=0, sticky="ew", pady=(0, 5))
+        elif mode == "JOIN":
+            self.address_label.grid(row=0, column=0, sticky="w", pady=(5, 0))
+            self.address_entry.grid(row=1, column=0, sticky="ew", pady=(0, 5))
+
+        # Toggle map selector visibility — host picks the map in JOIN mode
+        map_visible = mode != "JOIN"
+        if hasattr(self, "config_panel"):
+            if map_visible:
+                self.config_panel.grid()
+            else:
+                self.config_panel.grid_remove()
+            # Show a hint in the header when joining
+            if hasattr(self, "header_label"):
+                if mode == "JOIN":
+                    self.header_label.configure(text="Joining — host controls the map")
+                else:
+                    self.header_label.configure(text="Game Configuration")
+
     def _update_play_summary(self) -> None:
         """Update the label on the play tab showing the active config."""
         total = len(mods.get_active_mod_uids())
@@ -543,8 +654,9 @@ class WopcApp(BaseApp):  # type: ignore
             )
             self.log("WOPC is not deployed. Click Install to begin.")
         else:
+            mode = self.mode_var.get()
             self.primary_btn.configure(
-                text="PLAY MATCH",
+                text=self._PLAY_LABELS.get(mode, "PLAY MATCH"),
                 fg_color=COLOR_READY,
                 hover_color="#1F8B4C",
                 text_color="white",
@@ -559,8 +671,14 @@ class WopcApp(BaseApp):  # type: ignore
     def _on_primary_click(self) -> None:
         """Handle main button action depending on current state."""
         btn_text = self.primary_btn.cget("text")
-        if btn_text == "PLAY MATCH":
-            self.log("Launching game...")
+
+        if btn_text in self._PLAY_LABELS.values():
+            mode = self.mode_var.get()
+            # Validate JOIN address before launching
+            if mode == "JOIN" and not self.address_entry.get().strip():
+                self.log("ERROR: Enter a host address before joining.")
+                return
+            self.log(f"Launching game ({mode.lower()} mode)...")
             threading.Thread(target=self._launch_game, daemon=True).start()
 
         elif btn_text == "INSTALL / UPDATE":
@@ -590,6 +708,15 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _launch_game(self) -> None:
         """Run the game in a background thread."""
+        # Persist any unsaved widget values before launch
+        mode = self.mode_var.get()
+        if mode == "HOST":
+            prefs.set_host_port(self.port_entry.get())
+        elif mode == "JOIN":
+            prefs.set_join_address(self.address_entry.get())
+        if hasattr(self, "name_entry"):
+            prefs.set_player_name(self.name_entry.get())
+
         ret = cmd_launch()
         if ret == 0:
             self.log("Game process started successfully.")

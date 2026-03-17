@@ -22,6 +22,9 @@ DEFAULT_PREFS = {
         "player_name": "Player",
         "minimap_enabled": "True",
         "player_faction": "random",
+        "launch_mode": "solo",  # solo | host | join
+        "host_port": "15000",
+        "join_address": "",  # e.g. "192.168.1.50:15000"
     },
     "Mods": {
         # Mods are stored as keys with boolean values (Enabled/Disabled)
@@ -104,3 +107,59 @@ def get_player_faction() -> str:
     """Return the player's chosen faction (uef/aeon/cybran/seraphim/random)."""
     parser = load_prefs()
     return parser.get("Game", "player_faction", fallback="random")
+
+
+def set_player_name(name: str) -> None:
+    """Set the player's display name."""
+    parser = load_prefs()
+    parser.set("Game", "player_name", name.strip() or "Player")
+    save_prefs(parser)
+
+
+# ---------------------------------------------------------------------------
+# Launch mode (solo / host / join)
+# ---------------------------------------------------------------------------
+
+VALID_LAUNCH_MODES = ("solo", "host", "join")
+
+
+def get_launch_mode() -> str:
+    """Return the current launch mode: 'solo', 'host', or 'join'."""
+    parser = load_prefs()
+    mode = parser.get("Game", "launch_mode", fallback="solo")
+    return mode if mode in VALID_LAUNCH_MODES else "solo"
+
+
+def set_launch_mode(mode: str) -> None:
+    """Set the launch mode. Must be 'solo', 'host', or 'join'."""
+    if mode not in VALID_LAUNCH_MODES:
+        mode = "solo"
+    parser = load_prefs()
+    parser.set("Game", "launch_mode", mode)
+    save_prefs(parser)
+
+
+def get_host_port() -> str:
+    """Return the port for hosting a game."""
+    parser = load_prefs()
+    return parser.get("Game", "host_port", fallback="15000")
+
+
+def set_host_port(port: str) -> None:
+    """Set the host port."""
+    parser = load_prefs()
+    parser.set("Game", "host_port", port.strip() or "15000")
+    save_prefs(parser)
+
+
+def get_join_address() -> str:
+    """Return the host address for joining (e.g. '192.168.1.50:15000')."""
+    parser = load_prefs()
+    return parser.get("Game", "join_address", fallback="")
+
+
+def set_join_address(address: str) -> None:
+    """Set the join address."""
+    parser = load_prefs()
+    parser.set("Game", "join_address", address.strip())
+    save_prefs(parser)

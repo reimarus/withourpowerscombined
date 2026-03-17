@@ -183,6 +183,144 @@ class TestCmdLaunch:
             assert result == 1
 
 
+class TestCmdLaunchModes:
+    """Test the three launch modes: solo, host, join."""
+
+    def _setup_wopc_tree(self, tmp_path):
+        """Create a minimal WOPC tree with exe, init, and a map."""
+        wopc_bin = tmp_path / "bin"
+        wopc_bin.mkdir()
+        (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
+        (wopc_bin / "init_wopc.lua").write_text("-- init")
+        wopc_maps = tmp_path / "maps"
+        (wopc_maps / "TestMap").mkdir(parents=True)
+        (wopc_maps / "TestMap" / "TestMap_scenario.lua").write_text("-- scen")
+        return wopc_bin, wopc_maps
+
+    @patch("subprocess.Popen")
+    def test_solo_mode_has_quickstart(self, mock_popen, tmp_path):
+        """Solo mode includes /wopcquickstart and /wopcconfig flags."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="solo"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ),
+        ):
+            assert cmd_launch() == 0
+            args = mock_popen.call_args[0][0]
+            assert "/wopcquickstart" in args
+            assert "/hostgame" in args
+
+    @patch("subprocess.Popen")
+    def test_host_mode_no_quickstart(self, mock_popen, tmp_path):
+        """Host mode uses /hostgame but NOT /wopcquickstart."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="host"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="HostP"),
+            patch("launcher.wopc.prefs.get_host_port", return_value="16000"),
+        ):
+            assert cmd_launch() == 0
+            args = mock_popen.call_args[0][0]
+            assert "/hostgame" in args
+            assert "/wopcquickstart" not in args
+            assert "16000" in args
+
+    @patch("subprocess.Popen")
+    def test_host_custom_port(self, mock_popen, tmp_path):
+        """Host mode uses the configured port from prefs."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="host"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch("launcher.wopc.prefs.get_host_port", return_value="17500"),
+        ):
+            assert cmd_launch() == 0
+            args = mock_popen.call_args[0][0]
+            assert "17500" in args
+
+    @patch("subprocess.Popen")
+    def test_join_mode_uses_joingame(self, mock_popen, tmp_path):
+        """Join mode uses /joingame with address, no map arg."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="join"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="JoinP"),
+            patch(
+                "launcher.wopc.prefs.get_join_address",
+                return_value="192.168.1.10:15000",
+            ),
+        ):
+            assert cmd_launch() == 0
+            args = mock_popen.call_args[0][0]
+            assert "/joingame" in args
+            assert "192.168.1.10:15000" in args
+            assert "/hostgame" not in args
+            assert "/wopcquickstart" not in args
+
+    def test_join_missing_address_returns_1(self, tmp_path):
+        """Join mode returns error when no address is configured."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="join"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch("launcher.wopc.prefs.get_join_address", return_value=""),
+        ):
+            assert cmd_launch() == 1
+
+
 class TestCmdSetup:
     """Test the setup command."""
 

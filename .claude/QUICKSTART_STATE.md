@@ -1,17 +1,15 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-10
+> Last updated: 2026-03-17
 > If session runs out of tokens, a new session can pick up from here.
 
-## Current State: QUICKSTART WORKS END-TO-END (GUI → game). Sim init fails on missing LOUD content.
+## Current State: Multiplayer launcher Phase 1 complete. Three launch modes (SOLO/HOST/JOIN) working.
 
-### End-to-end verified (GUI launcher → game):
-1. **Build exe:** `python build_exe.py` → `dist/WOPC-Launcher.exe` (~18 MB)
-2. **Run exe:** `dist/WOPC-Launcher.exe` (or dev: `from launcher.gui.app import launch_gui; launch_gui()`)
-3. User selects map (Caldera) → clicks PLAY MATCH
-4. Python writes `wopc_game_config.lua` + passes `/wopcquickstart /wopcconfig <path>`
-5. Engine loads patched uimain.lua → detects quickstart → calls quickstart.Launch()
-6. quickstart.lua reads config, creates LobbyComm, calls LaunchGame()
-7. Engine enters simulation → loads map → loads blueprints → hits LOUD content blocker
+### What works now:
+1. **Solo mode** (quickstart bypass): GUI → select map → PLAY MATCH → game enters sim
+2. **Host mode**: GUI → select map → HOST GAME → SCFA opens FAF lobby → friends can join
+3. **Join mode**: GUI → enter host address → JOIN GAME → SCFA connects to host's lobby
+4. **Content packs**: TotalMayhem (62 FAF-compatible units) toggleable in launcher
+5. **Content icons**: Auto-extracted from LOUD's textures.scd during deploy
 
 ### IMPORTANT: Rebuilding the exe
 After ANY code changes to `launcher/`, `init/`, or `gamedata/`:
@@ -20,36 +18,36 @@ python build_exe.py    # rebuilds dist/WOPC-Launcher.exe
 ```
 The exe bundles Python + assets at build time. Stale exe = old code!
 
-### Current blocker: Missing LOUD gameplay content
-The sim crashes at `buffdefinitions.lua` because LOUD-specific categories (like `MOBILE`) aren't defined.
-This is because `bundled/gamedata/*.scd` (LOUD gameplay content) isn't in the repo.
-**This is a content packaging issue, NOT a quickstart issue.**
+### Launch modes (implemented in wopc.py):
+| Mode | Engine args | Behaviour |
+|------|------------|-----------|
+| **Solo** | `/hostgame udp 15000 {name} WOPC {map} /wopcquickstart /wopcconfig {cfg}` | Quickstart bypass, no lobby |
+| **Host** | `/hostgame udp {port} {name} WOPC {map}` | FAF lobby opens, friends connect |
+| **Join** | `/joingame udp {address} {name}` | Connects to host's FAF lobby |
 
-### All commits pushed (feature/phase-6-advanced-launcher):
-1. `3d1cc33` — Add quickstart system: bypass lobby, launch directly into match
-2. `fe7b66e` — Refactor init_generator and add player_name preference
-3. `7c111de` — Fix quickstart: pass config path via /wopcconfig command-line arg
-4. `98a500f` — Fix quickstart: OwnerID must be string, not number
-5. `03e8a17` — Update quickstart breadcrumbs
-6. `c8ba228` — Document quickstart architecture + VFS dual search order
+### GUI launcher features:
+- Mode selector (SOLO / HOST / JOIN segmented button) in sidebar
+- Conditional port entry (HOST) or host address entry (JOIN)
+- Player name entry in PLAYER SETTINGS panel
+- Map selector hidden in JOIN mode (host controls the map)
+- Button text changes: PLAY MATCH / HOST GAME / JOIN GAME
 
-### Key fixes applied:
-- uimain.lua: full FAF copy (303 lines) with WOPC quickstart hook in StartHostLobbyUI
-- quickstart.lua: InitFileDir → /wopcconfig command-line arg (UI Lua state doesn't have InitFileDir)
-- quickstart.lua: OwnerID as string, not number (C++ LaunchGame expects string peer IDs)
-- quickstart.lua: removed broken fallback (port already bound after HostGame)
-- deploy.py: _patch_scd() to patch lua.scd (engine C++ uses first-added priority)
-- deploy.py: combined nested `with` statement (ruff SIM117)
-- game_config.py: fixed double-brace bug in Lua output
+### Key blocker fix: `/players` nil crash in uimain.lua
+Lines 94+115 crashed when `/players` arg is absent (required for host/join mode):
+```lua
+-- Fixed: nil guard on GetCommandLineArg
+local playersArg = GetCommandLineArg("/players", 1)
+local autoStart = playersArg and playersArg[1] >= 2
+```
 
 ### How to BACK OUT if needed:
 - Remove `/wopcquickstart` from cmd args in `launcher/wopc.py` → game uses standard lobby
 - Or: revert `_patch_scd()` call in `launcher/deploy.py` → lua.scd stays unmodified
 - All quickstart code is guarded by `HasCommandLineArg("/wopcquickstart")`
 
-### Next steps:
-- Package LOUD gameplay content (bundled/gamedata/*.scd) so the sim can initialize
-- OR: test with vanilla SCFA content only (no LOUD) to verify quickstart fully works
-- The quickstart Lua code is complete and working
+### Next steps (Phase 2+):
+- Player slot management for solo mode (dynamic AI opponents, not hardcoded 1v1)
+- Game options panel (victory condition, unit cap, fog of war, etc.)
+- End-to-end multiplayer test (host + join on LAN)
 
-### Test results: 105 tests pass, 78.49% coverage, ruff clean, mypy clean
+### Test results: 166 tests pass, 80.74% coverage, ruff clean
