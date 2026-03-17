@@ -1,127 +1,77 @@
-# Feature: Persistent minimap visibility toggle in launcher
+# Feature: Faction selector in launcher
 
 ## Context
 
-The user wants a **persistent player setting** in the WOPC launcher to control
-whether the minimap is visible when the game starts. Currently the only way to
-toggle the minimap is with the in-game hotkey after the match has loaded. This
-setting should be saved across sessions so the player doesn't have to toggle it
-every game.
-
-**How the minimap works today:** FAF's `minimap.lua` (line 20) reads
-`Prefs.GetFromCurrentProfile('stratview')` at module load time. If `false`
-(default), `CreateMinimap()` hides the minimap panel. The in-game toggle saves
-back to profile prefs. We need to set this profile pref **before** the game UI
-is created.
+The user needs to choose a faction (UEF, Aeon, Cybran, Seraphim, Random) from
+the launcher to test faction-specific bugs (e.g. Aeon freeze). Currently
+`write_game_config()` already supports a `player_faction` parameter but it's
+never passed — defaulting to "random".
 
 ## Changes
 
-### 1. Add `minimap_enabled` to prefs (`launcher/prefs.py`)
+### 1. Add `player_faction` to prefs (`launcher/prefs.py`)
 
-Add to `DEFAULT_PREFS["Game"]`:
-
+Add to `DEFAULT_PREFS["Game"]` (after `minimap_enabled`):
 ```python
-"Game": {
-    "active_map": "",
-    "player_name": "Player",
-    "minimap_enabled": "True",   # <-- ADD (default: show minimap)
-},
+"player_faction": "random",
 ```
 
-Add a getter helper:
-
+Add getter:
 ```python
-def get_minimap_enabled() -> bool:
+def get_player_faction() -> str:
     parser = load_prefs()
-    return parser.getboolean("Game", "minimap_enabled", fallback=True)
+    return parser.get("Game", "player_faction", fallback="random")
 ```
 
-### 2. Add minimap checkbox to launcher GUI (`launcher/gui/app.py`)
+### 2. Add faction dropdown to GUI (`launcher/gui/app.py`)
 
-Add a "PLAYER SETTINGS" section in the right pane (`_build_mod_pane`), below
-the user mods section. Use a `CTkCheckBox` bound to the pref:
+In `_build_mod_pane()`, add a `CTkOptionMenu` in the PLAYER SETTINGS section
+(insert at row 5, shift minimap to row 6, summary to row 7):
 
 ```python
-# --- Player Settings Section ---
-self.settings_header = ctk.CTkLabel(
-    self.mod_pane, text="PLAYER SETTINGS",
-    text_color=COLOR_TEXT_MUTED,
-    font=ctk.CTkFont(size=12, weight="bold"),
-)
-
-self.minimap_var = ctk.BooleanVar(value=prefs.get_minimap_enabled())
-self.minimap_cb = ctk.CTkCheckBox(
-    self.mod_pane, text="Show minimap on launch",
-    variable=self.minimap_var,
-    command=self._on_minimap_toggle,
+self.faction_var = ctk.StringVar(value=prefs.get_player_faction().capitalize())
+self.faction_menu = ctk.CTkOptionMenu(
+    self.mod_pane,
+    values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
+    variable=self.faction_var,
+    command=self._on_faction_change,
+    width=160,
 )
 ```
 
-Add handler:
-
+Add handler (same pattern as `_on_minimap_toggle`):
 ```python
-def _on_minimap_toggle(self) -> None:
+def _on_faction_change(self, choice: str) -> None:
     parser = prefs.load_prefs()
-    parser.set("Game", "minimap_enabled", str(self.minimap_var.get()))
+    parser.set("Game", "player_faction", choice.lower())
     prefs.save_prefs(parser)
 ```
 
-### 3. Pass setting through game config (`launcher/wopc.py`)
+### 3. Pass faction to game config (`launcher/wopc.py`)
 
-In `cmd_launch()`, read the pref and pass it as a game option:
-
+In `cmd_launch()` (after `minimap_enabled`):
 ```python
-minimap_enabled = prefs.get_minimap_enabled()
-config_path = write_game_config(
-    scenario_file=vfs_path,
-    player_name=player_name,
-    game_options={"minimap_enabled": str(minimap_enabled)},
-)
+player_faction = prefs.get_player_faction()
+```
+Add to `write_game_config()` call:
+```python
+player_faction=player_faction,
 ```
 
-This writes `minimap_enabled = 'True'` (or `'False'`) into `wopc_game_config.lua`.
-
-### 4. Set profile pref in quickstart (`gamedata/wopc_patches/lua/wopc/quickstart.lua`)
-
-In the `Launch()` function, after loading config but **before** calling
-`comm:LaunchGame()`, read the game option and set the engine profile pref:
-
-```lua
--- Apply WOPC player settings to engine profile prefs
-if cfg.GameOptions then
-    local Prefs = import('/lua/user/prefs.lua')
-    if cfg.GameOptions.minimap_enabled then
-        local enabled = (cfg.GameOptions.minimap_enabled == 'True')
-        Prefs.SetToCurrentProfile('stratview', enabled)
-        LOG('WOPC: Set minimap visibility to ' .. tostring(enabled))
-    end
-end
-```
-
-This runs in the lobby UI state, before `LaunchGame()` transitions to game
-state. When `minimap.lua` is later imported in game state, it reads the
-updated `stratview` pref and shows/hides the minimap accordingly.
+**No changes needed** to `game_config.py` — already supports `player_faction`.
 
 ## Files to modify
 
 | File | Change |
 |------|--------|
-| `launcher/prefs.py` | Add `minimap_enabled` default + `get_minimap_enabled()` helper |
-| `launcher/gui/app.py` | Add "PLAYER SETTINGS" section with minimap checkbox |
-| `launcher/wopc.py` | Pass `minimap_enabled` in `game_options` dict |
-| `gamedata/wopc_patches/lua/wopc/quickstart.lua` | Set `stratview` profile pref from game option |
-
-## Not in scope
-
-- Other player settings (these can be added to the same section later)
-- In-game toggle hotkey (already works via FAF's minimap.lua)
+| `launcher/prefs.py` | Add `player_faction` default + getter |
+| `launcher/gui/app.py` | Add faction dropdown in PLAYER SETTINGS |
+| `launcher/wopc.py` | Pass `player_faction` to `write_game_config()` |
 
 ## Verification
 
 1. `pytest tests/ -x -q` — all pass
-2. `ruff check launcher/ tests/` — clean
-3. Rebuild exe: `python build_exe.py`
-4. Launch GUI — verify "PLAYER SETTINGS" section with minimap checkbox appears
-5. Uncheck minimap, launch match — minimap should be hidden
-6. Check minimap, launch match — minimap should be visible
-7. Restart launcher — checkbox should remember the last setting
+2. `ruff check` — clean
+3. Launch GUI — faction dropdown appears with Random/UEF/Aeon/Cybran/Seraphim
+4. Select Aeon, launch — `wopc_game_config.lua` has `Faction = 2`
+5. Restart launcher — dropdown remembers last selection

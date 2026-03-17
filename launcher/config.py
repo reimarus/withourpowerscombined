@@ -109,6 +109,24 @@ FAF_UI_SCD = "faf_ui.scd"
 FAF_BASE_EXE_URL = "https://content.faforever.com/build/ForgedAlliance_base.exe"
 FAF_BASE_EXE_CACHE = PATCH_BUILD_DIR / "ForgedAlliance_base.exe"
 
+# --- LOUD installation paths (for sourcing content packs) ---
+
+LOUD_ROOT = SCFA_STEAM / "LOUD"
+LOUD_GAMEDATA = LOUD_ROOT / "gamedata"
+LOUD_SOUNDS = LOUD_ROOT / "sounds"
+
+# Content pack assets hosted on GitHub releases.
+# deploy.py tries local LOUD install first, then downloads from these URLs.
+CONTENT_PACK_ASSETS: dict[str, dict] = {
+    "blackops.scd": {
+        "url": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackops.scd",
+        "sounds": {
+            "blackopssb.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackopssb.xsb",
+            "blackopswb.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackopswb.xwb",
+        },
+    },
+}
+
 # --- Game exe name and launch arguments ---
 
 GAME_EXE = "SupremeCommander.exe"

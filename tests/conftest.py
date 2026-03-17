@@ -90,6 +90,11 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
     wopc_patches.mkdir()
     (wopc_patches / "patch_file.lua").write_bytes(b"\x00")
 
+    # LOUD paths (not created by default — tests that need them create content)
+    loud_root = scfa / "LOUD"
+    loud_gamedata = loud_root / "gamedata"
+    loud_sounds = loud_root / "sounds"
+
     config_patches = {
         "SCFA_STEAM": scfa,
         "SCFA_BIN": scfa / "bin",
@@ -113,6 +118,9 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "REPO_FAF_UI": vendor / "faf_ui",
         "FAF_UI_SCD": "faf_ui.scd",
         "REPO_WOPC_PATCHES": wopc_patches,
+        "LOUD_ROOT": loud_root,
+        "LOUD_GAMEDATA": loud_gamedata,
+        "LOUD_SOUNDS": loud_sounds,
     }
 
     with patch.multiple("launcher.config", **config_patches):  # type: ignore[call-overload]

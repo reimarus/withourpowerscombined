@@ -2,6 +2,7 @@
 
 import logging
 import shutil
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -60,6 +61,48 @@ def copy_file(src: Path, dst: Path) -> None:
         return
     shutil.copy2(src, dst)
     logger.info("  copied  %s", dst.name)
+
+
+def _download_file(url: str, dst: Path) -> None:
+    """Download a file from *url* to *dst* with progress logging."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix(dst.suffix + ".tmp")
+    try:
+        logger.info("  downloading %s ...", dst.name)
+        urllib.request.urlretrieve(url, tmp)
+        tmp.replace(dst)
+        logger.info("  saved %s (%.1f MB)", dst.name, dst.stat().st_size / 1e6)
+    except (OSError, urllib.error.URLError) as exc:
+        logger.warning("  WARNING: download failed for %s: %s", dst.name, exc)
+        if tmp.exists():
+            tmp.unlink()
+
+
+def _acquire_content_packs() -> None:
+    """Copy content packs from local LOUD install or download from GitHub."""
+    config.WOPC_GAMEDATA.mkdir(parents=True, exist_ok=True)
+    config.WOPC_SOUNDS.mkdir(parents=True, exist_ok=True)
+
+    for scd_name, asset_info in config.CONTENT_PACK_ASSETS.items():
+        scd_dst = config.WOPC_GAMEDATA / scd_name
+        if not scd_dst.exists():
+            # Try local LOUD install first
+            local_scd = config.LOUD_GAMEDATA / scd_name
+            if local_scd.exists():
+                logger.info("  copying %s from LOUD install", scd_name)
+                shutil.copy2(local_scd, scd_dst)
+            else:
+                _download_file(asset_info["url"], scd_dst)
+
+        for sound_name, sound_url in asset_info.get("sounds", {}).items():
+            sound_dst = config.WOPC_SOUNDS / sound_name
+            if not sound_dst.exists():
+                local_sound = config.LOUD_SOUNDS / sound_name
+                if local_sound.exists():
+                    logger.info("  copying %s from LOUD install", sound_name)
+                    shutil.copy2(local_sound, sound_dst)
+                else:
+                    _download_file(sound_url, sound_dst)
 
 
 def run_setup(repo_init_dir: Path) -> None:
@@ -247,6 +290,10 @@ def run_setup(repo_init_dir: Path) -> None:
         if structure_src.exists() and faf_ui_dst.exists():
             _patch_scd(faf_ui_dst, "lua/sim/units/structureunit.lua", structure_src)
             logger.info("  patched faf_ui.scd with fixed StructureUnit.lua")
+
+    # --- Step 4b: Acquire content packs (LOUD mods) ---
+    logger.info("\n[4b] Acquiring content packs")
+    _acquire_content_packs()
 
     # Maps, sounds: copy entire directories
     if config.REPO_BUNDLED_MAPS.exists():
