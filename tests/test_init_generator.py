@@ -1,11 +1,16 @@
-"""Tests for launcher.init_generator."""
+"""Tests for launcher.init_generator.
 
+Content pack state management tests have moved to test_mods.py.
+This file tests only the Lua template generation (generate_init_lua).
+"""
+
+import configparser
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from launcher import init_generator
+from launcher import config, init_generator, mods, prefs
 
 
 @pytest.fixture()
@@ -25,92 +30,28 @@ def gamedata_dir(tmp_path: Path) -> Path:
     return gd
 
 
-@pytest.fixture()
-def prefs_file(tmp_path: Path) -> Path:
-    """Return a path for the prefs INI file."""
-    return tmp_path / "wopc_prefs.ini"
+class TestDelegation:
+    """Verify init_generator delegates to mods module."""
 
-
-class TestGetToggleableScds:
-    """Tests for get_toggleable_scds()."""
-
-    def test_excludes_fixed_position_scds(self, gamedata_dir: Path) -> None:
-        with patch("launcher.init_generator.config") as mock_config:
-            mock_config.WOPC_GAMEDATA = gamedata_dir
+    def test_get_toggleable_scds_delegates(self, gamedata_dir: Path) -> None:
+        with patch.object(config, "WOPC_GAMEDATA", gamedata_dir):
             result = init_generator.get_toggleable_scds()
-        # Fixed-position SCD should not appear (needs special mount order)
         assert "faf_ui.scd" not in result
-        # LOUD SCDs (lua.scd, loc_US.scd) are now toggleable content packs
         assert "lua.scd" in result
-        assert "loc_US.scd" in result
-        # Other toggleable content packs
         assert "brewlan.scd" in result
-        assert "blackops.scd" in result
-        assert "TotalMayhem.scd" in result
 
-    def test_returns_empty_if_no_dir(self, tmp_path: Path) -> None:
-        with patch("launcher.init_generator.config") as mock_config:
-            mock_config.WOPC_GAMEDATA = tmp_path / "nonexistent"
-            result = init_generator.get_toggleable_scds()
-        assert result == []
-
-    def test_sorted_alphabetically(self, gamedata_dir: Path) -> None:
-        with patch("launcher.init_generator.config") as mock_config:
-            mock_config.WOPC_GAMEDATA = gamedata_dir
-            result = init_generator.get_toggleable_scds()
-        assert result == sorted(result)
-
-
-class TestPackState:
-    """Tests for set_pack_state() and get_enabled_packs()."""
-
-    def test_faf_only_default(self, gamedata_dir: Path) -> None:
-        """No ContentPacks section → empty list (FAF-only mode)."""
+    def test_set_pack_state_delegates(self) -> None:
+        parser = configparser.ConfigParser()
         with (
-            patch("launcher.init_generator.config") as mock_config,
-            patch("launcher.init_generator.prefs") as mock_prefs,
+            patch.object(prefs, "load_prefs", return_value=parser),
+            patch.object(prefs, "save_prefs") as mock_save,
         ):
-            mock_config.WOPC_GAMEDATA = gamedata_dir
-
-            import configparser
-
-            parser = configparser.ConfigParser()
-            mock_prefs.load_prefs.return_value = parser
-
-            result = init_generator.get_enabled_packs()
-
-        assert result == []
-
-    def test_toggle_pack_off(self, gamedata_dir: Path, prefs_file: Path) -> None:
-        with (
-            patch("launcher.init_generator.config") as mock_config,
-            patch("launcher.init_generator.prefs") as mock_prefs,
-        ):
-            mock_config.WOPC_GAMEDATA = gamedata_dir
-
-            import configparser
-
-            parser = configparser.ConfigParser()
-            parser.add_section("ContentPacks")
-            parser.set("ContentPacks", "brewlan.scd", "False")
-            mock_prefs.load_prefs.return_value = parser
-
-            result = init_generator.get_enabled_packs()
-
-        assert "brewlan.scd" not in result
-        assert "blackops.scd" in result  # defaults to True
-
-    def test_set_pack_state_calls_save(self) -> None:
-        with patch("launcher.init_generator.prefs") as mock_prefs:
-            import configparser
-
-            parser = configparser.ConfigParser()
-            mock_prefs.load_prefs.return_value = parser
-
             init_generator.set_pack_state("brewlan.scd", False)
+        mock_save.assert_called_once_with(parser)
+        assert parser.get("ContentPacks", "brewlan.scd") == "False"
 
-            mock_prefs.save_prefs.assert_called_once_with(parser)
-            assert parser.get("ContentPacks", "brewlan.scd") == "False"
+    def test_content_pack_labels_re_exported(self) -> None:
+        assert init_generator.CONTENT_PACK_LABELS is mods.CONTENT_PACK_LABELS
 
 
 class TestGenerateInitLua:
@@ -121,18 +62,12 @@ class TestGenerateInitLua:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
+        parser = configparser.ConfigParser()
         with (
-            patch("launcher.init_generator.config") as mock_config,
-            patch("launcher.init_generator.prefs") as mock_prefs,
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_BIN", bin_dir),
+            patch.object(prefs, "load_prefs", return_value=parser),
         ):
-            mock_config.WOPC_GAMEDATA = gamedata_dir
-            mock_config.WOPC_BIN = bin_dir
-
-            import configparser
-
-            parser = configparser.ConfigParser()
-            mock_prefs.load_prefs.return_value = parser
-
             result = init_generator.generate_init_lua()
 
         assert result.exists()
@@ -156,20 +91,14 @@ class TestGenerateInitLua:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
+        parser = configparser.ConfigParser()
+        parser.add_section("ContentPacks")
+        # All default to True when section exists
         with (
-            patch("launcher.init_generator.config") as mock_config,
-            patch("launcher.init_generator.prefs") as mock_prefs,
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_BIN", bin_dir),
+            patch.object(prefs, "load_prefs", return_value=parser),
         ):
-            mock_config.WOPC_GAMEDATA = gamedata_dir
-            mock_config.WOPC_BIN = bin_dir
-
-            import configparser
-
-            parser = configparser.ConfigParser()
-            parser.add_section("ContentPacks")
-            # All default to True when section exists
-            mock_prefs.load_prefs.return_value = parser
-
             result = init_generator.generate_init_lua()
 
         content = result.read_text()
@@ -180,20 +109,14 @@ class TestGenerateInitLua:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
+        parser = configparser.ConfigParser()
+        parser.add_section("ContentPacks")
+        parser.set("ContentPacks", "brewlan.scd", "False")
         with (
-            patch("launcher.init_generator.config") as mock_config,
-            patch("launcher.init_generator.prefs") as mock_prefs,
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_BIN", bin_dir),
+            patch.object(prefs, "load_prefs", return_value=parser),
         ):
-            mock_config.WOPC_GAMEDATA = gamedata_dir
-            mock_config.WOPC_BIN = bin_dir
-
-            import configparser
-
-            parser = configparser.ConfigParser()
-            parser.add_section("ContentPacks")
-            parser.set("ContentPacks", "brewlan.scd", "False")
-            mock_prefs.load_prefs.return_value = parser
-
             result = init_generator.generate_init_lua()
 
         content = result.read_text()
@@ -206,18 +129,12 @@ class TestGenerateInitLua:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
+        parser = configparser.ConfigParser()
         with (
-            patch("launcher.init_generator.config") as mock_config,
-            patch("launcher.init_generator.prefs") as mock_prefs,
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_BIN", bin_dir),
+            patch.object(prefs, "load_prefs", return_value=parser),
         ):
-            mock_config.WOPC_GAMEDATA = gamedata_dir
-            mock_config.WOPC_BIN = bin_dir
-
-            import configparser
-
-            parser = configparser.ConfigParser()
-            mock_prefs.load_prefs.return_value = parser
-
             result = init_generator.generate_init_lua()
 
         content = result.read_text()
@@ -234,18 +151,12 @@ class TestGenerateInitLua:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
+        parser = configparser.ConfigParser()
         with (
-            patch("launcher.init_generator.config") as mock_config,
-            patch("launcher.init_generator.prefs") as mock_prefs,
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_BIN", bin_dir),
+            patch.object(prefs, "load_prefs", return_value=parser),
         ):
-            mock_config.WOPC_GAMEDATA = gamedata_dir
-            mock_config.WOPC_BIN = bin_dir
-
-            import configparser
-
-            parser = configparser.ConfigParser()
-            mock_prefs.load_prefs.return_value = parser
-
             result = init_generator.generate_init_lua()
 
         content = result.read_text()
@@ -257,18 +168,12 @@ class TestGenerateInitLua:
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
+        parser = configparser.ConfigParser()
         with (
-            patch("launcher.init_generator.config") as mock_config,
-            patch("launcher.init_generator.prefs") as mock_prefs,
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_BIN", bin_dir),
+            patch.object(prefs, "load_prefs", return_value=parser),
         ):
-            mock_config.WOPC_GAMEDATA = gamedata_dir
-            mock_config.WOPC_BIN = bin_dir
-
-            import configparser
-
-            parser = configparser.ConfigParser()
-            mock_prefs.load_prefs.return_value = parser
-
             result = init_generator.generate_init_lua()
 
         content = result.read_text()
