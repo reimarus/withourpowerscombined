@@ -2,11 +2,9 @@ backlog of items for us to do over time.
 
 ## Features
 1. mini map size persistance
-2. merge loud unit mods (BlackOps integrated but has issues — see below; remaining: BrewLAN, TotalMayhem, etc.)
-    - BlackOps ACU mod forces commander to spawn fully upgraded, invisible, and uncontrollable
-    - Several BlackOps units show placeholder/missing strategic icons
-    - Likely need to disable BlackopsACUs mod or strip its ACU upgrade hooks
-    - Unit icon issue may require adding missing strategic icon assets
+2. merge loud unit mods (BlackOps integrated; remaining: BrewLAN, TotalMayhem, etc.)
+    - ~~BlackOps ACU mod forces commander to spawn fully upgraded, invisible, and uncontrollable~~ ✅ Fixed — BlackopsACUs excluded from SCD extraction (`EXCLUDED_SCD_MODS`). The mod replaces vanilla ACUs with LOUD-specific units that depend on LOUD's extended Unit base class (`PlayCommanderWarpInEffect`, `SetValidTargetsForCurrentLayer`, etc.) which don't exist in FAF-only mode.
+    - Several BlackOps units show placeholder/missing strategic icons (brb1302, brb1106, brb2306, brb4309, brb4401)
 3. save game function
 4. hotkeys for factory queueing
 5. discoball czars

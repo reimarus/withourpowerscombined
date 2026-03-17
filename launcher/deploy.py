@@ -121,6 +121,14 @@ def _acquire_content_packs() -> None:
                 else:
                     _download_file(sound_url, sound_dst)
 
+    # Clean up excluded mods from previous extractions (e.g. BlackopsACUs
+    # was extracted before we added the exclusion list).
+    for excluded in sorted(mods.EXCLUDED_SCD_MODS):
+        excluded_path = config.WOPC_MODS / excluded
+        if excluded_path.exists():
+            shutil.rmtree(excluded_path)
+            logger.info("  removed excluded mod: %s", excluded)
+
 
 def run_setup(repo_init_dir: Path) -> None:
     """Create the WOPC game directory at C:\\ProgramData\\WOPC\\ and populate it.

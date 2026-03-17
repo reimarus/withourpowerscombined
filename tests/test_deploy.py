@@ -273,6 +273,50 @@ class TestContentPackAcquisition:
         assert not (wopc_gd / "blackops.scd").exists()
 
 
+class TestExcludedModCleanup:
+    """Test cleanup of previously-extracted excluded mods."""
+
+    def test_removes_excluded_mod_directory(self, patched_config):
+        """Removes BlackopsACUs from WOPC/mods/ during content pack acquisition."""
+        from launcher.deploy import _acquire_content_packs
+
+        # Pre-populate WOPC with existing blackops.scd + extracted BlackopsACUs
+        wopc_gd = patched_config["WOPC_GAMEDATA"]
+        wopc_gd.mkdir(parents=True, exist_ok=True)
+        (wopc_gd / "blackops.scd").write_bytes(b"\x00" * 100)
+
+        wopc_sounds = patched_config["WOPC_SOUNDS"]
+        wopc_sounds.mkdir(parents=True, exist_ok=True)
+        (wopc_sounds / "blackopssb.xsb").write_bytes(b"\x01")
+        (wopc_sounds / "blackopswb.xwb").write_bytes(b"\x02")
+
+        wopc_mods = patched_config["WOPC_MODS"]
+        wopc_mods.mkdir(parents=True, exist_ok=True)
+        excluded_dir = wopc_mods / "BlackopsACUs"
+        excluded_dir.mkdir()
+        (excluded_dir / "mod_info.lua").write_text('uid = "acus-uid"')
+
+        _acquire_content_packs()
+
+        assert not excluded_dir.exists(), "BlackopsACUs should be removed"
+
+    def test_cleanup_ignores_missing_excluded_dir(self, patched_config):
+        """No error when excluded mod dir doesn't exist."""
+        from launcher.deploy import _acquire_content_packs
+
+        wopc_gd = patched_config["WOPC_GAMEDATA"]
+        wopc_gd.mkdir(parents=True, exist_ok=True)
+        (wopc_gd / "blackops.scd").write_bytes(b"\x00" * 100)
+
+        wopc_sounds = patched_config["WOPC_SOUNDS"]
+        wopc_sounds.mkdir(parents=True, exist_ok=True)
+        (wopc_sounds / "blackopssb.xsb").write_bytes(b"\x01")
+        (wopc_sounds / "blackopswb.xwb").write_bytes(b"\x02")
+
+        # No BlackopsACUs directory exists — should not raise
+        _acquire_content_packs()
+
+
 class TestExtractModsFromScd:
     """Test mod extraction from SCD archives."""
 

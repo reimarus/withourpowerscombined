@@ -271,6 +271,29 @@ class TestExtraction:
             result = mods.extract_mods_from_scd(scd)
         assert result == []
 
+    def test_extract_skips_excluded_mods(self, tmp_path: Path) -> None:
+        """Mods in EXCLUDED_SCD_MODS are not extracted."""
+        scd = tmp_path / "blackops.scd"
+        wopc_mods = tmp_path / "mods"
+
+        with zipfile.ZipFile(scd, "w") as zf:
+            zf.writestr("mods/BlackopsACUs/mod_info.lua", 'uid = "acus-uid"\n')
+            zf.writestr("mods/BlackopsACUs/units/eel0001.bp", "bp data")
+            zf.writestr("mods/BlackOpsUnleashed/mod_info.lua", 'uid = "unleashed-uid"\n')
+            zf.writestr("mods/BlackOpsUnleashed/units/bal0401.bp", "bp data")
+
+        with patch.object(config, "WOPC_MODS", wopc_mods):
+            result = mods.extract_mods_from_scd(scd)
+
+        assert "BlackOpsUnleashed" in result
+        assert "BlackopsACUs" not in result
+        assert (wopc_mods / "BlackOpsUnleashed" / "mod_info.lua").exists()
+        assert not (wopc_mods / "BlackopsACUs").exists()
+
+    def test_excluded_mods_contains_blackops_acus(self) -> None:
+        """BlackopsACUs must be in the exclusion list."""
+        assert "BlackopsACUs" in mods.EXCLUDED_SCD_MODS
+
 
 # ---------------------------------------------------------------------------
 # TestStateManagement
