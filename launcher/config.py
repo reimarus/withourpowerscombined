@@ -26,6 +26,7 @@ WOPC_BIN = WOPC_ROOT / "bin"
 WOPC_GAMEDATA = WOPC_ROOT / "gamedata"
 WOPC_MAPS = WOPC_ROOT / "maps"
 WOPC_SOUNDS = WOPC_ROOT / "sounds"
+WOPC_MODS = WOPC_ROOT / "mods"  # Server-level mods (extracted from content packs)
 WOPC_USERMODS = WOPC_ROOT / "usermods"
 WOPC_USERMAPS = WOPC_ROOT / "usermaps"
 

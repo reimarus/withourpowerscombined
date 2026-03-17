@@ -275,8 +275,9 @@ class WopcApp(BaseApp):  # type: ignore
         """Construct the right-hand sidebar for Mod management."""
         self.mod_pane = ctk.CTkFrame(self, fg_color=COLOR_MOD_PANEL, corner_radius=0)
         self.mod_pane.grid(row=0, column=2, sticky="nsew")
-        self.mod_pane.grid_rowconfigure(1, weight=1)
-        self.mod_pane.grid_rowconfigure(3, weight=1)
+        self.mod_pane.grid_rowconfigure(1, weight=1)  # Content packs
+        self.mod_pane.grid_rowconfigure(3, weight=1)  # Server mods
+        self.mod_pane.grid_rowconfigure(5, weight=1)  # User mods
 
         # --- Content Packs Section ---
         self.packs_header = ctk.CTkLabel(
@@ -291,6 +292,19 @@ class WopcApp(BaseApp):  # type: ignore
         self.packs_scroll.grid(row=1, column=0, sticky="nsew", padx=10)
         self.pack_checkboxes: dict[str, Any] = {}
 
+        # --- Server Mods Section (from content packs — shared by all players) ---
+        self.server_mods_header = ctk.CTkLabel(
+            self.mod_pane,
+            text="SERVER MODS",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        self.server_mods_header.grid(row=2, column=0, padx=20, pady=(15, 5), sticky="w")
+
+        self.server_mods_scroll = ctk.CTkScrollableFrame(self.mod_pane, fg_color="transparent")
+        self.server_mods_scroll.grid(row=3, column=0, sticky="nsew", padx=10)
+        self.server_mod_labels: list[Any] = []
+
         # --- User Mods Section ---
         self.mod_header = ctk.CTkLabel(
             self.mod_pane,
@@ -298,10 +312,10 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12, weight="bold"),
         )
-        self.mod_header.grid(row=2, column=0, padx=20, pady=(15, 5), sticky="w")
+        self.mod_header.grid(row=4, column=0, padx=20, pady=(15, 5), sticky="w")
 
         self.mods_scroll = ctk.CTkScrollableFrame(self.mod_pane, fg_color="transparent")
-        self.mods_scroll.grid(row=3, column=0, sticky="nsew", padx=10)
+        self.mods_scroll.grid(row=5, column=0, sticky="nsew", padx=10)
         self.mod_checkboxes: dict[str, Any] = {}
 
         # --- Player Settings Section ---
@@ -311,7 +325,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12, weight="bold"),
         )
-        self.settings_header.grid(row=4, column=0, padx=20, pady=(15, 5), sticky="w")
+        self.settings_header.grid(row=6, column=0, padx=20, pady=(15, 5), sticky="w")
 
         # Faction selector
         saved_faction = prefs.get_player_faction()
@@ -323,7 +337,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.faction_label.grid(row=5, column=0, padx=30, pady=(3, 0), sticky="w")
+        self.faction_label.grid(row=7, column=0, padx=30, pady=(3, 0), sticky="w")
         self.faction_menu = ctk.CTkOptionMenu(
             self.mod_pane,
             values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
@@ -331,7 +345,7 @@ class WopcApp(BaseApp):  # type: ignore
             command=self._on_faction_change,
             width=160,
         )
-        self.faction_menu.grid(row=6, column=0, padx=30, pady=(0, 5), sticky="w")
+        self.faction_menu.grid(row=8, column=0, padx=30, pady=(0, 5), sticky="w")
 
         # Minimap toggle
         self.minimap_var = ctk.BooleanVar(value=prefs.get_minimap_enabled())
@@ -341,7 +355,7 @@ class WopcApp(BaseApp):  # type: ignore
             command=self._on_minimap_toggle,
             variable=self.minimap_var,
         )
-        self.minimap_cb.grid(row=7, column=0, padx=30, pady=3, sticky="w")
+        self.minimap_cb.grid(row=9, column=0, padx=30, pady=3, sticky="w")
 
         # Summary Status
         self.play_summary = ctk.CTkLabel(
@@ -350,7 +364,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.play_summary.grid(row=8, column=0, padx=20, pady=10, sticky="w")
+        self.play_summary.grid(row=10, column=0, padx=20, pady=10, sticky="w")
 
     def _refresh_mods_list(self) -> None:
         """Read available mods and content packs from disk and update the UI."""
@@ -381,6 +395,27 @@ class WopcApp(BaseApp):  # type: ignore
                 cb.select()
             cb.grid(row=idx, column=0, pady=3, padx=10, sticky="w")
             self.pack_checkboxes[scd_name] = cb
+
+        # --- Server Mods (read-only, extracted from content packs) ---
+        for lbl in self.server_mod_labels:
+            lbl.destroy()
+        self.server_mod_labels.clear()
+
+        if config.WOPC_MODS.exists():
+            server_mods = sorted(
+                d.name
+                for d in config.WOPC_MODS.iterdir()
+                if d.is_dir() and (d / "mod_info.lua").exists()
+            )
+            for idx, mod_name in enumerate(server_mods):
+                lbl = ctk.CTkLabel(
+                    self.server_mods_scroll,
+                    text=f"  {mod_name}",
+                    text_color=COLOR_TEXT_MUTED,
+                    font=ctk.CTkFont(size=12),
+                )
+                lbl.grid(row=idx, column=0, pady=1, padx=10, sticky="w")
+                self.server_mod_labels.append(lbl)
 
         # --- User Mods ---
         for cb in self.mod_checkboxes.values():

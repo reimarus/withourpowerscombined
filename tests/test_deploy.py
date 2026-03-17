@@ -271,3 +271,51 @@ class TestContentPackAcquisition:
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         assert not (wopc_gd / "blackops.scd").exists()
+
+
+class TestExtractModsFromScd:
+    """Test mod extraction from SCD archives."""
+
+    def test_extracts_mods_to_wopc_mods(self, patched_config, tmp_path):
+        """Extracts mods/ subtree from SCD to WOPC/mods/ with prefix stripped."""
+        import zipfile
+
+        from launcher.deploy import _extract_mods_from_scd
+
+        # Create a fake SCD with mod content
+        scd_path = tmp_path / "test.scd"
+        with zipfile.ZipFile(scd_path, "w") as zf:
+            zf.writestr("mods/TestMod/mod_info.lua", 'name = "Test Mod"')
+            zf.writestr("mods/TestMod/units/TEST001/TEST001_unit.bp", "bp data")
+            zf.writestr("mods/TestMod/hook/lua/test.lua", "hook data")
+            zf.writestr("lua/AI/test_ai.lua", "ai data")  # non-mod file
+
+        result = _extract_mods_from_scd(scd_path)
+
+        assert result == ["TestMod"]
+        wopc_mods = patched_config["WOPC_MODS"]
+        assert (wopc_mods / "TestMod" / "mod_info.lua").exists()
+        assert (wopc_mods / "TestMod" / "units" / "TEST001" / "TEST001_unit.bp").exists()
+        assert (wopc_mods / "TestMod" / "hook" / "lua" / "test.lua").exists()
+        # Non-mod files should NOT be extracted
+        assert not (wopc_mods / "lua").exists()
+
+    def test_skips_existing_files(self, patched_config, tmp_path):
+        """Does not overwrite already-extracted mod files."""
+        import zipfile
+
+        from launcher.deploy import _extract_mods_from_scd
+
+        wopc_mods = patched_config["WOPC_MODS"]
+        wopc_mods.mkdir(parents=True, exist_ok=True)
+        (wopc_mods / "TestMod").mkdir()
+        (wopc_mods / "TestMod" / "mod_info.lua").write_text("original")
+
+        scd_path = tmp_path / "test.scd"
+        with zipfile.ZipFile(scd_path, "w") as zf:
+            zf.writestr("mods/TestMod/mod_info.lua", "new content")
+
+        _extract_mods_from_scd(scd_path)
+
+        # Should keep original content
+        assert (wopc_mods / "TestMod" / "mod_info.lua").read_text() == "original"

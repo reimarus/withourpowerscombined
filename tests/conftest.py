@@ -109,6 +109,7 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "WOPC_GAMEDATA": wopc / "gamedata",
         "WOPC_MAPS": wopc / "maps",
         "WOPC_SOUNDS": wopc / "sounds",
+        "WOPC_MODS": wopc / "mods",
         "WOPC_USERMODS": wopc / "usermods",
         "WOPC_USERMAPS": wopc / "usermaps",
         "PATCH_BUILD_DIR": patch_build,

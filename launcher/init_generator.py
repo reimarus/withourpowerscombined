@@ -125,7 +125,8 @@ def generate_init_lua() -> Path:
 --   4. FAF UI + WOPC patches    (single SCD: FAF logic + our fixes)
 --   5. Vanilla SCFA content     (fonts, textures, effects, units, loc, etc.)
 --   6. User maps
---   7. User mods                (separate namespace via mount_mods)
+--   7. Server mods              (content pack mods — shared by all players)
+--   8. User mods                (personal mods via mount_mods)
 -- =============================================================================
 
 do
@@ -190,7 +191,12 @@ mount_dir(SCFARoot .. '\\\\sounds', '/sounds')
 mount_dir(WOPCRoot .. '\\\\usermaps', '/maps')
 
 -- =========================================================================
--- 7. User mods (separate namespace — loaded via mount_mods)
+-- 7. Server-level mods (content pack mods — shared by all players)
+-- =========================================================================
+mount_mods(WOPCRoot .. '\\\\mods')
+
+-- =========================================================================
+-- 8. User mods (personal mods — separate namespace via mount_mods)
 -- =========================================================================
 mount_mods(WOPCRoot .. '\\\\usermods')
 

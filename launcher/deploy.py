@@ -78,8 +78,56 @@ def _download_file(url: str, dst: Path) -> None:
             tmp.unlink()
 
 
+def _extract_mods_from_scd(scd_path: Path) -> list[str]:
+    """Extract mod directories from an SCD to WOPC/usermods/.
+
+    SCFA's mount_mods() needs mods on the real filesystem — it can't
+    discover mods inside a ZIP/SCD.  This extracts any ``mods/*/``
+    subtree so mount_mods() activates hooks and blueprints.
+
+    Returns the list of extracted mod directory names.
+    """
+    config.WOPC_MODS.mkdir(parents=True, exist_ok=True)
+    extracted: list[str] = []
+
+    try:
+        with zipfile.ZipFile(scd_path, "r") as zf:
+            mod_entries = [
+                info
+                for info in zf.infolist()
+                if info.filename.startswith("mods/") and not info.is_dir()
+            ]
+            if not mod_entries:
+                return extracted
+
+            for info in mod_entries:
+                # Strip the "mods/" prefix so mount_mods() finds them
+                # directly under WOPC/mods/ (e.g. mods/BlackOpsUnleashed/)
+                rel_path = info.filename[len("mods/") :]
+                dst = config.WOPC_MODS / rel_path
+                if not dst.exists():
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    dst.write_bytes(zf.read(info))
+
+            # Collect unique mod names (e.g. "BlackopsACUs", "BlackOpsUnleashed")
+            mod_names = {
+                info.filename.split("/")[1] for info in mod_entries if info.filename.count("/") >= 2
+            }
+            extracted = sorted(mod_names)
+            if extracted:
+                logger.info("  extracted mods: %s", ", ".join(extracted))
+    except (zipfile.BadZipFile, OSError) as exc:
+        logger.warning("  WARNING: could not extract mods from %s: %s", scd_path.name, exc)
+
+    return extracted
+
+
 def _acquire_content_packs() -> None:
-    """Copy content packs from local LOUD install or download from GitHub."""
+    """Copy content packs from local LOUD install or download from GitHub.
+
+    Also extracts mod directories from SCDs to WOPC/usermods/ so the
+    engine's mount_mods() can discover and activate them.
+    """
     config.WOPC_GAMEDATA.mkdir(parents=True, exist_ok=True)
     config.WOPC_SOUNDS.mkdir(parents=True, exist_ok=True)
 
@@ -93,6 +141,10 @@ def _acquire_content_packs() -> None:
                 shutil.copy2(local_scd, scd_dst)
             else:
                 _download_file(asset_info["url"], scd_dst)
+
+        # Extract mods/ subtree so mount_mods() can find them
+        if scd_dst.exists():
+            _extract_mods_from_scd(scd_dst)
 
         for sound_name, sound_url in asset_info.get("sounds", {}).items():
             sound_dst = config.WOPC_SOUNDS / sound_name
@@ -115,7 +167,7 @@ def run_setup(repo_init_dir: Path) -> None:
     logger.info("WOPC directory: %s", config.WOPC_ROOT)
 
     # Create directory structure
-    for d in [config.WOPC_ROOT, config.WOPC_BIN, config.WOPC_GAMEDATA]:
+    for d in [config.WOPC_ROOT, config.WOPC_BIN, config.WOPC_GAMEDATA, config.WOPC_MODS]:
         d.mkdir(parents=True, exist_ok=True)
 
     # --- Step 1: Copy exe + DLLs from Steam SCFA/bin/ ---
