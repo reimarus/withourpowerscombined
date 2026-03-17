@@ -139,10 +139,9 @@ class TestCmdLaunch:
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
             patch("launcher.wopc.prefs.get_active_map", return_value="SCMP_002"),
             patch("launcher.wopc.prefs.get_player_name", return_value="Player"),
-            patch("launcher.wopc.prefs.get_enabled_mods", return_value=["BrewLAN"]),
             patch(
-                "launcher.wopc.prefs.get_server_mod_uids",
-                return_value=["server-uid-1"],
+                "launcher.wopc.mods.get_active_mod_uids",
+                return_value=["server-uid-1", "brew-lan-uid"],
             ),
             patch(
                 "launcher.wopc.write_game_config",
@@ -178,7 +177,7 @@ class TestCmdLaunch:
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
             patch("launcher.wopc.prefs.get_active_map", return_value=""),
-            patch("launcher.wopc.prefs.get_enabled_mods", return_value=[]),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
         ):
             result = cmd_launch()
             assert result == 1

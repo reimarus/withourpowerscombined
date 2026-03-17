@@ -8,81 +8,36 @@ packs are simply omitted from the mount list.
 The template is identical to ``init/init_wopc.lua`` in the repo, but
 replaces the wildcard ``mount_dir(... '\\\\*.scd', '/')`` with explicit
 lines for each enabled SCD.
+
+Content pack state management (labels, toggling, enabled packs) lives
+in ``launcher.mods`` — this module is a pure template renderer.
 """
 
 import logging
 from pathlib import Path
 
-from launcher import config, prefs
+from launcher import config, mods
 
 logger = logging.getLogger("wopc.init_generator")
 
-# SCDs that are always mounted from WOPC/gamedata/ and never toggleable.
-# In FAF-only mode (default), this is empty — faf_ui.scd provides all
-# Lua code and vanilla SCFA provides units/loc.  When LOUD content packs
-# are enabled, lua.scd from LOUD will be toggled on via the content pack
-# system (it's now in CONTENT_PACK_LABELS).
-CORE_SCDS: frozenset[str] = frozenset()
-
-# SCDs with fixed mount positions that must NOT appear in the toggleable
-# content packs list or in the early gamedata block.
-_FIXED_POSITION_SCDS = frozenset({"faf_ui.scd"})
-
-# Human-friendly names for content packs shown in the launcher UI.
-# All of these are toggleable — disabled by default in FAF-only mode.
-# Enabling LOUD packs requires lua.scd + loc_US.scd (LOUD overrides).
-CONTENT_PACK_LABELS: dict[str, str] = {
-    "lua.scd": "LOUD Lua (required for LOUD packs)",
-    "loc_US.scd": "LOUD Localization",
-    "4D-CompatibilityPack.scd": "4D Compatibility Pack",
-    "blackops.scd": "BlackOps Units",
-    "brewlan.scd": "BrewLAN Units",
-    "civ_units.scd": "Civilian Units",
-    "extra_env.scd": "Extra Environments",
-    "loud_misc.scd": "LOUD Miscellaneous",
-    "loud_units.scd": "LOUD Units",
-    "SC_Music.scd": "Supreme Commander Music",
-    "TotalMayhem.scd": "Total Mayhem Units",
-    "units.scd": "Core Units",
-    "WyvernBattlePack.scd": "Wyvern Battle Pack",
-}
+# Re-export for backwards compatibility (other modules may import from here).
+CONTENT_PACK_LABELS = mods.CONTENT_PACK_LABELS
+CORE_SCDS = mods.CORE_SCDS
 
 
 def get_toggleable_scds() -> list[str]:
-    """Return a sorted list of gamedata SCD names the user can toggle.
-
-    Fixed-position SCDs (faf_ui.scd) are excluded because they have
-    explicit mount points in the init template and disabling them
-    would corrupt VFS mount ordering.
-    """
-    if not config.WOPC_GAMEDATA.exists():
-        return []
-
-    all_scds = sorted(f.name for f in config.WOPC_GAMEDATA.iterdir() if f.suffix == ".scd")
-    non_toggleable = CORE_SCDS | _FIXED_POSITION_SCDS
-    return [s for s in all_scds if s not in non_toggleable]
+    """Delegate to mods.get_toggleable_scds()."""
+    return mods.get_toggleable_scds()
 
 
 def get_enabled_packs() -> list[str]:
-    """Return a list of currently enabled content pack SCD names."""
-
-    parser = prefs.load_prefs()
-    if not parser.has_section("ContentPacks"):
-        return []  # default: FAF-only mode (no LOUD content packs)
-    enabled = []
-    for scd_name in get_toggleable_scds():
-        if parser.getboolean("ContentPacks", scd_name, fallback=True):
-            enabled.append(scd_name)
-    return enabled
+    """Delegate to mods.get_enabled_packs()."""
+    return mods.get_enabled_packs()
 
 
 def set_pack_state(scd_name: str, enabled: bool) -> None:
-    """Enable or disable a content pack SCD."""
-    parser = prefs.load_prefs()
-    if not parser.has_section("ContentPacks"):
-        parser.add_section("ContentPacks")
-    parser.set("ContentPacks", scd_name, str(enabled))
-    prefs.save_prefs(parser)
+    """Delegate to mods.set_pack_state()."""
+    mods.set_pack_state(scd_name, enabled)
 
 
 def generate_init_lua() -> Path:

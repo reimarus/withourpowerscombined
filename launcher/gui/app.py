@@ -3,7 +3,7 @@ import sys
 import threading
 from typing import TYPE_CHECKING, Any
 
-from launcher import init_generator, map_scanner
+from launcher import map_scanner, mods
 
 if TYPE_CHECKING:
     import customtkinter as ctk  # type: ignore[import-untyped,import-not-found]
@@ -359,11 +359,11 @@ class WopcApp(BaseApp):  # type: ignore
             cb.destroy()
         self.pack_checkboxes.clear()
 
-        toggleable = init_generator.get_toggleable_scds()
-        enabled_packs = init_generator.get_enabled_packs()
+        toggleable = mods.get_toggleable_scds()
+        enabled_packs = mods.get_enabled_packs()
 
         for idx, scd_name in enumerate(toggleable):
-            label = init_generator.CONTENT_PACK_LABELS.get(scd_name, scd_name)
+            label = mods.CONTENT_PACK_LABELS.get(scd_name, scd_name)
             scd_path = config.WOPC_GAMEDATA / scd_name
             if scd_path.exists():
                 size_mb = scd_path.stat().st_size / 1_048_576
@@ -373,7 +373,7 @@ class WopcApp(BaseApp):  # type: ignore
 
             def on_pack_toggle(name=scd_name) -> None:
                 cb = self.pack_checkboxes[name]
-                init_generator.set_pack_state(name, bool(cb.get()))
+                mods.set_pack_state(name, bool(cb.get()))
                 self._update_play_summary()
 
             cb = ctk.CTkCheckBox(self.packs_scroll, text=label, command=on_pack_toggle)
@@ -387,32 +387,22 @@ class WopcApp(BaseApp):  # type: ignore
             cb.destroy()
         self.mod_checkboxes.clear()
 
-        if not config.WOPC_USERMODS.exists():
-            self._update_play_summary()
-            return
+        user_mods_on_disk = mods.discover_user_mods()
+        enabled_uids = mods.get_enabled_user_mod_uids()
 
-        enabled_mods = prefs.get_enabled_mods()
+        for idx, mod_info in enumerate(user_mods_on_disk):
+            is_enabled = mod_info.uid in enabled_uids
 
-        available = []
-        for d in config.WOPC_USERMODS.iterdir():
-            if d.is_dir() or d.name.endswith((".scd", ".zip")):
-                available.append(d.name)
-
-        available.sort()
-
-        for idx, mod_name in enumerate(available):
-            is_enabled = mod_name in enabled_mods
-
-            def on_toggle(name=mod_name) -> None:
-                cb = self.mod_checkboxes[name]
-                prefs.set_mod_state(name, bool(cb.get()))
+            def on_toggle(uid=mod_info.uid) -> None:
+                cb = self.mod_checkboxes[uid]
+                mods.set_user_mod_enabled(uid, bool(cb.get()))
                 self._update_play_summary()
 
-            cb = ctk.CTkCheckBox(self.mods_scroll, text=mod_name, command=on_toggle)
+            cb = ctk.CTkCheckBox(self.mods_scroll, text=mod_info.name, command=on_toggle)
             if is_enabled:
                 cb.select()
             cb.grid(row=idx, column=0, pady=3, padx=10, sticky="w")
-            self.mod_checkboxes[mod_name] = cb
+            self.mod_checkboxes[mod_info.uid] = cb
 
         self._update_play_summary()
 
@@ -512,9 +502,7 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _update_play_summary(self) -> None:
         """Update the label on the play tab showing the active config."""
-        user_mods = len(prefs.get_enabled_mods())
-        server_mods = len(prefs.get_server_mod_uids())
-        total = user_mods + server_mods
+        total = len(mods.get_active_mod_uids())
         self.play_summary.configure(text=f"Active Mods: {total}")
 
     def log(self, message: str) -> None:

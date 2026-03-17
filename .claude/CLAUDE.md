@@ -98,8 +98,11 @@ C:\Users\roskv\wopc\          (repo)
   launcher/                    Python CLI + GUI
     wopc.py                    Entry point (status/setup/launch/validate/patch)
     config.py                  Path constants, file lists, version
+    mods.py                    Mod system — discovery, activation, content packs, extraction
     deploy.py                  Creates C:\ProgramData\WOPC\ game directory
     game_config.py             Generates wopc_game_config.lua (quickstart config)
+    init_generator.py          init_wopc.lua template (delegates to mods.py)
+    prefs.py                   INI infrastructure (map, player, display prefs)
     log.py                     Logging configuration
     toolchain.py               Compiler discovery (Clang, GCC, LD)
     manifest.py                Patch manifest parsing (wopc_patches.toml)

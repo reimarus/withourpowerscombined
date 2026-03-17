@@ -11,10 +11,11 @@ withourpowerscombined/
   launcher/                     Python CLI + GUI
     wopc.py                     Entry point (status/setup/launch/validate/patch)
     config.py                   Path constants, file lists, version
+    mods.py                     Mod system — discovery, activation, content packs
     deploy.py                   Creates C:\ProgramData\WOPC\ game directory
     game_config.py              Generates wopc_game_config.lua (quickstart config)
-    init_generator.py           Dynamic init_wopc.lua generation (per-launch)
-    prefs.py                    User preferences (active map, mods, player name)
+    init_generator.py           Dynamic init_wopc.lua generation (delegates to mods.py)
+    prefs.py                    User preferences (INI infrastructure, map, player)
     map_scanner.py              Map directory scanner
     log.py                      Logging configuration
     toolchain.py                Compiler discovery (Clang, GCC, LD)
@@ -147,6 +148,51 @@ The built executable is a single-file PyInstaller bundle (~18 MB) that includes:
 4. The exe is fully self-contained — no Python installation needed on the player's machine
 
 **When to rebuild:** After ANY change to `launcher/`, `init/`, or `gamedata/`. The exe bundles code at build time — a stale exe runs old code. During development, use dev mode instead to skip rebuilds.
+
+## Mod System
+
+All mod operations flow through `launcher/mods.py` — the single source of truth.
+
+### Mod Types
+
+| Type | Location | Identification | Activation |
+|------|----------|----------------|------------|
+| **Server mods** | `WOPC/mods/` | UID from mod_info.lua | Always active (extracted from content pack SCDs) |
+| **User mods** | `WOPC/usermods/` | UID from mod_info.lua | Toggled via prefs (UID-based) |
+| **Content packs** | `WOPC/gamedata/*.scd` | SCD filename | Toggled via prefs, affects VFS mount order |
+
+### Activation Pipeline
+
+```
+Python launcher (mods.py)
+  → discover_server_mods() + get_enabled_user_mod_uids()
+  → get_active_mod_uids() — single combined UID list
+  → game_config.py writes ActiveMods = { "uid1", "uid2", ... }
+
+Game runtime (quickstart.lua)
+  → reads ActiveMods from wopc_game_config.lua
+  → ResolveGameMods(uidList) calls FAF mods.lua:GetGameMods(uidSet)
+  → dependency sorting, conflict detection, UI-only filtering
+  → gameInfo.GameMods = resolved ModInfo[] array
+  → comm:LaunchGame(gameInfo) → engine sets __active_mods global
+  → blueprints.lua + ruleinit.lua use __active_mods to load mod content
+```
+
+### Key Concepts
+
+- **VFS mount** (`mount_mods()` in init_wopc.lua) = filesystem discovery only. Makes mod files findable in VFS namespace `/mods/<name>/`.
+- **Game activation** (`gameInfo.GameMods`) = tells the engine to load mod blueprints and hook scripts. This is the critical step for mods to actually work.
+- **Content packs** are SCDs that affect VFS mount order (in init_wopc.lua). They can contain mods in their `mods/` subtree, which get extracted to `WOPC/mods/` by `mods.extract_mods_from_scd()`.
+
+### Module Responsibilities
+
+| Module | Owns |
+|--------|------|
+| `mods.py` | Discovery, UID parsing, state management, content pack labels, extraction |
+| `init_generator.py` | Lua template rendering (delegates pack queries to mods.py) |
+| `game_config.py` | Writes UID list to Lua config (receives `active_mod_uids` param) |
+| `prefs.py` | Pure INI infrastructure (load/save), map/player/display prefs |
+| `quickstart.lua` | Runtime UID → ModInfo resolution via FAF's mods.lua |
 
 ## Key Design Decisions
 

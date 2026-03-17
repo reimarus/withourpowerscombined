@@ -6,7 +6,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from launcher import config
+from launcher import config, mods
 
 logger = logging.getLogger("wopc.deploy")
 
@@ -79,47 +79,12 @@ def _download_file(url: str, dst: Path) -> None:
 
 
 def _extract_mods_from_scd(scd_path: Path) -> list[str]:
-    """Extract mod directories from an SCD to WOPC/usermods/.
+    """Extract mod directories from an SCD to WOPC/mods/.
 
-    SCFA's mount_mods() needs mods on the real filesystem — it can't
-    discover mods inside a ZIP/SCD.  This extracts any ``mods/*/``
-    subtree so mount_mods() activates hooks and blueprints.
-
-    Returns the list of extracted mod directory names.
+    Delegates to ``mods.extract_mods_from_scd()`` — the canonical
+    implementation lives in the consolidated mods module.
     """
-    config.WOPC_MODS.mkdir(parents=True, exist_ok=True)
-    extracted: list[str] = []
-
-    try:
-        with zipfile.ZipFile(scd_path, "r") as zf:
-            mod_entries = [
-                info
-                for info in zf.infolist()
-                if info.filename.startswith("mods/") and not info.is_dir()
-            ]
-            if not mod_entries:
-                return extracted
-
-            for info in mod_entries:
-                # Strip the "mods/" prefix so mount_mods() finds them
-                # directly under WOPC/mods/ (e.g. mods/BlackOpsUnleashed/)
-                rel_path = info.filename[len("mods/") :]
-                dst = config.WOPC_MODS / rel_path
-                if not dst.exists():
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    dst.write_bytes(zf.read(info))
-
-            # Collect unique mod names (e.g. "BlackopsACUs", "BlackOpsUnleashed")
-            mod_names = {
-                info.filename.split("/")[1] for info in mod_entries if info.filename.count("/") >= 2
-            }
-            extracted = sorted(mod_names)
-            if extracted:
-                logger.info("  extracted mods: %s", ", ".join(extracted))
-    except (zipfile.BadZipFile, OSError) as exc:
-        logger.warning("  WARNING: could not extract mods from %s: %s", scd_path.name, exc)
-
-    return extracted
+    return mods.extract_mods_from_scd(scd_path)
 
 
 def _acquire_content_packs() -> None:

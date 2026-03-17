@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from launcher import prefs
+from launcher import mods, prefs
 from launcher.config import (
     FA_PATCHES_DIR,
     GAME_EXE,
@@ -164,12 +164,9 @@ def cmd_launch() -> int:
         else:
             logger.warning("Could not find _scenario.lua in %s", map_dir)
 
-    # Collect all active mod UIDs: server mods (always active) + user mods.
-    # These are written to the game config and resolved by quickstart.lua
-    # at runtime via FAF's mods.lua — no /mod command line needed.
-    server_uids = prefs.get_server_mod_uids()
-    user_mods = prefs.get_enabled_mods()
-    all_mod_uids = server_uids + user_mods
+    # Collect all active mod UIDs: server mods (always active) + enabled user mods.
+    # Single source of truth — mods.py resolves everything by UID.
+    all_mod_uids = mods.get_active_mod_uids()
 
     if vfs_path:
         # Write the game config for quickstart.lua to read at runtime.
