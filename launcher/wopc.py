@@ -164,9 +164,16 @@ def cmd_launch() -> int:
         else:
             logger.warning("Could not find _scenario.lua in %s", map_dir)
 
+    # Collect all active mod UIDs: server mods (always active) + user mods.
+    # These are written to the game config and resolved by quickstart.lua
+    # at runtime via FAF's mods.lua — no /mod command line needed.
+    server_uids = prefs.get_server_mod_uids()
+    user_mods = prefs.get_enabled_mods()
+    all_mod_uids = server_uids + user_mods
+
     if vfs_path:
         # Write the game config for quickstart.lua to read at runtime.
-        # This includes player info, AI opponents, and game options.
+        # This includes player info, AI opponents, active mods, and game options.
         player_name = prefs.get_player_name()
         player_faction = prefs.get_player_faction()
         minimap_enabled = prefs.get_minimap_enabled()
@@ -175,6 +182,7 @@ def cmd_launch() -> int:
             player_name=player_name,
             player_faction=player_faction,
             game_options={"minimap_enabled": str(minimap_enabled)},
+            active_mod_uids=all_mod_uids,
         )
         logger.info("Wrote game config: %s", config_path)
 
@@ -197,19 +205,14 @@ def cmd_launch() -> int:
     else:
         logger.warning("No map selected — launching to main menu")
 
-    enabled_mods = prefs.get_enabled_mods()
-    if enabled_mods:
-        # FAF engine reads multiple mods as comma-separated
-        cmd.extend(["/mod", ",".join(enabled_mods)])
-
     logger.info("Launching WOPC...")
     logger.info("  Exe:  %s", exe_path)
     logger.info("  Init: %s", init_path)
     logger.info("  Log:  %s", WOPC_BIN / GAME_LOG)
     if active_map:
         logger.info("  Map:  %s", active_map)
-    if enabled_mods:
-        logger.info("  Mods: %s", ", ".join(enabled_mods))
+    if all_mod_uids:
+        logger.info("  Mods: %s", ", ".join(all_mod_uids))
 
     try:
         subprocess.Popen(cmd, cwd=str(WOPC_BIN))

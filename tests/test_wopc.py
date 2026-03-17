@@ -141,6 +141,10 @@ class TestCmdLaunch:
             patch("launcher.wopc.prefs.get_player_name", return_value="Player"),
             patch("launcher.wopc.prefs.get_enabled_mods", return_value=["BrewLAN"]),
             patch(
+                "launcher.wopc.prefs.get_server_mod_uids",
+                return_value=["server-uid-1"],
+            ),
+            patch(
                 "launcher.wopc.write_game_config",
                 return_value=wopc_bin / "wopc_game_config.lua",
             ),
@@ -155,8 +159,9 @@ class TestCmdLaunch:
             assert "/wopcquickstart" in call_args
             assert "/wopcconfig" in call_args
             assert "/maps/SCMP_002/SCMP_002_scenario.lua" in call_args
-            assert "/mod" in call_args
-            assert "BrewLAN" in call_args
+            # Mod activation is handled via game config + quickstart.lua,
+            # not /mod command line — verify /mod is NOT in args
+            assert "/mod" not in call_args
 
     @patch("subprocess.Popen", side_effect=OSError("access denied"))
     def test_launch_handles_oserror(self, mock_popen, tmp_path):

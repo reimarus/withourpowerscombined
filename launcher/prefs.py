@@ -6,6 +6,7 @@ to the wopc_prefs.ini configuration file.
 
 import configparser
 import logging
+import re
 
 from launcher import config
 
@@ -125,3 +126,34 @@ def set_mod_state(mod_name: str, enabled: bool) -> None:
 
     parser.set("Mods", mod_name, str(enabled))
     save_prefs(parser)
+
+
+_UID_RE = re.compile(r"""uid\s*=\s*['"]([^'"]+)['"]""")
+
+
+def _parse_mod_uid(mod_info_path: "config.Path") -> str | None:
+    """Extract the UID from a mod_info.lua file."""
+    try:
+        text = mod_info_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    m = _UID_RE.search(text)
+    return m.group(1) if m else None
+
+
+def get_server_mod_uids() -> list[str]:
+    """Return UIDs for all server-level mods in WOPC/mods/.
+
+    Server mods are extracted from content pack SCDs and are always
+    active when present — they apply to all players in multiplayer.
+    """
+    if not config.WOPC_MODS.exists():
+        return []
+    uids = []
+    for d in sorted(config.WOPC_MODS.iterdir()):
+        if not d.is_dir():
+            continue
+        uid = _parse_mod_uid(d / "mod_info.lua")
+        if uid:
+            uids.append(uid)
+    return uids

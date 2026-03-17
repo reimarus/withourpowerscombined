@@ -11,6 +11,7 @@
 -- =============================================================================
 
 local LobbyComm = import("/lua/ui/lobby/lobbyComm.lua")
+local Mods = import("/lua/mods.lua")
 
 --- Resolve faction 5 (random) to a real faction (1-4).
 --- The lobby normally does this before LaunchGame; we must do it ourselves.
@@ -22,6 +23,34 @@ local function ResolveFaction(faction)
         return Random(1, 4)
     end
     return faction
+end
+
+--- Resolve a list of mod UIDs to full ModInfo tables via FAF's mods.lua.
+--- This is the same data structure that LaunchGame expects in gameInfo.GameMods
+--- and that the engine copies into __active_mods for blueprint loading.
+---@param uidList string[]  List of mod UIDs from the launcher config
+---@return ModInfo[]
+local function ResolveGameMods(uidList)
+    if not uidList or table.getn(uidList) == 0 then
+        return {}
+    end
+
+    -- Build a UID set for GetGameMods (same format GetSelectedMods returns)
+    local uidSet = {}
+    for _, uid in uidList do
+        uidSet[uid] = true
+    end
+
+    -- Use FAF's mod resolution — handles dependency sorting, validation,
+    -- and filtering to sim-only mods (excludes ui_only).
+    local resolved = Mods.GetGameMods(uidSet)
+
+    LOG("WOPC QuickStart: Resolved " .. table.getn(resolved) .. " active game mods:")
+    for _, mod in resolved do
+        LOG("  - " .. tostring(mod.name) .. " (" .. tostring(mod.uid) .. ")")
+    end
+
+    return resolved
 end
 
 --- Build the flat gameInfo table that LobbyComm:LaunchGame() expects.
@@ -78,11 +107,16 @@ local function BuildGameInfo(cfg)
         }
     end
 
+    -- Resolve active mods from config UIDs via FAF's mods.lua.
+    -- The engine copies GameMods into __active_mods in the sim state,
+    -- which blueprints.lua and ruleinit.lua use for blueprint loading.
+    local gameMods = ResolveGameMods(cfg.ActiveMods)
+
     return {
         GameOptions = options,
         PlayerOptions = playerOptions,
         Observers = {},
-        GameMods = {},
+        GameMods = gameMods,
     }
 end
 
@@ -151,13 +185,23 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
     -- Apply WOPC player settings to engine profile prefs.
     -- These must be set before LaunchGame() transitions to game state,
     -- because FAF UI modules read profile prefs at import time.
-    if cfg.GameOptions then
-        local Prefs = import('/lua/user/prefs.lua')
-        if cfg.GameOptions.minimap_enabled then
-            local enabled = (cfg.GameOptions.minimap_enabled == 'True')
-            Prefs.SetToCurrentProfile('stratview', enabled)
-            LOG('WOPC QuickStart: Set minimap visibility to ' .. tostring(enabled))
+    local Prefs = import('/lua/user/prefs.lua')
+    if cfg.GameOptions and cfg.GameOptions.minimap_enabled then
+        local enabled = (cfg.GameOptions.minimap_enabled == 'True')
+        Prefs.SetToCurrentProfile('stratview', enabled)
+        LOG('WOPC QuickStart: Set minimap visibility to ' .. tostring(enabled))
+    end
+
+    -- Persist active mods to profile prefs so FAF's GetSelectedMods()
+    -- returns them correctly for any code path that reads preferences
+    -- (e.g. blueprint pre-game data loading).
+    if cfg.ActiveMods and table.getn(cfg.ActiveMods) > 0 then
+        local activeModsTable = {}
+        for _, uid in cfg.ActiveMods do
+            activeModsTable[uid] = true
         end
+        Prefs.SetToCurrentProfile('active_mods', activeModsTable)
+        LOG("WOPC QuickStart: Set " .. table.getn(cfg.ActiveMods) .. " active mods in preferences")
     end
 
     -- Build the flat gameInfo and launch directly into the simulation

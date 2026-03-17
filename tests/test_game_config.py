@@ -148,6 +148,28 @@ class TestWriteGameConfig:
 
         assert path.exists()
 
+    def test_active_mods_written(self, config_dir: Path) -> None:
+        """Active mod UIDs are written to config for quickstart.lua."""
+        uids = ["9e8ea941-c306-4751-b367-e00000000302", "9e8ea941-c306-4751-b367-a11000000502"]
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/Caldera/Caldera_scenario.lua",
+                active_mod_uids=uids,
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        assert "ActiveMods = {" in lua
+        assert "'9e8ea941-c306-4751-b367-e00000000302'" in lua
+        assert "'9e8ea941-c306-4751-b367-a11000000502'" in lua
+
+    def test_no_active_mods(self, config_dir: Path) -> None:
+        """Empty ActiveMods table when no mods are active."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config("/maps/Caldera/Caldera_scenario.lua")
+
+        lua = path.read_text(encoding="utf-8")
+        assert "ActiveMods = {" in lua
+
     def test_start_spots_increment(self, config_dir: Path) -> None:
         """Each player gets an incrementing StartSpot and PlayerColor."""
         ais = [

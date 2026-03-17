@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from launcher import prefs
+from launcher import config, prefs
 
 
 class TestLoadPrefs:
@@ -67,3 +67,40 @@ class TestSetPrefs:
             # The mod key is forced lowercase by configparser when returning
             assert "blackopsunleashed" in mods
             assert "brewlan" not in mods
+
+
+class TestServerModUids:
+    """Test scanning server-level mod UIDs from WOPC/mods/."""
+
+    def test_returns_uids_from_mod_info(self, tmp_path):
+        """Extracts UIDs from mod_info.lua files."""
+        mods_dir = tmp_path / "mods"
+        mod_a = mods_dir / "ModA"
+        mod_a.mkdir(parents=True)
+        (mod_a / "mod_info.lua").write_text('name = "Mod A"\nuid = "aaaa-1111"\nenabled = true\n')
+        mod_b = mods_dir / "ModB"
+        mod_b.mkdir()
+        (mod_b / "mod_info.lua").write_text("name = 'Mod B'\nuid = 'bbbb-2222'\n")
+
+        with patch.object(config, "WOPC_MODS", mods_dir):
+            uids = prefs.get_server_mod_uids()
+
+        assert uids == ["aaaa-1111", "bbbb-2222"]
+
+    def test_returns_empty_when_no_mods_dir(self, tmp_path):
+        """Returns empty list when WOPC/mods/ doesn't exist."""
+        with patch.object(config, "WOPC_MODS", tmp_path / "nonexistent"):
+            uids = prefs.get_server_mod_uids()
+
+        assert uids == []
+
+    def test_skips_dirs_without_mod_info(self, tmp_path):
+        """Ignores directories without mod_info.lua."""
+        mods_dir = tmp_path / "mods"
+        (mods_dir / "NoModInfo").mkdir(parents=True)
+        (mods_dir / "NoModInfo" / "readme.txt").write_text("hi")
+
+        with patch.object(config, "WOPC_MODS", mods_dir):
+            uids = prefs.get_server_mod_uids()
+
+        assert uids == []
