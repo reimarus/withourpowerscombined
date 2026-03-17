@@ -115,6 +115,12 @@ FAF_BASE_EXE_CACHE = PATCH_BUILD_DIR / "ForgedAlliance_base.exe"
 LOUD_ROOT = SCFA_STEAM / "LOUD"
 LOUD_GAMEDATA = LOUD_ROOT / "gamedata"
 LOUD_SOUNDS = LOUD_ROOT / "sounds"
+LOUD_TEXTURES_SCD = LOUD_GAMEDATA / "textures.scd"
+
+# Auto-generated SCD containing unit icons extracted from LOUD's textures.scd.
+# This is rebuilt during `wopc setup` whenever content packs change.
+CONTENT_ICONS_SCD = "content_icons.scd"
+CONTENT_ICONS_URL = "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/content_icons.scd"
 
 # Content pack assets hosted on GitHub releases.
 # deploy.py tries local LOUD install first, then downloads from these URLs.

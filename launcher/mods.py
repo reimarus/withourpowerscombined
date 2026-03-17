@@ -104,7 +104,7 @@ def discover_all_mods() -> list[ModInfo]:
 EXCLUDED_SCD_MODS: frozenset[str] = frozenset({"BlackopsACUs"})
 
 # SCDs that are always mounted and never toggleable.
-CORE_SCDS: frozenset[str] = frozenset()
+CORE_SCDS: frozenset[str] = frozenset({config.CONTENT_ICONS_SCD})
 
 # SCDs with fixed mount positions — excluded from toggleable list.
 FIXED_POSITION_SCDS = frozenset({"faf_ui.scd"})

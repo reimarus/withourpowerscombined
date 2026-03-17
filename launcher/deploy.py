@@ -87,6 +87,85 @@ def _extract_mods_from_scd(scd_path: Path) -> list[str]:
     return mods.extract_mods_from_scd(scd_path)
 
 
+def _collect_content_unit_ids() -> set[str]:
+    """Scan all extracted content-pack mods for unit IDs.
+
+    Returns lowercase unit IDs found in ``WOPC_MODS/*/units/*/`` directories.
+    """
+    unit_ids: set[str] = set()
+    if not config.WOPC_MODS.exists():
+        return unit_ids
+    for mod_dir in config.WOPC_MODS.iterdir():
+        units_dir = mod_dir / "units"
+        if units_dir.is_dir():
+            for unit_dir in units_dir.iterdir():
+                if unit_dir.is_dir():
+                    unit_ids.add(unit_dir.name.lower())
+    return unit_ids
+
+
+def _build_content_icons_scd() -> None:
+    """Build ``content_icons.scd`` containing unit icons for all content packs.
+
+    SCFA looks for unit icons at ``/textures/ui/{faction}/icons/units/{id}_icon.dds``
+    with a fallback to ``/textures/ui/common/icons/units/{id}_icon.dds``.  Content
+    pack SCDs (like TotalMayhem.scd) don't include these icon textures — LOUD stores
+    them separately in its own ``textures.scd``.
+
+    This function:
+    1. Scans all extracted content-pack mods for unit IDs.
+    2. Extracts matching icon DDS files from LOUD's ``textures.scd``.
+    3. Packs them into ``WOPC/gamedata/content_icons.scd``.
+
+    If LOUD is not installed, downloads a pre-built SCD from GitHub.
+    """
+    dst = config.WOPC_GAMEDATA / config.CONTENT_ICONS_SCD
+    unit_ids = _collect_content_unit_ids()
+    if not unit_ids:
+        logger.info("  no content pack units found, skipping icon extraction")
+        return
+
+    if config.LOUD_TEXTURES_SCD.exists():
+        logger.info(
+            "  building %s from LOUD textures.scd (%d unit IDs)",
+            config.CONTENT_ICONS_SCD,
+            len(unit_ids),
+        )
+        _build_icons_from_loud(dst, unit_ids)
+    elif not dst.exists():
+        logger.info("  LOUD not installed, downloading %s", config.CONTENT_ICONS_SCD)
+        _download_file(config.CONTENT_ICONS_URL, dst)
+
+
+def _build_icons_from_loud(dst: Path, unit_ids: set[str]) -> None:
+    """Extract matching unit icons from LOUD's textures.scd into a new SCD."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    extracted = 0
+    try:
+        with zipfile.ZipFile(config.LOUD_TEXTURES_SCD, "r") as src_zf:
+            # Index icon entries by lowercase unit ID
+            icon_map: dict[str, list[zipfile.ZipInfo]] = {}
+            for info in src_zf.infolist():
+                lower = info.filename.lower()
+                if "/icons/units/" in lower and lower.endswith(".dds"):
+                    # Extract unit ID from filename like "brmt1pd_icon.dds"
+                    fname = lower.rsplit("/", 1)[-1]
+                    uid = fname.replace("_icon.dds", "")
+                    icon_map.setdefault(uid, []).append(info)
+
+            with zipfile.ZipFile(dst, "w", zipfile.ZIP_STORED) as out_zf:
+                for uid in sorted(unit_ids):
+                    for info in icon_map.get(uid, []):
+                        # Preserve original path (textures/ui/common/icons/units/...)
+                        arcname = info.filename.lower()
+                        out_zf.writestr(arcname, src_zf.read(info))
+                        extracted += 1
+
+        logger.info("  packed %d icon textures into %s", extracted, config.CONTENT_ICONS_SCD)
+    except (zipfile.BadZipFile, OSError) as exc:
+        logger.warning("  WARNING: could not build %s: %s", config.CONTENT_ICONS_SCD, exc)
+
+
 def _acquire_content_packs() -> None:
     """Copy content packs from local LOUD install or download from GitHub.
 
@@ -319,6 +398,10 @@ def run_setup(repo_init_dir: Path) -> None:
     # --- Step 4b: Acquire content packs (LOUD mods) ---
     logger.info("\n[4b] Acquiring content packs")
     _acquire_content_packs()
+
+    # --- Step 4c: Build unit icon SCD for content packs ---
+    logger.info("\n[4c] Building content pack icons")
+    _build_content_icons_scd()
 
     # Maps, sounds: copy entire directories
     if config.REPO_BUNDLED_MAPS.exists():
