@@ -112,6 +112,14 @@ end
 ---@param playerName string
 ---@param natTraversalProvider userdata?
 function StartJoinLobbyUI(protocol, address, playerName, natTraversalProvider)
+    -- WOPC Quick Start: bypass the lobby UI for joiner as well.
+    if HasCommandLineArg("/wopcquickstart") then
+        LOG("WOPC: Quick-start join mode — bypassing lobby UI")
+        local quickstart = import("/lua/wopc/quickstart.lua")
+        quickstart.JoinLaunch(protocol, address, playerName, natTraversalProvider)
+        return
+    end
+
     LOG("WOPC: Joining lobby at " .. tostring(address))
     local lobby
     -- Auto lobby only works with 2+ players (CLI-driven, no UI).
