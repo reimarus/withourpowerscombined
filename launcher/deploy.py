@@ -301,6 +301,7 @@ def run_setup(repo_init_dir: Path) -> None:
             # paths before lookup (import.lua line 116), but ZIP lookups are
             # case-sensitive.  Without this, 833/1264 files are unreachable.
             for target_dir in [
+                "etc",
                 "lua",
                 "modules",
                 "ui",
