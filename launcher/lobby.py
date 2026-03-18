@@ -57,6 +57,8 @@ class LobbyCallbacks:
     on_connected: Callable[[], None] | None = None
     on_disconnected: Callable[[str], None] | None = None
     on_error: Callable[[str], None] | None = None
+    on_chat_received: Callable[[str, str], None] | None = None
+    on_kicked: Callable[[str], None] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +101,8 @@ class _RemotePlayer:
     name: str
     faction: str
     slot: int
+    team: int = 1
+    color: int = 0
     ready: bool = False
     sock: socket.socket | None = None
     last_heartbeat: float = 0.0
@@ -117,9 +121,15 @@ class LobbyServer:
     and broadcasts lobby state changes.
     """
 
-    def __init__(self, port: int, callbacks: LobbyCallbacks) -> None:
+    def __init__(
+        self,
+        port: int,
+        callbacks: LobbyCallbacks,
+        game_state_provider: Callable[[], dict[str, Any] | None] | None = None,
+    ) -> None:
         self.port = port
         self._cb = callbacks
+        self._game_state_provider = game_state_provider
         self._players: dict[int, _RemotePlayer] = {}
         self._next_id = 1
         self._next_slot = 2  # slot 1 is reserved for host
@@ -183,6 +193,8 @@ class LobbyServer:
                     "name": p.name,
                     "faction": p.faction,
                     "slot": p.slot,
+                    "team": p.team,
+                    "color": p.color,
                     "ready": p.ready,
                 }
                 for p in self._players.values()
@@ -195,6 +207,27 @@ class LobbyServer:
     def reset_slots(self) -> None:
         """Reset the slot counter (e.g. when expected humans changes)."""
         self._next_slot = 2
+
+    def broadcast_chat(self, sender: str, text: str) -> None:
+        """Send a chat message to all connected peers."""
+        self._broadcast({"type": "Chat", "sender": sender, "text": text})
+
+    def kick_player(self, player_id: int, reason: str = "Kicked by host") -> None:
+        """Kick a player from the lobby."""
+        with self._lock:
+            player = self._players.get(player_id)
+        if player and player.sock:
+            with contextlib.suppress(OSError):
+                _send_msg(player.sock, {"type": "Kicked", "reason": reason})
+        self._remove_player(player_id)
+
+    def send_to_player(self, player_id: int, msg: dict[str, Any]) -> None:
+        """Send a message to a specific player."""
+        with self._lock:
+            player = self._players.get(player_id)
+        if player and player.sock:
+            with contextlib.suppress(OSError):
+                _send_msg(player.sock, msg)
 
     # -- internals -----------------------------------------------------------
 
@@ -329,12 +362,16 @@ class LobbyServer:
             self._next_slot += 1
             name = hello.get("player_name", f"Player {pid}")
             faction = hello.get("faction", "random")
+            team = hello.get("team", 1)
+            color = hello.get("color", 0)
 
             player = _RemotePlayer(
                 player_id=pid,
                 name=name,
                 faction=faction,
                 slot=slot,
+                team=team,
+                color=color,
                 sock=sock,
                 last_heartbeat=time.monotonic(),
             )
@@ -352,6 +389,11 @@ class LobbyServer:
             sock.setblocking(True)
             sock.settimeout(5.0)
             _send_msg(sock, welcome)
+            # If a game state snapshot callback is registered, send it now
+            if self._game_state_provider:
+                state = self._game_state_provider()
+                if state:
+                    _send_msg(sock, {"type": "GameState", "state": state})
             sock.setblocking(False)
         except OSError:
             self._remove_player(pid)
@@ -368,6 +410,8 @@ class LobbyServer:
             "player_name": name,
             "faction": faction,
             "slot": slot,
+            "team": team,
+            "color": color,
         }
         self._broadcast(join_msg)
 
@@ -385,6 +429,42 @@ class LobbyServer:
                 self._cb.on_player_joined(
                     player.player_id, player.name, player.faction, player.slot
                 )
+
+        elif msg_type == "TeamChange":
+            player.team = msg.get("team", player.team)
+            self._broadcast(
+                {
+                    "type": "PlayerUpdate",
+                    "player_id": player.player_id,
+                    "team": player.team,
+                }
+            )
+            if self._cb.on_player_joined:
+                self._cb.on_player_joined(
+                    player.player_id, player.name, player.faction, player.slot
+                )
+
+        elif msg_type == "ColorChange":
+            player.color = msg.get("color", player.color)
+            self._broadcast(
+                {
+                    "type": "PlayerUpdate",
+                    "player_id": player.player_id,
+                    "color": player.color,
+                }
+            )
+            if self._cb.on_player_joined:
+                self._cb.on_player_joined(
+                    player.player_id, player.name, player.faction, player.slot
+                )
+
+        elif msg_type == "Chat":
+            text = msg.get("text", "")
+            if text:
+                # Relay to all peers including sender
+                self._broadcast({"type": "Chat", "sender": player.name, "text": text})
+                if self._cb.on_chat_received:
+                    self._cb.on_chat_received(player.name, text)
 
         elif msg_type == "Ready":
             player.ready = msg.get("ready", False)
@@ -492,6 +572,24 @@ class LobbyClient:
             with contextlib.suppress(OSError):
                 _send_msg(self._sock, {"type": "Ready", "ready": ready})
 
+    def send_chat(self, text: str) -> None:
+        """Send a chat message to the lobby."""
+        if self._sock and text.strip():
+            with contextlib.suppress(OSError):
+                _send_msg(self._sock, {"type": "Chat", "text": text.strip()})
+
+    def send_team(self, team: int) -> None:
+        """Notify the host of a team change."""
+        if self._sock:
+            with contextlib.suppress(OSError):
+                _send_msg(self._sock, {"type": "TeamChange", "team": team})
+
+    def send_color(self, color: int) -> None:
+        """Notify the host of a color change."""
+        if self._sock:
+            with contextlib.suppress(OSError):
+                _send_msg(self._sock, {"type": "ColorChange", "color": color})
+
     @property
     def is_connected(self) -> bool:
         return self._sock is not None and self._running
@@ -598,6 +696,10 @@ class LobbyClient:
             if self._cb.on_state_updated:
                 self._cb.on_state_updated(msg.get("lobby_state", {}))
 
+        elif msg_type == "GameState":
+            if self._cb.on_state_updated:
+                self._cb.on_state_updated(msg.get("state", {}))
+
         elif msg_type == "PlayerJoined":
             if self._cb.on_player_joined:
                 self._cb.on_player_joined(
@@ -611,9 +713,23 @@ class LobbyClient:
             if self._cb.on_player_left:
                 self._cb.on_player_left(msg["player_id"])
 
+        elif msg_type == "PlayerUpdate":
+            # Partial player update (team/color change) — route via state_updated
+            if self._cb.on_state_updated:
+                self._cb.on_state_updated({"player_update": msg})
+
         elif msg_type == "ReadyUpdate":
             if self._cb.on_ready_changed:
                 self._cb.on_ready_changed(msg["player_id"], msg["ready"])
+
+        elif msg_type == "Chat":
+            if self._cb.on_chat_received:
+                self._cb.on_chat_received(msg.get("sender", "?"), msg.get("text", ""))
+
+        elif msg_type == "Kicked":
+            if self._cb.on_kicked:
+                self._cb.on_kicked(msg.get("reason", "Kicked"))
+            self._running = False
 
         elif msg_type == "Launch":
             if self._cb.on_launch:

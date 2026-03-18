@@ -42,6 +42,18 @@ COLOR_WARN = "#FEE75C"  # Discord Yellow for UPDATE/INSTALL state
 COLOR_TEXT_PRIMARY = "#F2F3F5"
 COLOR_TEXT_MUTED = "#949BA4"
 
+# SCFA player colors (index 1-8 match engine's color system)
+PLAYER_COLORS: list[tuple[str, str]] = [
+    ("#FF0000", "Red"),
+    ("#0000FF", "Blue"),
+    ("#18DAE8", "Teal"),
+    ("#DFBF00", "Yellow"),
+    ("#FF6600", "Orange"),
+    ("#9161FF", "Purple"),
+    ("#FF88FF", "Pink"),
+    ("#00FF00", "Green"),
+]
+
 
 class WopcApp(BaseApp):  # type: ignore
     """The main Graphical User Interface for the WOPC Launcher."""
@@ -335,17 +347,46 @@ class WopcApp(BaseApp):  # type: ignore
         self._build_player_slots()
         self._build_game_options()
 
-        # --- Log Window ---
+        # --- Log / Chat Window ---
+        self.log_chat_frame = ctk.CTkFrame(
+            self.main_content, fg_color=COLOR_MOD_PANEL, corner_radius=8
+        )
+        self.log_chat_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        self.log_chat_frame.grid_columnconfigure(0, weight=1)
+        self.log_chat_frame.grid_rowconfigure(0, weight=1)
+
         self.log_textbox = ctk.CTkTextbox(
-            self.main_content,
+            self.log_chat_frame,
             height=100,
             fg_color=COLOR_MOD_PANEL,
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.log_textbox.grid(row=3, column=0, sticky="ew", pady=(10, 0))
-        self.log_textbox.insert("0.0", "Welcome to the WOPC Match Lobby.\\n")
+        self.log_textbox.grid(row=0, column=0, sticky="ew")
+        self.log_textbox.insert("0.0", "Welcome to the WOPC Match Lobby.\n")
         self.log_textbox.configure(state="disabled")
+
+        # Chat input row
+        self.chat_input_frame = ctk.CTkFrame(self.log_chat_frame, fg_color="transparent")
+        self.chat_input_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=(0, 5))
+        self.chat_input_frame.grid_columnconfigure(0, weight=1)
+
+        self.chat_entry = ctk.CTkEntry(
+            self.chat_input_frame,
+            placeholder_text="Type a message...",
+            height=28,
+        )
+        self.chat_entry.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        self.chat_entry.bind("<Return>", lambda e: self._send_chat())
+
+        self.chat_send_btn = ctk.CTkButton(
+            self.chat_input_frame,
+            text="Send",
+            width=60,
+            height=28,
+            command=self._send_chat,
+        )
+        self.chat_send_btn.grid(row=0, column=1)
 
     def _build_mod_pane(self) -> None:
         """Construct the right-hand sidebar for Mod management."""
@@ -639,6 +680,7 @@ class WopcApp(BaseApp):  # type: ignore
                 "widgets": widgets,
             }
         )
+        self._broadcast_game_state()
 
     def _remove_slot(self, index: int) -> None:
         """Remove a player slot and re-layout remaining slots."""
@@ -656,6 +698,7 @@ class WopcApp(BaseApp):  # type: ignore
                 w.grid_configure(row=i)
             # Update slot number label
             s["widgets"][0].configure(text=str(i + 1))
+        self._broadcast_game_state()
 
     def get_ai_opponents(self) -> list[dict[str, Any]]:
         """Collect AI opponent config from the slot UI for game_config.py."""
@@ -723,11 +766,16 @@ class WopcApp(BaseApp):  # type: ignore
                 opts_frame,
                 values=values,
                 variable=var,
+                command=lambda _v, _k=key: self._on_game_option_change(_k),
                 width=130,
                 height=24,
             )
             menu.grid(row=idx + 1, column=1, sticky="w", pady=2)
             self.game_option_vars[key] = var
+
+    def _on_game_option_change(self, key: str) -> None:
+        """Broadcast state when a game option changes (host only)."""
+        self._broadcast_game_state()
 
     def get_game_options(self) -> dict[str, str]:
         """Collect game options from the UI for game_config.py."""
@@ -861,6 +909,7 @@ class WopcApp(BaseApp):  # type: ignore
                     if getattr(map_btn, "_wopc_folder", None) == name:
                         map_btn.configure(fg_color=COLOR_ACCENT, text_color="white")
                 self.selected_map_label.configure(text=f"Selected Map: {disp}")
+                self._broadcast_game_state()
 
             color = COLOR_ACCENT if is_active else "transparent"
             tcolor = "white" if is_active else COLOR_TEXT_PRIMARY
@@ -910,9 +959,9 @@ class WopcApp(BaseApp):  # type: ignore
     # Lobby networking callbacks
     # ------------------------------------------------------------------
 
-    def _make_lobby_callbacks(self) -> LobbyCallbacks:
+    def _make_lobby_callbacks(self, *, is_host: bool = False) -> LobbyCallbacks:
         """Create callbacks that marshal onto the GUI thread via self.after()."""
-        return LobbyCallbacks(
+        cbs = LobbyCallbacks(
             on_player_joined=lambda pid, name, faction, slot: self.after(
                 0, self._on_player_joined, pid, name, faction, slot
             ),
@@ -922,7 +971,14 @@ class WopcApp(BaseApp):  # type: ignore
             on_connected=lambda: self.after(0, self._on_lobby_connected),
             on_disconnected=lambda reason: self.after(0, self._on_lobby_disconnected, reason),
             on_error=lambda err: self.after(0, self._on_lobby_error, err),
+            on_chat_received=lambda sender, text: self.after(
+                0, self._on_chat_received, sender, text
+            ),
+            on_kicked=lambda reason: self.after(0, self._on_kicked, reason),
         )
+        if not is_host:
+            cbs.on_state_updated = lambda state: self.after(0, self._on_game_state_received, state)
+        return cbs
 
     def _on_player_joined(self, player_id: int, name: str, faction: str, slot: int) -> None:
         """TCP callback: add or update remote human in player slots panel."""
@@ -1008,6 +1064,198 @@ class WopcApp(BaseApp):  # type: ignore
         if mode == "JOIN":
             self.primary_btn.configure(text="JOIN GAME", fg_color=COLOR_READY, state="normal")
 
+    def _send_chat(self) -> None:
+        """Send a chat message from the chat input."""
+        text = self.chat_entry.get().strip()
+        if not text:
+            return
+        self.chat_entry.delete(0, "end")
+        name = self.name_entry.get() or "Player"
+        mode = self.mode_var.get()
+        if mode == "HOST" and self._lobby_server:
+            self._lobby_server.broadcast_chat(name, text)
+            self._append_chat(name, text)
+        elif mode == "JOIN" and self._lobby_client:
+            self._lobby_client.send_chat(text)
+            # Server will relay back to us via Chat message
+        else:
+            # Solo mode — just show locally
+            self._append_chat(name, text)
+
+    def _append_chat(self, sender: str, text: str) -> None:
+        """Append a chat message to the log/chat textbox."""
+        self.log(f"[{sender}] {text}")
+
+    def _on_chat_received(self, sender: str, text: str) -> None:
+        """TCP callback: chat message received."""
+        self._append_chat(sender, text)
+
+    def _on_kicked(self, reason: str) -> None:
+        """TCP callback (joiner): kicked from lobby."""
+        self.log(f"Kicked from lobby: {reason}")
+        self._lobby_client = None
+        self._clear_remote_players()
+        self.primary_btn.configure(text="JOIN GAME", fg_color=COLOR_READY, state="normal")
+
+    def _kick_player(self, player_id: int) -> None:
+        """Host kicks a player from the lobby."""
+        if self._lobby_server:
+            info = self._remote_players.get(player_id)
+            name = info["name"] if info else "?"
+            self._lobby_server.kick_player(player_id)
+            self.log(f"Kicked player: {name}")
+
+    def _on_game_state_received(self, state: dict[str, Any]) -> None:
+        """TCP callback (joiner): full game state from host."""
+        # Handle partial player updates
+        if "player_update" in state:
+            return  # For now, we only care about full state updates
+
+        # Update map display and check if joiner has the map
+        if "map_name" in state:
+            map_name = state["map_name"]
+            map_folder = state.get("map_folder", "")
+            if hasattr(self, "header_label"):
+                self.header_label.configure(text=f"Map: {map_name}")
+            # Check if joiner has this map
+            if map_folder:
+                has_map = any(m.folder_name == map_folder for m in getattr(self, "_all_maps", []))
+                if not has_map:
+                    self.log(f"WARNING: You don't have map '{map_name}' — game may fail!")
+
+        # Update game options display
+        if "game_options" in state:
+            for key, val in state["game_options"].items():
+                if key in self.game_option_vars:
+                    self.game_option_vars[key].set(val)
+
+        # Update AI slots display for joiner
+        if "ai_slots" in state:
+            self._apply_remote_ai_slots(state["ai_slots"])
+
+        # Update player list
+        if "players" in state:
+            for p in state["players"]:
+                pid = p.get("player_id", 0)
+                if pid and pid not in self._remote_players:
+                    self._add_remote_human_slot(
+                        pid, p["name"], p.get("faction", "random"), p["slot"]
+                    )
+
+    # ------------------------------------------------------------------
+    # Game state snapshot (host builds this for joiners)
+    # ------------------------------------------------------------------
+
+    def _build_game_state(self) -> dict[str, Any] | None:
+        """Capture the full game configuration for broadcasting to joiners."""
+        if not hasattr(self, "game_option_vars"):
+            return None
+        active_map = prefs.get_active_map()
+        # Find display name for the map
+        map_display = active_map
+        for m in getattr(self, "_all_maps", []):
+            if m.folder_name == active_map:
+                map_display = m.display_name
+                break
+
+        return {
+            "map_folder": active_map,
+            "map_name": map_display,
+            "game_options": self.get_game_options(),
+            "ai_slots": self.get_ai_opponents(),
+            "players": self._lobby_server.connected_players if self._lobby_server else [],
+        }
+
+    def _validate_before_launch(self) -> list[str]:
+        """Check pre-launch conditions. Returns list of error strings (empty = OK)."""
+        errors: list[str] = []
+        # Check map is selected
+        active_map = prefs.get_active_map()
+        if not active_map:
+            errors.append("No map selected")
+        # Check all remote players are ready (multiplayer only)
+        not_ready = [
+            info["name"] for info in self._remote_players.values() if not info.get("ready", False)
+        ]
+        if not_ready:
+            errors.append(f"{', '.join(not_ready)} not ready")
+        # Check WOPC deployment is intact
+        if not (config.WOPC_BIN / config.GAME_EXE).exists():
+            errors.append("WOPC not deployed — run Install first")
+        # Check manifest exists for multiplayer (warns only, doesn't block)
+        manifest_path = config.WOPC_ROOT / "manifest.json"
+        if self._remote_players and not manifest_path.exists():
+            self.log("TIP: Run 'wopc manifest' to generate file hashes for desync prevention")
+        return errors
+
+    def _broadcast_game_state(self) -> None:
+        """Send the current game state to all connected joiners."""
+        if not self._lobby_server or not self._lobby_server.is_running:
+            return
+        state = self._build_game_state()
+        if state:
+            self._lobby_server.broadcast_state(state)
+
+    def _apply_remote_ai_slots(self, ai_slots: list[dict[str, Any]]) -> None:
+        """Update the joiner's AI slot display to match host's config."""
+        # Remove existing AI slots
+        while len(self.player_slots) > 1:
+            slot = self.player_slots.pop()
+            for w in slot["widgets"]:
+                w.destroy()
+        # Disable add button for joiners
+        if hasattr(self, "add_slot_btn"):
+            self.add_slot_btn.configure(state="disabled")
+        # Add read-only rows for each AI the host has configured
+        for ai in ai_slots:
+            row = len(self.player_slots) + len(self._remote_players)
+            widgets: list[Any] = []
+            slot_num = len(self.player_slots) + 1
+            lbl = ctk.CTkLabel(
+                self.slots_scroll,
+                text=str(slot_num),
+                width=20,
+                text_color=COLOR_TEXT_MUTED,
+                font=ctk.CTkFont(size=12),
+            )
+            lbl.grid(row=row, column=0, padx=(0, 5), pady=2)
+            widgets.append(lbl)
+
+            name_lbl = ctk.CTkLabel(
+                self.slots_scroll,
+                text=ai.get("name", "AI"),
+                text_color=COLOR_TEXT_MUTED,
+                font=ctk.CTkFont(size=12),
+                anchor="w",
+            )
+            name_lbl.grid(row=row, column=1, sticky="w", pady=2)
+            widgets.append(name_lbl)
+
+            faction_lbl = ctk.CTkLabel(
+                self.slots_scroll,
+                text=ai.get("faction", "random").capitalize(),
+                text_color=COLOR_TEXT_MUTED,
+                font=ctk.CTkFont(size=11),
+            )
+            faction_lbl.grid(row=row, column=2, padx=5, pady=2)
+            widgets.append(faction_lbl)
+
+            team_lbl = ctk.CTkLabel(
+                self.slots_scroll,
+                text=str(ai.get("team", 2)),
+                text_color=COLOR_TEXT_MUTED,
+                font=ctk.CTkFont(size=11),
+                width=50,
+            )
+            team_lbl.grid(row=row, column=3, padx=5, pady=2)
+            widgets.append(team_lbl)
+
+            spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
+            spacer.grid(row=row, column=4, pady=2)
+            widgets.append(spacer)
+
+            self.player_slots.append({"type": "ai_remote", "widgets": widgets})
+
     # ------------------------------------------------------------------
     # Remote player display
     # ------------------------------------------------------------------
@@ -1056,10 +1304,30 @@ class WopcApp(BaseApp):  # type: ignore
         ready_lbl.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(ready_lbl)
 
-        # Empty column 4 (no remove button for remote players)
-        spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
-        spacer.grid(row=row, column=4, pady=2)
-        widgets.append(spacer)
+        # Kick button (host only) or spacer
+        mode = self.mode_var.get()
+        if mode == "HOST":
+            pid_capture = player_id
+
+            def kick_this(pid=pid_capture) -> None:
+                self._kick_player(pid)
+
+            kick_btn = ctk.CTkButton(
+                self.slots_scroll,
+                text="✕",
+                width=24,
+                height=24,
+                fg_color="transparent",
+                hover_color="#ED4245",
+                text_color=COLOR_TEXT_MUTED,
+                command=kick_this,
+            )
+            kick_btn.grid(row=row, column=4, pady=2)
+            widgets.append(kick_btn)
+        else:
+            spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
+            spacer.grid(row=row, column=4, pady=2)
+            widgets.append(spacer)
 
         self._remote_players[player_id] = {
             "name": name,
@@ -1102,8 +1370,10 @@ class WopcApp(BaseApp):  # type: ignore
             return
         port = int(self.port_entry.get() or "15000")
         prefs.set_host_port(str(port))
-        callbacks = self._make_lobby_callbacks()
-        self._lobby_server = LobbyServer(port, callbacks)
+        callbacks = self._make_lobby_callbacks(is_host=True)
+        self._lobby_server = LobbyServer(
+            port, callbacks, game_state_provider=self._build_game_state
+        )
         try:
             self._lobby_server.start()
             self.log(f"Lobby server started on port {port}")
@@ -1288,7 +1558,12 @@ class WopcApp(BaseApp):  # type: ignore
             if not self._lobby_server or not self._lobby_server.is_running:
                 self._start_lobby_server()
                 return
-            # Server running — broadcast launch to all peers, then launch SCFA
+            # Pre-launch validation
+            errors = self._validate_before_launch()
+            if errors:
+                for err in errors:
+                    self.log(f"Cannot launch: {err}")
+                return
             n_remote = len(self._remote_players)
             prefs.set_expected_humans(1 + n_remote)
             host_port = self.port_entry.get() or "15000"
