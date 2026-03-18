@@ -6,7 +6,8 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 
 **Before doing ANY work in a new session, read these files:**
 1. `C:\Users\roskv\wopc\.claude\CLAUDE.md` — this file (code standards, architecture)
-2. `C:\Users\roskv\wopc\.claude\QUICKSTART_STATE.md` — session recovery breadcrumbs
+2. `C:\Users\roskv\wopc\.claude\SCFA_ENGINE_REFERENCE.md` — SCFA engine API reference (moho methods, callbacks, Lua dialect, VFS)
+3. `C:\Users\roskv\wopc\.claude\QUICKSTART_STATE.md` — session recovery breadcrumbs
 3. `C:\Users\roskv\wopc\docs\architecture.md` — system architecture and VFS design
 4. `C:\Users\roskv\wopc\docs\plan.md` — current implementation plan (what are we working on?)
 5. `C:\Users\roskv\wopc\docs\utils-list.md` — available developer utilities

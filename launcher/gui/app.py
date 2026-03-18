@@ -1,9 +1,11 @@
 import logging
 import sys
 import threading
+import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from launcher import map_scanner, mods
+from launcher.lobby import LobbyCallbacks, LobbyClient, LobbyServer
 
 if TYPE_CHECKING:
     import customtkinter as ctk  # type: ignore[import-untyped,import-not-found]
@@ -68,6 +70,11 @@ class WopcApp(BaseApp):  # type: ignore
 
     def __init__(self) -> None:
         super().__init__()
+
+        # Lobby networking state
+        self._lobby_server: LobbyServer | None = None
+        self._lobby_client: LobbyClient | None = None
+        self._remote_players: dict[int, dict[str, Any]] = {}
 
         self.title("WOPC - Match Lobby")
         self.geometry("1024x768")
@@ -190,6 +197,21 @@ class WopcApp(BaseApp):  # type: ignore
             self.address_entry.insert(0, saved_addr)
         self.address_entry.bind(
             "<FocusOut>", lambda e: prefs.set_join_address(self.address_entry.get())
+        )
+
+        # Expected Players dropdown (HOST mode only)
+        self.expected_label = ctk.CTkLabel(
+            self.mode_widgets_frame, text="Expected Players:", text_color=COLOR_TEXT_MUTED
+        )
+        saved_expected = str(prefs.get_expected_humans())
+        self.expected_var = ctk.StringVar(value=saved_expected)
+        self.expected_menu = ctk.CTkOptionMenu(
+            self.mode_widgets_frame,
+            values=["2", "3", "4", "5", "6", "7", "8"],
+            variable=self.expected_var,
+            command=self._on_expected_humans_change,
+            width=80,
+            height=28,
         )
 
         self._update_mode_widgets()
@@ -880,14 +902,281 @@ class WopcApp(BaseApp):  # type: ignore
         "JOIN": "JOIN GAME",
     }
 
+    def _on_expected_humans_change(self, value: str) -> None:
+        """Persist expected humans preference when dropdown changes."""
+        prefs.set_expected_humans(int(value))
+
+    # ------------------------------------------------------------------
+    # Lobby networking callbacks
+    # ------------------------------------------------------------------
+
+    def _make_lobby_callbacks(self) -> LobbyCallbacks:
+        """Create callbacks that marshal onto the GUI thread via self.after()."""
+        return LobbyCallbacks(
+            on_player_joined=lambda pid, name, faction, slot: self.after(
+                0, self._on_player_joined, pid, name, faction, slot
+            ),
+            on_player_left=lambda pid: self.after(0, self._on_player_left, pid),
+            on_ready_changed=lambda pid, ready: self.after(0, self._on_ready_changed, pid, ready),
+            on_launch=lambda host_port: self.after(0, self._on_lobby_launch, host_port),
+            on_connected=lambda: self.after(0, self._on_lobby_connected),
+            on_disconnected=lambda reason: self.after(0, self._on_lobby_disconnected, reason),
+            on_error=lambda err: self.after(0, self._on_lobby_error, err),
+        )
+
+    def _on_player_joined(self, player_id: int, name: str, faction: str, slot: int) -> None:
+        """TCP callback: add or update remote human in player slots panel."""
+        if player_id in self._remote_players:
+            # Update existing player (e.g. faction change)
+            info = self._remote_players[player_id]
+            info["name"] = name
+            info["faction"] = faction
+            info["slot"] = slot
+            if "name_lbl" in info:
+                info["name_lbl"].configure(text=name)
+            if "faction_lbl" in info:
+                info["faction_lbl"].configure(text=faction.capitalize())
+            return
+        self._add_remote_human_slot(player_id, name, faction, slot)
+        self._update_host_button_text()
+        self.log(f"Player joined: {name} (slot {slot})")
+
+    def _on_player_left(self, player_id: int) -> None:
+        """TCP callback: remove remote human from player slots panel."""
+        info = self._remote_players.pop(player_id, None)
+        if info:
+            for w in info.get("widgets", []):
+                w.destroy()
+            self._update_host_button_text()
+            self.log(f"Player left: {info.get('name', '?')}")
+
+    def _on_ready_changed(self, player_id: int, ready: bool) -> None:
+        """TCP callback: update ready indicator for remote player."""
+        info = self._remote_players.get(player_id)
+        if info and "ready_lbl" in info:
+            info["ready"] = ready
+            info["ready_lbl"].configure(
+                text="✓" if ready else "—",
+                text_color=COLOR_READY if ready else COLOR_TEXT_MUTED,
+            )
+
+    def _on_lobby_launch(self, host_port: str) -> None:
+        """TCP callback (joiner): host says launch — start SCFA in join mode."""
+        self.log(f"Host launched! Starting game (host port: {host_port})...")
+        # Build join address from the lobby client's host + the game port
+        if self._lobby_client:
+            join_addr = f"{self._lobby_client.host_address}:{host_port}"
+            prefs.set_join_address(join_addr)
+            self._lobby_client.disconnect()
+            self._lobby_client = None
+        # Launch with a small delay to let the host bind the game port first
+        self.primary_btn.configure(text="LAUNCHING...", state="disabled")
+
+        def _delayed_launch() -> None:
+            time.sleep(2)
+            ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
+            game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
+            ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options)
+            if ret == 0:
+                self.log("Game process started successfully.")
+            else:
+                self.log("Game failed to launch.")
+            self.after(0, lambda: self.primary_btn.configure(text="JOIN GAME", state="normal"))
+
+        threading.Thread(target=_delayed_launch, daemon=True).start()
+
+    def _on_lobby_connected(self) -> None:
+        """TCP callback (joiner): connected to host."""
+        self.log("Connected to host lobby!")
+        self.primary_btn.configure(text="READY", fg_color=COLOR_ACCENT)
+
+    def _on_lobby_disconnected(self, reason: str) -> None:
+        """TCP callback: connection lost."""
+        self.log(f"Disconnected: {reason}")
+        self._lobby_client = None
+        self._clear_remote_players()
+        mode = self.mode_var.get()
+        if mode == "JOIN":
+            self.primary_btn.configure(text="JOIN GAME", fg_color=COLOR_READY, state="normal")
+
+    def _on_lobby_error(self, error: str) -> None:
+        """TCP callback: connection error."""
+        self.log(f"Lobby error: {error}")
+        self._lobby_client = None
+        self._clear_remote_players()
+        mode = self.mode_var.get()
+        if mode == "JOIN":
+            self.primary_btn.configure(text="JOIN GAME", fg_color=COLOR_READY, state="normal")
+
+    # ------------------------------------------------------------------
+    # Remote player display
+    # ------------------------------------------------------------------
+
+    def _add_remote_human_slot(self, player_id: int, name: str, faction: str, slot: int) -> None:
+        """Insert a row in player slots for a remote human player."""
+        row = len(self.player_slots) + len(self._remote_players)
+        widgets: list[Any] = []
+
+        slot_lbl = ctk.CTkLabel(
+            self.slots_scroll,
+            text=str(slot),
+            width=20,
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
+        )
+        slot_lbl.grid(row=row, column=0, padx=(0, 5), pady=2)
+        widgets.append(slot_lbl)
+
+        name_lbl = ctk.CTkLabel(
+            self.slots_scroll,
+            text=name,
+            text_color=COLOR_ACCENT,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        )
+        name_lbl.grid(row=row, column=1, sticky="w", pady=2)
+        widgets.append(name_lbl)
+
+        faction_lbl = ctk.CTkLabel(
+            self.slots_scroll,
+            text=faction.capitalize(),
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        )
+        faction_lbl.grid(row=row, column=2, padx=5, pady=2)
+        widgets.append(faction_lbl)
+
+        ready_lbl = ctk.CTkLabel(
+            self.slots_scroll,
+            text="—",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            width=50,
+        )
+        ready_lbl.grid(row=row, column=3, padx=5, pady=2)
+        widgets.append(ready_lbl)
+
+        # Empty column 4 (no remove button for remote players)
+        spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
+        spacer.grid(row=row, column=4, pady=2)
+        widgets.append(spacer)
+
+        self._remote_players[player_id] = {
+            "name": name,
+            "faction": faction,
+            "slot": slot,
+            "ready": False,
+            "widgets": widgets,
+            "name_lbl": name_lbl,
+            "faction_lbl": faction_lbl,
+            "ready_lbl": ready_lbl,
+        }
+
+    def _clear_remote_players(self) -> None:
+        """Remove all remote player UI rows."""
+        for info in self._remote_players.values():
+            for w in info.get("widgets", []):
+                w.destroy()
+        self._remote_players.clear()
+
+    def _update_host_button_text(self) -> None:
+        """Update HOST button to show connected player count."""
+        mode = self.mode_var.get()
+        if mode != "HOST" or not self._lobby_server:
+            return
+        n_remote = len(self._remote_players)
+        expected = int(self.expected_var.get())
+        total = 1 + n_remote  # host + connected peers
+        if n_remote == 0:
+            self.primary_btn.configure(text="HOST GAME (Waiting...)")
+        else:
+            self.primary_btn.configure(text=f"LAUNCH ({total}/{expected} players)")
+
+    # ------------------------------------------------------------------
+    # Lobby lifecycle management
+    # ------------------------------------------------------------------
+
+    def _start_lobby_server(self) -> None:
+        """Start the TCP lobby server for HOST mode."""
+        if self._lobby_server and self._lobby_server.is_running:
+            return
+        port = int(self.port_entry.get() or "15000")
+        prefs.set_host_port(str(port))
+        callbacks = self._make_lobby_callbacks()
+        self._lobby_server = LobbyServer(port, callbacks)
+        try:
+            self._lobby_server.start()
+            self.log(f"Lobby server started on port {port}")
+            self._update_host_button_text()
+        except OSError as exc:
+            self.log(f"Failed to start lobby server: {exc}")
+            self._lobby_server = None
+
+    def _stop_lobby_server(self) -> None:
+        """Stop the TCP lobby server."""
+        if self._lobby_server:
+            self._lobby_server.stop()
+            self._lobby_server = None
+            self._clear_remote_players()
+            self.log("Lobby server stopped")
+
+    def _connect_lobby_client(self) -> None:
+        """Connect to a host's lobby server for JOIN mode."""
+        if self._lobby_client and self._lobby_client.is_connected:
+            return
+        raw_addr = self.address_entry.get().strip()
+        if not raw_addr:
+            self.log("ERROR: Enter a host address before joining.")
+            return
+        # Parse "host:port" or just "host" (default port 15000)
+        if ":" in raw_addr:
+            host, port_str = raw_addr.rsplit(":", 1)
+            port = int(port_str)
+        else:
+            host = raw_addr
+            port = 15000
+        prefs.set_join_address(raw_addr)
+        name = self.name_entry.get() or "Player"
+        faction = self.faction_var.get().lower()
+        callbacks = self._make_lobby_callbacks()
+        self._lobby_client = LobbyClient(host, port, name, faction, callbacks)
+        self._lobby_client.connect()
+        self.primary_btn.configure(text="CONNECTING...", state="disabled")
+        self.log(f"Connecting to {host}:{port}...")
+
+    def _disconnect_lobby_client(self) -> None:
+        """Disconnect from the host's lobby."""
+        if self._lobby_client:
+            self._lobby_client.disconnect()
+            self._lobby_client = None
+            self._clear_remote_players()
+
     def _on_mode_change(self, mode: str) -> None:
         """Respond to the SOLO / HOST / JOIN segmented button."""
+        old_mode = prefs.get_launch_mode().upper()
         prefs.set_launch_mode(mode.lower())
         self._update_mode_widgets()
+
+        # Stop previous lobby connections on mode switch
+        if old_mode == "HOST" and mode != "HOST":
+            self._stop_lobby_server()
+        if old_mode == "JOIN" and mode != "JOIN":
+            self._disconnect_lobby_client()
+
+        # Start lobby server when switching to HOST
+        if mode == "HOST":
+            self._start_lobby_server()
+
         # Update the play button text (only when installation is ready)
         btn_text = self.primary_btn.cget("text")
-        if btn_text in self._PLAY_LABELS.values():
-            self.primary_btn.configure(text=self._PLAY_LABELS.get(mode, "PLAY MATCH"))
+        play_labels = set(self._PLAY_LABELS.values())
+        transitional = {"CONNECTING...", "READY", "LAUNCHING...", "HOST GAME (Waiting...)"}
+        if btn_text in play_labels or btn_text in transitional or "LAUNCH (" in btn_text:
+            self.primary_btn.configure(
+                text=self._PLAY_LABELS.get(mode, "PLAY MATCH"),
+                fg_color=COLOR_READY,
+                state="normal",
+            )
 
     def _update_mode_widgets(self) -> None:
         """Show/hide conditional inputs for the current launch mode."""
@@ -898,10 +1187,14 @@ class WopcApp(BaseApp):  # type: ignore
         self.port_entry.grid_forget()
         self.address_label.grid_forget()
         self.address_entry.grid_forget()
+        self.expected_label.grid_forget()
+        self.expected_menu.grid_forget()
 
         if mode == "HOST":
             self.port_label.grid(row=0, column=0, sticky="w", pady=(5, 0))
             self.port_entry.grid(row=1, column=0, sticky="ew", pady=(0, 5))
+            self.expected_label.grid(row=2, column=0, sticky="w", pady=(5, 0))
+            self.expected_menu.grid(row=3, column=0, sticky="w", pady=(0, 5))
         elif mode == "JOIN":
             self.address_label.grid(row=0, column=0, sticky="w", pady=(5, 0))
             self.address_entry.grid(row=1, column=0, sticky="ew", pady=(0, 5))
@@ -981,20 +1274,54 @@ class WopcApp(BaseApp):  # type: ignore
         """Handle main button action depending on current state."""
         btn_text = self.primary_btn.cget("text")
 
-        if btn_text in self._PLAY_LABELS.values():
-            mode = self.mode_var.get()
-            # Validate JOIN address before launching
-            if mode == "JOIN" and not self.address_entry.get().strip():
-                self.log("ERROR: Enter a host address before joining.")
-                return
-            self.log(f"Launching game ({mode.lower()} mode)...")
-            threading.Thread(target=self._launch_game, daemon=True).start()
-
-        elif btn_text == "INSTALL / UPDATE":
+        if btn_text == "INSTALL / UPDATE":
             self.log("Starting asynchronous installation...")
             self.primary_btn.configure(state="disabled", text="INSTALLING...")
             worker = SetupWorker(on_complete=self._on_setup_complete, on_log=self.log)
             worker.start()
+            return
+
+        mode = self.mode_var.get()
+
+        # --- HOST mode ---
+        if mode == "HOST":
+            if not self._lobby_server or not self._lobby_server.is_running:
+                self._start_lobby_server()
+                return
+            # Server running — broadcast launch to all peers, then launch SCFA
+            n_remote = len(self._remote_players)
+            prefs.set_expected_humans(1 + n_remote)
+            host_port = self.port_entry.get() or "15000"
+            self._lobby_server.broadcast_launch(host_port)
+            self.log(f"Broadcasting launch to {n_remote} peer(s)...")
+            self.primary_btn.configure(text="LAUNCHING...", state="disabled")
+            threading.Thread(target=self._launch_game_and_cleanup, daemon=True).start()
+            return
+
+        # --- JOIN mode ---
+        if mode == "JOIN":
+            if not self._lobby_client or not self._lobby_client.is_connected:
+                # Not connected yet — connect
+                self._connect_lobby_client()
+                return
+            # Connected — toggle ready state
+            # Check if we're currently "READY" vs just connected
+            if btn_text == "READY":
+                self._lobby_client.send_ready(True)
+                self.primary_btn.configure(
+                    text="UNREADY", fg_color="#ED4245", hover_color="#C53030"
+                )
+            elif btn_text == "UNREADY":
+                self._lobby_client.send_ready(False)
+                self.primary_btn.configure(
+                    text="READY", fg_color=COLOR_ACCENT, hover_color="#4752C4"
+                )
+            return
+
+        # --- SOLO mode (default) ---
+        if btn_text in self._PLAY_LABELS.values():
+            self.log("Launching game (solo mode)...")
+            threading.Thread(target=self._launch_game, daemon=True).start()
 
     def _on_setup_complete(self, success: bool) -> None:
         """Callback executed when the SetupWorker finishes."""
@@ -1016,17 +1343,8 @@ class WopcApp(BaseApp):  # type: ignore
         self.after(0, _update)
 
     def _launch_game(self) -> None:
-        """Run the game in a background thread."""
-        # Persist any unsaved widget values before launch
-        mode = self.mode_var.get()
-        if mode == "HOST":
-            prefs.set_host_port(self.port_entry.get())
-        elif mode == "JOIN":
-            prefs.set_join_address(self.address_entry.get())
-        if hasattr(self, "name_entry"):
-            prefs.set_player_name(self.name_entry.get())
-
-        # Collect player slots and game options from the UI
+        """Run the game in a background thread (solo mode)."""
+        self._persist_widget_values()
         ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
         game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
 
@@ -1035,6 +1353,44 @@ class WopcApp(BaseApp):  # type: ignore
             self.log("Game process started successfully.")
         else:
             self.log("Game failed to launch.")
+
+    def _launch_game_and_cleanup(self) -> None:
+        """Run the game in a background thread (host mode), then stop lobby server."""
+        self._persist_widget_values()
+        ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
+        game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
+
+        ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options)
+        if ret == 0:
+            self.log("Game process started successfully.")
+        else:
+            self.log("Game failed to launch.")
+
+        # Give peers a moment to receive the Launch message, then stop server
+        time.sleep(3)
+        self.after(0, self._stop_lobby_server)
+        self.after(
+            0,
+            lambda: self.primary_btn.configure(
+                text="HOST GAME", fg_color=COLOR_READY, state="normal"
+            ),
+        )
+
+    def _persist_widget_values(self) -> None:
+        """Save any unsaved widget values to prefs before launching."""
+        mode = self.mode_var.get()
+        if mode == "HOST":
+            prefs.set_host_port(self.port_entry.get())
+        elif mode == "JOIN":
+            prefs.set_join_address(self.address_entry.get())
+        if hasattr(self, "name_entry"):
+            prefs.set_player_name(self.name_entry.get())
+
+    def destroy(self) -> None:
+        """Clean up lobby connections before closing the window."""
+        self._stop_lobby_server()
+        self._disconnect_lobby_client()
+        super().destroy()
 
 
 def launch_gui() -> None:
