@@ -161,6 +161,17 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
     LOG("WOPC QuickStart: Map = " .. tostring(cfg.ScenarioFile))
     LOG("WOPC QuickStart: Players = " .. table.getn(cfg.Players))
 
+    -- Multiplayer dispatch: if ExpectedHumans > 1, delegate to multilobby.lua.
+    -- multilobby handles P2P connection setup via LobbyComm, then auto-launches.
+    -- Note: joiners enter via JoinLaunch() below, not here — this path is host-only.
+    local expectedHumans = cfg.ExpectedHumans or 1
+    if expectedHumans > 1 then
+        LOG("WOPC QuickStart: Multiplayer host mode — dispatching to multilobby.lua (ExpectedHumans=" .. expectedHumans .. ")")
+        local multilobby = import("/lua/wopc/multilobby.lua")
+        multilobby.HostGame(cfg, protocol, port, playerName, gameName, mapFile, natTraversalProvider)
+        return
+    end
+
     -- Validate the scenario file exists
     local MapUtil = import("/lua/ui/maputil.lua")
     local scenarioInfo = MapUtil.LoadScenario(cfg.ScenarioFile)
@@ -218,4 +229,38 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
         -- Just log the error; the user will see the error in WOPC.log.
         LOG("WOPC QuickStart: Cannot recover. Check WOPC.log for details.")
     end
+end
+
+--- Joiner entry point — called from uimain.lua's StartJoinLobbyUI when
+--- /wopcquickstart is on the command line.
+---@param protocol string
+---@param address string     Host address (ip:port)
+---@param playerName string
+---@param natTraversalProvider userdata?
+function JoinLaunch(protocol, address, playerName, natTraversalProvider)
+    LOG("WOPC QuickStart: JoinLaunch — loading config for join mode...")
+
+    local configArg = GetCommandLineArg("/wopcconfig", 1)
+    if not configArg then
+        LOG("WOPC QuickStart: ERROR — /wopcconfig not on command line")
+        -- Fall back to standard join lobby
+        local lobby = import("/lua/ui/lobby/lobby.lua")
+        lobby.CreateLobby(protocol, 0, playerName, nil, natTraversalProvider, GetFrame(0),
+            import("/lua/ui/uimain.lua").StartFrontEndUI)
+        lobby.JoinGame(address, false)
+        return
+    end
+
+    local configPath = configArg[1]
+    LOG("WOPC QuickStart: Config path = " .. tostring(configPath))
+    local ok, cfg = pcall(dofile, configPath)
+    if not ok or not cfg then
+        LOG("WOPC QuickStart: Failed to load config: " .. tostring(cfg))
+        return
+    end
+
+    -- Always dispatch to multilobby for join mode
+    LOG("WOPC QuickStart: Joining multiplayer game at " .. tostring(address))
+    local multilobby = import("/lua/wopc/multilobby.lua")
+    multilobby.JoinGame(cfg, protocol, address, playerName, natTraversalProvider)
 end

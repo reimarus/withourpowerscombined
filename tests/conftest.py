@@ -122,6 +122,9 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "LOUD_ROOT": loud_root,
         "LOUD_GAMEDATA": loud_gamedata,
         "LOUD_SOUNDS": loud_sounds,
+        "LOUD_TEXTURES_SCD": loud_gamedata / "textures.scd",
+        "CONTENT_ICONS_SCD": "content_icons.scd",
+        "CONTENT_ICONS_URL": "https://example.com/content_icons.scd",
     }
 
     with patch.multiple("launcher.config", **config_patches):  # type: ignore[call-overload]

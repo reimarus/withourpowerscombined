@@ -3,6 +3,7 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from launcher import mods, prefs
 from launcher.config import (
@@ -122,8 +123,41 @@ def cmd_setup() -> int:
     return 0
 
 
-def cmd_launch() -> int:
-    """Launch the game from the WOPC directory."""
+def _resolve_map_vfs_path(active_map: str) -> str | None:
+    """Convert a map folder name to a VFS scenario path.
+
+    Returns e.g. ``/maps/Caldera/Caldera_scenario.lua`` or None.
+    """
+    if not active_map:
+        return None
+    map_dir = WOPC_MAPS / active_map
+    if map_dir.exists():
+        for f in map_dir.iterdir():
+            if f.name.endswith("_scenario.lua"):
+                return f"/maps/{active_map}/{f.name}"
+    logger.warning("Could not find _scenario.lua in %s", map_dir)
+    return None
+
+
+def cmd_launch(
+    ai_opponents: list[dict[str, Any]] | None = None,
+    game_options: dict[str, str] | None = None,
+) -> int:
+    """Launch the game from the WOPC directory.
+
+    Supports three launch modes (configured in prefs):
+    - **solo**: Quickstart bypass — 1 human + AI, no lobby UI.
+    - **host**: Opens FAF's interactive lobby where friends can join.
+    - **join**: Connects to a friend's hosted lobby.
+
+    Parameters
+    ----------
+    ai_opponents:
+        Optional list of AI opponent dicts for solo mode.
+        If None, a single medium AI is used (game_config default).
+    game_options:
+        Optional dict of game option overrides for solo mode.
+    """
     exe_path = WOPC_BIN / GAME_EXE
 
     if not exe_path.exists():
@@ -137,6 +171,9 @@ def cmd_launch() -> int:
     init_path = generate_init_lua()
     logger.info("Regenerated %s", init_path)
 
+    launch_mode = prefs.get_launch_mode()
+    player_name = prefs.get_player_name()
+
     cmd = [
         str(exe_path),
         "/init",
@@ -147,50 +184,74 @@ def cmd_launch() -> int:
     ]
 
     active_map = prefs.get_active_map()
-    vfs_path = None
-    if active_map:
-        # Find the _scenario.lua file inside the map directory
-        map_dir = WOPC_MAPS / active_map
-        scenario_file = None
-        if map_dir.exists():
-            for f in map_dir.iterdir():
-                if f.name.endswith("_scenario.lua"):
-                    scenario_file = f.name
-                    break
-
-        if scenario_file:
-            # The engine expects the VFS path, which is /maps/<folder>/<scenario.lua>
-            vfs_path = f"/maps/{active_map}/{scenario_file}"
-        else:
-            logger.warning("Could not find _scenario.lua in %s", map_dir)
-
-    # Collect all active mod UIDs: server mods (always active) + enabled user mods.
-    # Single source of truth — mods.py resolves everything by UID.
     all_mod_uids = mods.get_active_mod_uids()
 
-    if vfs_path:
-        # Write the game config for quickstart.lua to read at runtime.
-        # This includes player info, AI opponents, active mods, and game options.
-        player_name = prefs.get_player_name()
+    if launch_mode == "join":
+        # Join mode: connect to host's game via SCFA UDP.
+        # Our launcher's TCP lobby already coordinated everything —
+        # we just need to launch SCFA with /joingame and quickstart config.
+        join_address = prefs.get_join_address()
+        if not join_address:
+            logger.error("ERROR: No host address configured. Set join_address in prefs.")
+            return 1
+        player_faction = prefs.get_player_faction()
+        expected_humans = prefs.get_expected_humans()
+        # Joiner writes minimal config (just faction + multiplayer flags)
+        config_path = write_game_config(
+            scenario_file="",  # host provides the map
+            player_name=player_name,
+            player_faction=player_faction,
+            ai_opponents=[],
+            active_mod_uids=all_mod_uids,
+            expected_humans=expected_humans,
+            is_host=False,
+        )
+        logger.info("Wrote game config: %s", config_path)
+        cmd.extend(
+            [
+                "/joingame",
+                "udp",
+                join_address,
+                player_name,
+                "/wopcquickstart",
+                "/wopcconfig",
+                str(config_path),
+            ]
+        )
+        logger.info("Launching WOPC (join mode)...")
+        logger.info("  Connecting to: %s", join_address)
+
+    elif launch_mode == "host":
+        # Host mode: launch SCFA with /hostgame + quickstart.
+        # Our launcher's TCP lobby coordinated players — SCFA handles
+        # the UDP P2P networking via multilobby.lua.
+        vfs_path = _resolve_map_vfs_path(active_map)
+        if not vfs_path:
+            logger.error("ERROR: No map selected — cannot host.")
+            return 1
+        host_port = prefs.get_host_port()
+        expected_humans = prefs.get_expected_humans()
         player_faction = prefs.get_player_faction()
         minimap_enabled = prefs.get_minimap_enabled()
+        merged_options: dict[str, str] = {"minimap_enabled": str(minimap_enabled)}
+        if game_options:
+            merged_options.update(game_options)
         config_path = write_game_config(
             scenario_file=vfs_path,
             player_name=player_name,
             player_faction=player_faction,
-            game_options={"minimap_enabled": str(minimap_enabled)},
+            ai_opponents=ai_opponents,
+            game_options=merged_options,
             active_mod_uids=all_mod_uids,
+            expected_humans=expected_humans,
+            is_host=True,
         )
         logger.info("Wrote game config: %s", config_path)
-
-        # Use /hostgame to trigger StartHostLobbyUI in the engine.
-        # Our uimain.lua override checks for /wopcquickstart and
-        # bypasses the lobby UI, launching directly into the game.
         cmd.extend(
             [
                 "/hostgame",
                 "udp",
-                "15000",
+                host_port,
                 player_name,
                 "WOPC",
                 vfs_path,
@@ -199,14 +260,48 @@ def cmd_launch() -> int:
                 str(config_path),
             ]
         )
-    else:
-        logger.warning("No map selected — launching to main menu")
+        logger.info("Launching WOPC (host mode)...")
+        logger.info("  Hosting on port: %s", host_port)
 
-    logger.info("Launching WOPC...")
+    else:
+        # Solo mode: quickstart bypass (existing behavior).
+        vfs_path = _resolve_map_vfs_path(active_map)
+        if vfs_path:
+            player_faction = prefs.get_player_faction()
+            minimap_enabled = prefs.get_minimap_enabled()
+            merged_options_solo: dict[str, str] = {"minimap_enabled": str(minimap_enabled)}
+            if game_options:
+                merged_options_solo.update(game_options)
+            config_path = write_game_config(
+                scenario_file=vfs_path,
+                player_name=player_name,
+                player_faction=player_faction,
+                ai_opponents=ai_opponents,
+                game_options=merged_options_solo,
+                active_mod_uids=all_mod_uids,
+            )
+            logger.info("Wrote game config: %s", config_path)
+            cmd.extend(
+                [
+                    "/hostgame",
+                    "udp",
+                    "15000",
+                    player_name,
+                    "WOPC",
+                    vfs_path,
+                    "/wopcquickstart",
+                    "/wopcconfig",
+                    str(config_path),
+                ]
+            )
+        else:
+            logger.warning("No map selected — launching to main menu")
+        logger.info("Launching WOPC (solo mode)...")
+
     logger.info("  Exe:  %s", exe_path)
     logger.info("  Init: %s", init_path)
     logger.info("  Log:  %s", WOPC_BIN / GAME_LOG)
-    if active_map:
+    if active_map and launch_mode != "join":
         logger.info("  Map:  %s", active_map)
     if all_mod_uids:
         logger.info("  Mods: %s", ", ".join(all_mod_uids))
@@ -396,7 +491,7 @@ def main() -> int:
         return cmd_patch(cmd_args)
 
     if cmd in commands:
-        return commands[cmd]()
+        return commands[cmd]()  # type: ignore[no-any-return, operator]
     else:
         logger.error("Unknown command: %s", cmd)
         logger.info(HELP_TEXT)

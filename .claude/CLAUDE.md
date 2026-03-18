@@ -6,7 +6,8 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 
 **Before doing ANY work in a new session, read these files:**
 1. `C:\Users\roskv\wopc\.claude\CLAUDE.md` — this file (code standards, architecture)
-2. `C:\Users\roskv\wopc\.claude\QUICKSTART_STATE.md` — session recovery breadcrumbs
+2. `C:\Users\roskv\wopc\.claude\SCFA_ENGINE_REFERENCE.md` — SCFA engine API reference (moho methods, callbacks, Lua dialect, VFS)
+3. `C:\Users\roskv\wopc\.claude\QUICKSTART_STATE.md` — session recovery breadcrumbs
 3. `C:\Users\roskv\wopc\docs\architecture.md` — system architecture and VFS design
 4. `C:\Users\roskv\wopc\docs\plan.md` — current implementation plan (what are we working on?)
 5. `C:\Users\roskv\wopc\docs\utils-list.md` — available developer utilities
@@ -102,13 +103,13 @@ C:\Users\roskv\wopc\          (repo)
     deploy.py                  Creates C:\ProgramData\WOPC\ game directory
     game_config.py             Generates wopc_game_config.lua (quickstart config)
     init_generator.py          init_wopc.lua template (delegates to mods.py)
-    prefs.py                   INI infrastructure (map, player, display prefs)
+    prefs.py                   INI prefs (map, player, display, launch mode)
     log.py                     Logging configuration
     toolchain.py               Compiler discovery (Clang, GCC, LD)
     manifest.py                Patch manifest parsing (wopc_patches.toml)
     patcher.py                 Build orchestration for patched exe
     gui/                       GUI launcher (customtkinter)
-      app.py                   WopcApp — main window, map selector, PLAY MATCH
+      app.py                   WopcApp — main window, map selector, mode selector (SOLO/HOST/JOIN)
       worker.py                SetupWorker — async setup in background thread
       wopc.ico                 Application icon
   build_exe.py                 PyInstaller build script → dist/WOPC-Launcher.exe
@@ -187,9 +188,10 @@ quickstart.lua
 - **Phase 0** ✅ Foundation — launcher, init, CI, tests
 - **Phase 1** ✅ Game launches from WOPC directory
 - **Phase 2** ✅ FAF binary patches integration
-- **Phase 3** → WOPC Lua overlay (quickstart system done, LOUD content packaging next)
-- **Phase 4** → Multiplayer support
-- **Phase 5** → C++ pathfinding patch
+- **Phase 3** ✅ WOPC Lua overlay (quickstart system + content packs)
+- **Phase 4** 🔧 Multiplayer support (Phase 1 done: SOLO/HOST/JOIN launch modes)
+- **Phase 5** → Player slot management + game options
+- **Phase 6** → C++ pathfinding patch
 
 ## Key Technical Gotchas
 

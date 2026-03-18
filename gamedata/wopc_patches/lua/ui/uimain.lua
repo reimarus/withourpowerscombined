@@ -87,11 +87,14 @@ function StartHostLobbyUI(protocol, port, playerName, gameName, mapFile, natTrav
         return
     end
 
-    -- Standard FAF lobby flow
-    LOG("Hosting lobby from the command line")
+    -- Standard FAF lobby flow — opens the interactive lobby UI where
+    -- players can join, configure slots/factions/AI, and the host launches.
+    LOG("WOPC: Hosting lobby (interactive mode)")
     local lobby
-    -- auto lobby only works with 2+ players
-    local autoStart = GetCommandLineArg("/players", 1)[1] >= 2
+    -- Auto lobby only works with 2+ players (CLI-driven, no UI).
+    -- Guard against nil: /players is not passed in normal WOPC launches.
+    local playersArg = GetCommandLineArg("/players", 1)
+    local autoStart = playersArg and playersArg[1] >= 2
     if autoStart then
         lobby = import("/lua/ui/lobby/autolobby.lua")
     else
@@ -109,10 +112,20 @@ end
 ---@param playerName string
 ---@param natTraversalProvider userdata?
 function StartJoinLobbyUI(protocol, address, playerName, natTraversalProvider)
-    LOG("Joining lobby from the command line") -- can also be from lobby.lua ReturnToMenu(true), but that never gets called
+    -- WOPC Quick Start: bypass the lobby UI for joiner as well.
+    if HasCommandLineArg("/wopcquickstart") then
+        LOG("WOPC: Quick-start join mode — bypassing lobby UI")
+        local quickstart = import("/lua/wopc/quickstart.lua")
+        quickstart.JoinLaunch(protocol, address, playerName, natTraversalProvider)
+        return
+    end
+
+    LOG("WOPC: Joining lobby at " .. tostring(address))
     local lobby
-    -- auto lobby only works with 2+ players
-    local autoStart = GetCommandLineArg("/players", 1)[1] >= 2
+    -- Auto lobby only works with 2+ players (CLI-driven, no UI).
+    -- Guard against nil: /players is not passed in normal WOPC launches.
+    local playersArg = GetCommandLineArg("/players", 1)
+    local autoStart = playersArg and playersArg[1] >= 2
     if autoStart then
         lobby = import("/lua/ui/lobby/autolobby.lua")
     else

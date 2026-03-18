@@ -96,8 +96,15 @@ def discover_all_mods() -> list[ModInfo]:
 # Content pack management (moved from init_generator.py)
 # ---------------------------------------------------------------------------
 
+# Mods inside content pack SCDs that must NOT be extracted.
+# BlackopsACUs replaces vanilla ACUs with LOUD-specific units that depend on
+# LOUD's extended Unit base class (PlayCommanderWarpInEffect, etc.).  These
+# methods don't exist in FAF-only mode, causing cascading script errors that
+# make the commander invisible and unresponsive.
+EXCLUDED_SCD_MODS: frozenset[str] = frozenset({"BlackopsACUs"})
+
 # SCDs that are always mounted and never toggleable.
-CORE_SCDS: frozenset[str] = frozenset()
+CORE_SCDS: frozenset[str] = frozenset({config.CONTENT_ICONS_SCD})
 
 # SCDs with fixed mount positions — excluded from toggleable list.
 FIXED_POSITION_SCDS = frozenset({"faf_ui.scd"})
@@ -166,6 +173,9 @@ def extract_mods_from_scd(scd_path: Path) -> list[str]:
     discover mods inside a ZIP/SCD.  This extracts any ``mods/*/``
     subtree so mount_mods() activates hooks and blueprints.
 
+    Mods listed in :data:`EXCLUDED_SCD_MODS` are skipped (e.g.
+    BlackopsACUs which depends on LOUD base classes).
+
     Returns the list of extracted mod directory names.
     """
     config.WOPC_MODS.mkdir(parents=True, exist_ok=True)
@@ -176,7 +186,9 @@ def extract_mods_from_scd(scd_path: Path) -> list[str]:
             mod_entries = [
                 info
                 for info in zf.infolist()
-                if info.filename.startswith("mods/") and not info.is_dir()
+                if info.filename.startswith("mods/")
+                and not info.is_dir()
+                and info.filename.split("/")[1] not in EXCLUDED_SCD_MODS
             ]
             if not mod_entries:
                 return extracted
@@ -196,6 +208,16 @@ def extract_mods_from_scd(scd_path: Path) -> list[str]:
             extracted = sorted(mod_names)
             if extracted:
                 logger.info("  extracted mods: %s", ", ".join(extracted))
+
+            # Log skipped mods for transparency
+            all_mod_names = {
+                info.filename.split("/")[1]
+                for info in zf.infolist()
+                if info.filename.startswith("mods/") and info.filename.count("/") >= 2
+            }
+            skipped = sorted(all_mod_names & EXCLUDED_SCD_MODS)
+            if skipped:
+                logger.info("  skipped excluded mods: %s", ", ".join(skipped))
     except (zipfile.BadZipFile, OSError) as exc:
         logger.warning("  WARNING: could not extract mods from %s: %s", scd_path.name, exc)
 

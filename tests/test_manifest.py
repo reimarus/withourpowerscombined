@@ -63,8 +63,7 @@ class TestLoadManifest:
     def test_real_manifest_loads(self) -> None:
         """The actual wopc_patches.toml in the repo should parse successfully."""
         repo_manifest = Path(__file__).parent.parent / "wopc_patches.toml"
-        if not repo_manifest.is_file():
-            pytest.skip("wopc_patches.toml not found in repo root")
+        assert repo_manifest.is_file(), "wopc_patches.toml missing from repo root"
         m = load_manifest(repo_manifest)
         assert m.strategy == "include_all"
         assert "gpg_net.cpp" in m.exclude_hooks

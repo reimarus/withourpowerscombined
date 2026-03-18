@@ -115,6 +115,12 @@ FAF_BASE_EXE_CACHE = PATCH_BUILD_DIR / "ForgedAlliance_base.exe"
 LOUD_ROOT = SCFA_STEAM / "LOUD"
 LOUD_GAMEDATA = LOUD_ROOT / "gamedata"
 LOUD_SOUNDS = LOUD_ROOT / "sounds"
+LOUD_TEXTURES_SCD = LOUD_GAMEDATA / "textures.scd"
+
+# Auto-generated SCD containing unit icons extracted from LOUD's textures.scd.
+# This is rebuilt during `wopc setup` whenever content packs change.
+CONTENT_ICONS_SCD = "content_icons.scd"
+CONTENT_ICONS_URL = "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/content_icons.scd"
 
 # Content pack assets hosted on GitHub releases.
 # deploy.py tries local LOUD install first, then downloads from these URLs.
@@ -124,6 +130,21 @@ CONTENT_PACK_ASSETS: dict[str, dict] = {
         "sounds": {
             "blackopssb.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackopssb.xsb",
             "blackopswb.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackopswb.xwb",
+        },
+    },
+    "TotalMayhem.scd": {
+        "url": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/TotalMayhem.scd",
+        "sounds": {
+            "tm_aeonweapons.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aeonweapons.xsb",
+            "tm_aeonweaponsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aeonweaponsounds.xwb",
+            "tm_aircrafts.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aircrafts.xsb",
+            "tm_aircraftsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aircraftsounds.xwb",
+            "tm_cybranweapons.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_cybranweapons.xsb",
+            "tm_cybranweaponsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_cybranweaponsounds.xwb",
+            "tm_explosions.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_explosions.xsb",
+            "tm_explosionsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_explosionsounds.xwb",
+            "tm_uefweapons.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_uefweapons.xsb",
+            "tm_uefweaponsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_uefweaponsounds.xwb",
         },
     },
 }

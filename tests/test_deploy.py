@@ -205,15 +205,29 @@ class TestContentPackAcquisition:
         """Copies SCD from local LOUD install instead of downloading."""
         from launcher.deploy import _acquire_content_packs
 
-        # Set up a fake LOUD install with blackops.scd
+        # Set up a fake LOUD install with all content packs
         loud_gd = patched_config["LOUD_GAMEDATA"]
         loud_gd.mkdir(parents=True)
         loud_sounds = patched_config["LOUD_SOUNDS"]
         loud_sounds.mkdir(parents=True)
 
         (loud_gd / "blackops.scd").write_bytes(b"\x00" * 100)
+        (loud_gd / "TotalMayhem.scd").write_bytes(b"\x00" * 200)
         (loud_sounds / "blackopssb.xsb").write_bytes(b"\x01" * 10)
         (loud_sounds / "blackopswb.xwb").write_bytes(b"\x02" * 20)
+        for sfx in [
+            "tm_aeonweapons.xsb",
+            "tm_aeonweaponsounds.xwb",
+            "tm_aircrafts.xsb",
+            "tm_aircraftsounds.xwb",
+            "tm_cybranweapons.xsb",
+            "tm_cybranweaponsounds.xwb",
+            "tm_explosions.xsb",
+            "tm_explosionsounds.xwb",
+            "tm_uefweapons.xsb",
+            "tm_uefweaponsounds.xwb",
+        ]:
+            (loud_sounds / sfx).write_bytes(b"\x03" * 5)
 
         _acquire_content_packs()
 
@@ -221,8 +235,11 @@ class TestContentPackAcquisition:
         wopc_sounds = patched_config["WOPC_SOUNDS"]
         assert (wopc_gd / "blackops.scd").exists()
         assert (wopc_gd / "blackops.scd").stat().st_size == 100
+        assert (wopc_gd / "TotalMayhem.scd").exists()
+        assert (wopc_gd / "TotalMayhem.scd").stat().st_size == 200
         assert (wopc_sounds / "blackopssb.xsb").exists()
         assert (wopc_sounds / "blackopswb.xwb").exists()
+        assert (wopc_sounds / "tm_explosions.xsb").exists()
 
     def test_downloads_when_loud_not_installed(self, patched_config):
         """Downloads SCD from GitHub when LOUD is not available."""
@@ -233,25 +250,40 @@ class TestContentPackAcquisition:
         with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
             _acquire_content_packs()
 
-        # Should have been called for SCD + 2 sounds = 3 downloads
-        assert mock_retrieve.call_count == 3
+        # blackops: 1 SCD + 2 sounds = 3; TotalMayhem: 1 SCD + 10 sounds = 11
+        assert mock_retrieve.call_count == 14
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         assert (wopc_gd / "blackops.scd").exists()
+        assert (wopc_gd / "TotalMayhem.scd").exists()
 
     def test_skips_when_already_cached(self, patched_config):
         """Does not re-download when files already exist in WOPC."""
         from launcher.deploy import _acquire_content_packs
 
-        # Pre-populate WOPC with existing files
+        # Pre-populate WOPC with existing files for ALL content packs
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         wopc_gd.mkdir(parents=True, exist_ok=True)
         (wopc_gd / "blackops.scd").write_bytes(b"\x00" * 100)
+        (wopc_gd / "TotalMayhem.scd").write_bytes(b"\x00" * 100)
 
         wopc_sounds = patched_config["WOPC_SOUNDS"]
         wopc_sounds.mkdir(parents=True, exist_ok=True)
         (wopc_sounds / "blackopssb.xsb").write_bytes(b"\x01")
         (wopc_sounds / "blackopswb.xwb").write_bytes(b"\x02")
+        for sfx in [
+            "tm_aeonweapons.xsb",
+            "tm_aeonweaponsounds.xwb",
+            "tm_aircrafts.xsb",
+            "tm_aircraftsounds.xwb",
+            "tm_cybranweapons.xsb",
+            "tm_cybranweaponsounds.xwb",
+            "tm_explosions.xsb",
+            "tm_explosionsounds.xwb",
+            "tm_uefweapons.xsb",
+            "tm_uefweaponsounds.xwb",
+        ]:
+            (wopc_sounds / sfx).write_bytes(b"\x03")
 
         mock_retrieve = MagicMock()
         with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
@@ -271,6 +303,59 @@ class TestContentPackAcquisition:
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         assert not (wopc_gd / "blackops.scd").exists()
+
+
+class TestExcludedModCleanup:
+    """Test cleanup of previously-extracted excluded mods."""
+
+    def _prepopulate_all_packs(self, patched_config):
+        """Pre-populate all content pack files so _acquire_content_packs skips downloads."""
+        wopc_gd = patched_config["WOPC_GAMEDATA"]
+        wopc_gd.mkdir(parents=True, exist_ok=True)
+        (wopc_gd / "blackops.scd").write_bytes(b"\x00" * 100)
+        (wopc_gd / "TotalMayhem.scd").write_bytes(b"\x00" * 100)
+        wopc_sounds = patched_config["WOPC_SOUNDS"]
+        wopc_sounds.mkdir(parents=True, exist_ok=True)
+        (wopc_sounds / "blackopssb.xsb").write_bytes(b"\x01")
+        (wopc_sounds / "blackopswb.xwb").write_bytes(b"\x02")
+        for sfx in [
+            "tm_aeonweapons.xsb",
+            "tm_aeonweaponsounds.xwb",
+            "tm_aircrafts.xsb",
+            "tm_aircraftsounds.xwb",
+            "tm_cybranweapons.xsb",
+            "tm_cybranweaponsounds.xwb",
+            "tm_explosions.xsb",
+            "tm_explosionsounds.xwb",
+            "tm_uefweapons.xsb",
+            "tm_uefweaponsounds.xwb",
+        ]:
+            (wopc_sounds / sfx).write_bytes(b"\x03")
+
+    def test_removes_excluded_mod_directory(self, patched_config):
+        """Removes BlackopsACUs from WOPC/mods/ during content pack acquisition."""
+        from launcher.deploy import _acquire_content_packs
+
+        self._prepopulate_all_packs(patched_config)
+
+        wopc_mods = patched_config["WOPC_MODS"]
+        wopc_mods.mkdir(parents=True, exist_ok=True)
+        excluded_dir = wopc_mods / "BlackopsACUs"
+        excluded_dir.mkdir()
+        (excluded_dir / "mod_info.lua").write_text('uid = "acus-uid"')
+
+        _acquire_content_packs()
+
+        assert not excluded_dir.exists(), "BlackopsACUs should be removed"
+
+    def test_cleanup_ignores_missing_excluded_dir(self, patched_config):
+        """No error when excluded mod dir doesn't exist."""
+        from launcher.deploy import _acquire_content_packs
+
+        self._prepopulate_all_packs(patched_config)
+
+        # No BlackopsACUs directory exists — should not raise
+        _acquire_content_packs()
 
 
 class TestExtractModsFromScd:
@@ -319,3 +404,118 @@ class TestExtractModsFromScd:
 
         # Should keep original content
         assert (wopc_mods / "TestMod" / "mod_info.lua").read_text() == "original"
+
+
+class TestContentIconExtraction:
+    """Test content_icons.scd generation from LOUD's textures.scd."""
+
+    def _make_loud_textures_scd(self, patched_config, icon_entries: dict[str, bytes]):
+        """Create a fake LOUD textures.scd with the given icon entries.
+
+        Args:
+            icon_entries: mapping of arcname → file content
+        """
+        import zipfile
+
+        loud_gd = patched_config["LOUD_GAMEDATA"]
+        loud_gd.mkdir(parents=True, exist_ok=True)
+        scd_path = patched_config["LOUD_TEXTURES_SCD"]
+        with zipfile.ZipFile(scd_path, "w") as zf:
+            for arcname, data in icon_entries.items():
+                zf.writestr(arcname, data)
+
+    def _make_extracted_mod(self, patched_config, mod_name: str, unit_ids: list[str]):
+        """Create a fake extracted mod with unit directories."""
+        wopc_mods = patched_config["WOPC_MODS"]
+        for uid in unit_ids:
+            (wopc_mods / mod_name / "units" / uid).mkdir(parents=True, exist_ok=True)
+
+    def test_extracts_matching_icons(self, patched_config):
+        """Builds content_icons.scd with icons matching content pack units."""
+        import zipfile
+
+        from launcher.deploy import _build_content_icons_scd
+
+        self._make_extracted_mod(patched_config, "TestMod", ["BRMT1PD", "BRMT2HT"])
+        self._make_loud_textures_scd(
+            patched_config,
+            {
+                "textures/ui/common/icons/units/BRMT1PD_Icon.dds": b"\xdd\x01" * 32,
+                "textures/ui/common/icons/units/brmt2ht_icon.dds": b"\xdd\x02" * 32,
+                "textures/ui/common/icons/units/UAL0001_Icon.dds": b"\xdd\xff" * 32,
+            },
+        )
+
+        _build_content_icons_scd()
+
+        icons_scd = patched_config["WOPC_GAMEDATA"] / "content_icons.scd"
+        assert icons_scd.exists()
+
+        with zipfile.ZipFile(icons_scd, "r") as zf:
+            names = sorted(zf.namelist())
+            assert len(names) == 2
+            assert "textures/ui/common/icons/units/brmt1pd_icon.dds" in names
+            assert "textures/ui/common/icons/units/brmt2ht_icon.dds" in names
+            # Vanilla icon should NOT be included
+            assert "textures/ui/common/icons/units/ual0001_icon.dds" not in names
+
+    def test_skips_when_no_mods_extracted(self, patched_config):
+        """Does not create SCD when no content pack mods exist."""
+        from launcher.deploy import _build_content_icons_scd
+
+        _build_content_icons_scd()
+
+        icons_scd = patched_config["WOPC_GAMEDATA"] / "content_icons.scd"
+        assert not icons_scd.exists()
+
+    def test_downloads_when_loud_not_installed(self, patched_config):
+        """Downloads pre-built SCD from GitHub when LOUD is unavailable."""
+        from launcher.deploy import _build_content_icons_scd
+
+        self._make_extracted_mod(patched_config, "TestMod", ["BRMT1PD"])
+        # LOUD textures.scd does NOT exist
+
+        mock_retrieve = MagicMock()
+        with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
+            _build_content_icons_scd()
+
+        mock_retrieve.assert_called_once()
+        assert "content_icons.scd" in str(mock_retrieve.call_args)
+
+    def test_skips_download_when_cached(self, patched_config):
+        """Does not re-download if content_icons.scd already exists."""
+        from launcher.deploy import _build_content_icons_scd
+
+        self._make_extracted_mod(patched_config, "TestMod", ["BRMT1PD"])
+        # Pre-populate the icons SCD
+        wopc_gd = patched_config["WOPC_GAMEDATA"]
+        wopc_gd.mkdir(parents=True, exist_ok=True)
+        (wopc_gd / "content_icons.scd").write_bytes(b"\x00" * 50)
+
+        mock_retrieve = MagicMock()
+        with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
+            _build_content_icons_scd()
+
+        mock_retrieve.assert_not_called()
+
+    def test_rebuilds_from_loud_even_if_cached(self, patched_config):
+        """Always rebuilds from LOUD textures.scd when available (picks up new packs)."""
+        import zipfile
+
+        from launcher.deploy import _build_content_icons_scd
+
+        self._make_extracted_mod(patched_config, "TestMod", ["BRMT1PD"])
+        self._make_loud_textures_scd(
+            patched_config,
+            {"textures/ui/common/icons/units/BRMT1PD_Icon.dds": b"\xdd\x01" * 32},
+        )
+        # Pre-populate with stale content
+        wopc_gd = patched_config["WOPC_GAMEDATA"]
+        wopc_gd.mkdir(parents=True, exist_ok=True)
+        (wopc_gd / "content_icons.scd").write_bytes(b"\x00" * 5)
+
+        _build_content_icons_scd()
+
+        icons_scd = wopc_gd / "content_icons.scd"
+        with zipfile.ZipFile(icons_scd, "r") as zf:
+            assert len(zf.namelist()) == 1  # Rebuilt, not stale

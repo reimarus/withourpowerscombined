@@ -49,3 +49,99 @@ class TestSetPrefs:
         # Verify API can read it back
         with patch.object(prefs, "PREFS_FILE", prefs_file):
             assert prefs.get_active_map() == "SCMP_009"
+
+
+class TestLaunchModePrefs:
+    """Test launch_mode, host_port, and join_address preferences."""
+
+    def test_launch_mode_default_solo(self, tmp_path):
+        """Default launch mode is 'solo'."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            assert prefs.get_launch_mode() == "solo"
+
+    def test_launch_mode_roundtrip(self, tmp_path):
+        """Setting and reading launch mode works for all valid values."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        for mode in ("solo", "host", "join"):
+            with patch.object(prefs, "PREFS_FILE", prefs_file):
+                prefs.set_launch_mode(mode)
+                assert prefs.get_launch_mode() == mode
+
+    def test_invalid_launch_mode_falls_back_to_solo(self, tmp_path):
+        """Invalid launch mode falls back to 'solo'."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_launch_mode("invalid")
+            assert prefs.get_launch_mode() == "solo"
+
+    def test_host_port_roundtrip(self, tmp_path):
+        """Setting and reading host port works."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_host_port("16000")
+            assert prefs.get_host_port() == "16000"
+
+    def test_host_port_default(self, tmp_path):
+        """Default host port is '15000'."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            assert prefs.get_host_port() == "15000"
+
+    def test_join_address_roundtrip(self, tmp_path):
+        """Setting and reading join address works."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_join_address("192.168.1.50:15000")
+            assert prefs.get_join_address() == "192.168.1.50:15000"
+
+    def test_join_address_default_empty(self, tmp_path):
+        """Default join address is empty string."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            assert prefs.get_join_address() == ""
+
+    def test_player_name_roundtrip(self, tmp_path):
+        """Setting and reading player name works."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_player_name("TestPlayer")
+            assert prefs.get_player_name() == "TestPlayer"
+
+    def test_player_name_blank_defaults(self, tmp_path):
+        """Setting blank player name falls back to 'Player'."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_player_name("  ")
+            assert prefs.get_player_name() == "Player"
+
+
+class TestExpectedHumansPrefs:
+    """Test expected_humans preference for multiplayer hosting."""
+
+    def test_default_is_two(self, tmp_path):
+        """Default expected humans is 2."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            assert prefs.get_expected_humans() == 2
+
+    def test_roundtrip(self, tmp_path):
+        """Setting and reading expected humans works."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_expected_humans(4)
+            assert prefs.get_expected_humans() == 4
+
+    def test_clamped_low(self, tmp_path):
+        """Values below 2 are clamped to 2."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_expected_humans(0)
+            assert prefs.get_expected_humans() == 2
+
+    def test_clamped_high(self, tmp_path):
+        """Values above 8 are clamped to 8."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_expected_humans(99)
+            assert prefs.get_expected_humans() == 8
