@@ -227,8 +227,8 @@ class TestCmdLaunchModes:
             assert "/hostgame" in args
 
     @patch("subprocess.Popen")
-    def test_host_mode_no_quickstart(self, mock_popen, tmp_path):
-        """Host mode uses /hostgame but NOT /wopcquickstart."""
+    def test_host_mode_has_quickstart(self, mock_popen, tmp_path):
+        """Host mode uses /hostgame WITH /wopcquickstart and /wopcconfig."""
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
@@ -244,12 +244,23 @@ class TestCmdLaunchModes:
             patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
             patch("launcher.wopc.prefs.get_player_name", return_value="HostP"),
             patch("launcher.wopc.prefs.get_host_port", return_value="16000"),
+            patch("launcher.wopc.prefs.get_expected_humans", return_value=3),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ) as mock_config,
         ):
             assert cmd_launch() == 0
             args = mock_popen.call_args[0][0]
             assert "/hostgame" in args
-            assert "/wopcquickstart" not in args
+            assert "/wopcquickstart" in args
+            assert "/wopcconfig" in args
             assert "16000" in args
+            # Verify multiplayer config fields
+            mock_config.assert_called_once()
+            call_kwargs = mock_config.call_args
+            assert call_kwargs.kwargs.get("expected_humans") == 3
+            assert call_kwargs.kwargs.get("is_host") is True
 
     @patch("subprocess.Popen")
     def test_host_custom_port(self, mock_popen, tmp_path):
@@ -269,6 +280,11 @@ class TestCmdLaunchModes:
             patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
             patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
             patch("launcher.wopc.prefs.get_host_port", return_value="17500"),
+            patch("launcher.wopc.prefs.get_expected_humans", return_value=2),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ),
         ):
             assert cmd_launch() == 0
             args = mock_popen.call_args[0][0]
@@ -276,7 +292,7 @@ class TestCmdLaunchModes:
 
     @patch("subprocess.Popen")
     def test_join_mode_uses_joingame(self, mock_popen, tmp_path):
-        """Join mode uses /joingame with address, no map arg."""
+        """Join mode uses /joingame with address and /wopcquickstart."""
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
@@ -291,17 +307,28 @@ class TestCmdLaunchModes:
             patch("launcher.wopc.prefs.get_launch_mode", return_value="join"),
             patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
             patch("launcher.wopc.prefs.get_player_name", return_value="JoinP"),
+            patch("launcher.wopc.prefs.get_expected_humans", return_value=2),
             patch(
                 "launcher.wopc.prefs.get_join_address",
                 return_value="192.168.1.10:15000",
             ),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ) as mock_config,
         ):
             assert cmd_launch() == 0
             args = mock_popen.call_args[0][0]
             assert "/joingame" in args
             assert "192.168.1.10:15000" in args
             assert "/hostgame" not in args
-            assert "/wopcquickstart" not in args
+            assert "/wopcquickstart" in args
+            assert "/wopcconfig" in args
+            # Verify joiner config
+            mock_config.assert_called_once()
+            call_kwargs = mock_config.call_args
+            assert call_kwargs.kwargs.get("is_host") is False
+            assert call_kwargs.kwargs.get("expected_humans") == 2
 
     def test_join_missing_address_returns_1(self, tmp_path):
         """Join mode returns error when no address is configured."""

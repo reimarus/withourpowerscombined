@@ -114,3 +114,34 @@ class TestLaunchModePrefs:
         with patch.object(prefs, "PREFS_FILE", prefs_file):
             prefs.set_player_name("  ")
             assert prefs.get_player_name() == "Player"
+
+
+class TestExpectedHumansPrefs:
+    """Test expected_humans preference for multiplayer hosting."""
+
+    def test_default_is_two(self, tmp_path):
+        """Default expected humans is 2."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            assert prefs.get_expected_humans() == 2
+
+    def test_roundtrip(self, tmp_path):
+        """Setting and reading expected humans works."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_expected_humans(4)
+            assert prefs.get_expected_humans() == 4
+
+    def test_clamped_low(self, tmp_path):
+        """Values below 2 are clamped to 2."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_expected_humans(0)
+            assert prefs.get_expected_humans() == 2
+
+    def test_clamped_high(self, tmp_path):
+        """Values above 8 are clamped to 8."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_expected_humans(99)
+            assert prefs.get_expected_humans() == 8

@@ -189,3 +189,42 @@ class TestWriteGameConfig:
         assert "PlayerColor = 1" in lua
         assert "PlayerColor = 2" in lua
         assert "PlayerColor = 3" in lua
+
+
+class TestMultiplayerConfig:
+    """Test multiplayer fields (ExpectedHumans, IsHost)."""
+
+    def test_default_solo(self, config_dir: Path) -> None:
+        """Default config is solo: ExpectedHumans=1, IsHost=true."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config("/maps/Caldera/Caldera_scenario.lua")
+
+        lua = path.read_text(encoding="utf-8")
+        assert "ExpectedHumans = 1" in lua
+        assert "IsHost = true" in lua
+
+    def test_multiplayer_host(self, config_dir: Path) -> None:
+        """Host config has ExpectedHumans > 1 and IsHost = true."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/Caldera/Caldera_scenario.lua",
+                expected_humans=4,
+                is_host=True,
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        assert "ExpectedHumans = 4" in lua
+        assert "IsHost = true" in lua
+
+    def test_multiplayer_joiner(self, config_dir: Path) -> None:
+        """Joiner config has IsHost = false."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/Caldera/Caldera_scenario.lua",
+                expected_humans=2,
+                is_host=False,
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        assert "ExpectedHumans = 2" in lua
+        assert "IsHost = false" in lua

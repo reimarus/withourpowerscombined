@@ -187,25 +187,79 @@ def cmd_launch(
     all_mod_uids = mods.get_active_mod_uids()
 
     if launch_mode == "join":
-        # Join mode: connect to a friend's hosted lobby.
-        # The host controls map/settings — we just need their address.
+        # Join mode: connect to host's game via SCFA UDP.
+        # Our launcher's TCP lobby already coordinated everything —
+        # we just need to launch SCFA with /joingame and quickstart config.
         join_address = prefs.get_join_address()
         if not join_address:
             logger.error("ERROR: No host address configured. Set join_address in prefs.")
             return 1
-        cmd.extend(["/joingame", "udp", join_address, player_name])
+        player_faction = prefs.get_player_faction()
+        expected_humans = prefs.get_expected_humans()
+        # Joiner writes minimal config (just faction + multiplayer flags)
+        config_path = write_game_config(
+            scenario_file="",  # host provides the map
+            player_name=player_name,
+            player_faction=player_faction,
+            ai_opponents=[],
+            active_mod_uids=all_mod_uids,
+            expected_humans=expected_humans,
+            is_host=False,
+        )
+        logger.info("Wrote game config: %s", config_path)
+        cmd.extend(
+            [
+                "/joingame",
+                "udp",
+                join_address,
+                player_name,
+                "/wopcquickstart",
+                "/wopcconfig",
+                str(config_path),
+            ]
+        )
         logger.info("Launching WOPC (join mode)...")
         logger.info("  Connecting to: %s", join_address)
 
     elif launch_mode == "host":
-        # Host mode: open FAF's interactive lobby UI.
-        # Friends connect to our IP:port and join the lobby.
+        # Host mode: launch SCFA with /hostgame + quickstart.
+        # Our launcher's TCP lobby coordinated players — SCFA handles
+        # the UDP P2P networking via multilobby.lua.
         vfs_path = _resolve_map_vfs_path(active_map)
         if not vfs_path:
             logger.error("ERROR: No map selected — cannot host.")
             return 1
         host_port = prefs.get_host_port()
-        cmd.extend(["/hostgame", "udp", host_port, player_name, "WOPC", vfs_path])
+        expected_humans = prefs.get_expected_humans()
+        player_faction = prefs.get_player_faction()
+        minimap_enabled = prefs.get_minimap_enabled()
+        merged_options: dict[str, str] = {"minimap_enabled": str(minimap_enabled)}
+        if game_options:
+            merged_options.update(game_options)
+        config_path = write_game_config(
+            scenario_file=vfs_path,
+            player_name=player_name,
+            player_faction=player_faction,
+            ai_opponents=ai_opponents,
+            game_options=merged_options,
+            active_mod_uids=all_mod_uids,
+            expected_humans=expected_humans,
+            is_host=True,
+        )
+        logger.info("Wrote game config: %s", config_path)
+        cmd.extend(
+            [
+                "/hostgame",
+                "udp",
+                host_port,
+                player_name,
+                "WOPC",
+                vfs_path,
+                "/wopcquickstart",
+                "/wopcconfig",
+                str(config_path),
+            ]
+        )
         logger.info("Launching WOPC (host mode)...")
         logger.info("  Hosting on port: %s", host_port)
 
@@ -215,16 +269,15 @@ def cmd_launch(
         if vfs_path:
             player_faction = prefs.get_player_faction()
             minimap_enabled = prefs.get_minimap_enabled()
-            # Merge caller-provided game options with minimap pref
-            merged_options: dict[str, str] = {"minimap_enabled": str(minimap_enabled)}
+            merged_options_solo: dict[str, str] = {"minimap_enabled": str(minimap_enabled)}
             if game_options:
-                merged_options.update(game_options)
+                merged_options_solo.update(game_options)
             config_path = write_game_config(
                 scenario_file=vfs_path,
                 player_name=player_name,
                 player_faction=player_faction,
                 ai_opponents=ai_opponents,
-                game_options=merged_options,
+                game_options=merged_options_solo,
                 active_mod_uids=all_mod_uids,
             )
             logger.info("Wrote game config: %s", config_path)

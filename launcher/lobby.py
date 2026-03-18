@@ -123,7 +123,7 @@ class LobbyServer:
         self._players: dict[int, _RemotePlayer] = {}
         self._next_id = 1
         self._next_slot = 2  # slot 1 is reserved for host
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._server_sock: socket.socket | None = None
         self._running = False
         self._thread: threading.Thread | None = None
@@ -148,9 +148,10 @@ class LobbyServer:
         """Shut down the server and disconnect all peers."""
         self._running = False
         with self._lock:
-            for p in self._players.values():
-                self._close_player(p)
+            players = list(self._players.values())
             self._players.clear()
+        for p in players:
+            self._close_player(p)
         if self._server_sock:
             with contextlib.suppress(OSError):
                 self._server_sock.close()
@@ -225,8 +226,6 @@ class LobbyServer:
                         # New incoming connection
                         try:
                             client_sock, addr = self._server_sock.accept()
-                            client_sock.setblocking(True)
-                            client_sock.settimeout(0.0)
                             logger.info("New connection from %s", addr)
                             self._handle_new_connection(client_sock)
                         except OSError:
@@ -252,38 +251,51 @@ class LobbyServer:
 
     def _sync_selector(self, sel: selectors.BaseSelector) -> None:
         """Keep the selector's registered sockets in sync with _players."""
-        registered_fds = {key.fd for key in sel.get_map().values() if key.data != "server"}
         with self._lock:
-            current_fds = {p.sock.fileno() for p in self._players.values() if p.sock}
-        # Register new peer sockets
+            current_socks = {p.sock for p in self._players.values() if p.sock}
+            current_fds: set[int] = set()
+            for s in current_socks:
+                with contextlib.suppress(OSError):
+                    current_fds.add(s.fileno())
+
+        # Unregister stale peer sockets (no longer in _players)
         for key in list(sel.get_map().values()):
             if key.data != "server" and key.fd not in current_fds:
                 with contextlib.suppress(Exception):
                     sel.unregister(key.fileobj)
+
+        # Register new peer sockets
+        registered_fds = {key.fd for key in sel.get_map().values() if key.data != "server"}
         with self._lock:
             for p in self._players.values():
-                if p.sock and p.sock.fileno() not in registered_fds:
-                    with contextlib.suppress(Exception):
-                        sel.register(p.sock, selectors.EVENT_READ, data=p.player_id)
+                if p.sock:
+                    try:
+                        fd = p.sock.fileno()
+                    except OSError:
+                        continue
+                    if fd not in registered_fds:
+                        with contextlib.suppress(Exception):
+                            sel.register(p.sock, selectors.EVENT_READ, data=p.player_id)
 
     def _poll_peer_socket(self, sock: socket.socket) -> None:
         """Read data from a peer socket that select() marked as readable."""
+        # Find the player under lock, then release before doing I/O
         with self._lock:
             player = None
             for p in self._players.values():
                 if p.sock is sock:
                     player = p
                     break
-            if not player:
-                return
-            try:
-                lines = _recv_lines(sock, player.recv_buf)
-                for line in lines:
-                    self._handle_message(player, json.loads(line))
-            except (ConnectionResetError, OSError):
-                self._remove_player(player.player_id)
-            except json.JSONDecodeError:
-                pass
+        if not player:
+            return
+        try:
+            lines = _recv_lines(sock, player.recv_buf)
+            for line in lines:
+                self._handle_message(player, json.loads(line))
+        except (ConnectionResetError, OSError):
+            self._remove_player(player.player_id)
+        except json.JSONDecodeError:
+            pass
 
     def _handle_new_connection(self, sock: socket.socket) -> None:
         """Process the Hello handshake from a new peer."""
