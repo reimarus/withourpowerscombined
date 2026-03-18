@@ -659,7 +659,7 @@ class WopcApp(BaseApp):  # type: ignore
 
     def get_ai_opponents(self) -> list[dict[str, Any]]:
         """Collect AI opponent config from the slot UI for game_config.py."""
-        opponents = []
+        opponents: list[dict[str, Any]] = []
         for _i, slot in enumerate(self.player_slots):
             if slot["type"] != "ai":
                 continue

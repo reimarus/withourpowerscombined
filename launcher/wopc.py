@@ -491,7 +491,7 @@ def main() -> int:
         return cmd_patch(cmd_args)
 
     if cmd in commands:
-        return commands[cmd]()
+        return commands[cmd]()  # type: ignore[no-any-return, operator]
     else:
         logger.error("Unknown command: %s", cmd)
         logger.info(HELP_TEXT)

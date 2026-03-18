@@ -225,14 +225,14 @@ class LobbyServer:
                     if key.data == "server":
                         # New incoming connection
                         try:
-                            client_sock, addr = self._server_sock.accept()
+                            client_sock, addr = self._server_sock.accept()  # type: ignore[union-attr]
                             logger.info("New connection from %s", addr)
                             self._handle_new_connection(client_sock)
                         except OSError:
                             pass
                     else:
                         # Data from an existing peer
-                        self._poll_peer_socket(key.fileobj)
+                        self._poll_peer_socket(key.fileobj)  # type: ignore[arg-type]
 
                 # Check heartbeat timeouts
                 now = time.monotonic()
