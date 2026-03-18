@@ -45,9 +45,23 @@ local autoStart = playersArg and playersArg[1] >= 2
 - Or: revert `_patch_scd()` call in `launcher/deploy.py` → lua.scd stays unmodified
 - All quickstart code is guarded by `HasCommandLineArg("/wopcquickstart")`
 
-### Next steps (Phase 2+):
-- Player slot management for solo mode (dynamic AI opponents, not hardcoded 1v1)
-- Game options panel (victory condition, unit cap, fog of war, etc.)
-- End-to-end multiplayer test (host + join on LAN)
+### Player Slots (Phase 2 — done):
+- Dynamic slot list in main content area (left half of lower panel)
+- Human player always in slot 1 (cannot be removed)
+- "+ Add AI" button creates new AI slots with difficulty, faction, and team dropdowns
+- Each AI slot has a remove button (✕)
+- `get_ai_opponents()` collects slot data as list of dicts for `game_config.py`
+- Passed through `cmd_launch(ai_opponents=...)` to `write_game_config()`
 
-### Test results: 166 tests pass, 80.74% coverage, ruff clean
+### Game Options (Phase 3 — done):
+- Options panel in right half of lower panel
+- Victory, Unit Cap, Fog of War, Game Speed, Share
+- `get_game_options()` collects options, merged with minimap pref in `cmd_launch()`
+- Passed through to `write_game_config(game_options=...)` → quickstart.lua
+
+### Next steps:
+- End-to-end multiplayer test (host + join on LAN)
+- Persist player slot config across sessions (prefs serialization)
+- Persist game options across sessions
+
+### Test results: 168 tests pass, ~81% coverage, ruff clean

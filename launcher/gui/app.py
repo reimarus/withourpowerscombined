@@ -220,7 +220,9 @@ class WopcApp(BaseApp):  # type: ignore
         """Construct the central matching routing/configuration area."""
         self.main_content = ctk.CTkFrame(self, fg_color="transparent")
         self.main_content.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
-        self.main_content.grid_rowconfigure(1, weight=1)
+        # Row 0: header, Row 1: config_panel (map), Row 2: players+options, Row 3: log
+        self.main_content.grid_rowconfigure(1, weight=2)
+        self.main_content.grid_rowconfigure(2, weight=1)
         self.main_content.grid_columnconfigure(0, weight=1)
 
         self.header_label = ctk.CTkLabel(
@@ -229,17 +231,16 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_PRIMARY,
             font=ctk.CTkFont(size=20, weight="bold"),
         )
-        self.header_label.grid(row=0, column=0, sticky="w", pady=(0, 20))
+        self.header_label.grid(row=0, column=0, sticky="w", pady=(0, 10))
 
-        # Config Panel (Map / Players / Settings Placeholder)
+        # --- Map Selector Panel ---
         self.config_panel = ctk.CTkFrame(
             self.main_content, fg_color=COLOR_MOD_PANEL, corner_radius=8
         )
         self.config_panel.grid(row=1, column=0, sticky="nsew")
-        self.config_panel.grid_rowconfigure(1, weight=1)
+        self.config_panel.grid_rowconfigure(2, weight=1)
         self.config_panel.grid_columnconfigure(0, weight=1)
 
-        # Selected Map Header
         self.selected_map_label = ctk.CTkLabel(
             self.config_panel,
             text="Selected Map: None",
@@ -250,7 +251,7 @@ class WopcApp(BaseApp):  # type: ignore
 
         # Map Filters
         self.filter_frame = ctk.CTkFrame(self.config_panel, fg_color="transparent")
-        self.filter_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 10))
+        self.filter_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 5))
         self.filter_frame.grid_columnconfigure(0, weight=1)
 
         self.search_var = ctk.StringVar()
@@ -296,21 +297,31 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.size_menu.grid(row=0, column=3)
 
-        # Scrollable Map Selector
         self.map_scroll = ctk.CTkScrollableFrame(self.config_panel, fg_color="transparent")
         self.map_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
-
         self.map_buttons: list[Any] = []
 
-        # Log Window at the bottom
+        # --- Player Slots + Game Options Panel ---
+        self.lower_panel = ctk.CTkFrame(
+            self.main_content, fg_color=COLOR_MOD_PANEL, corner_radius=8
+        )
+        self.lower_panel.grid(row=2, column=0, sticky="nsew", pady=(10, 0))
+        self.lower_panel.grid_columnconfigure(0, weight=1)
+        self.lower_panel.grid_columnconfigure(1, weight=1)
+        self.lower_panel.grid_rowconfigure(1, weight=1)
+
+        self._build_player_slots()
+        self._build_game_options()
+
+        # --- Log Window ---
         self.log_textbox = ctk.CTkTextbox(
             self.main_content,
-            height=140,
+            height=100,
             fg_color=COLOR_MOD_PANEL,
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.log_textbox.grid(row=2, column=0, sticky="ew", pady=(20, 0))
+        self.log_textbox.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         self.log_textbox.insert("0.0", "Welcome to the WOPC Match Lobby.\\n")
         self.log_textbox.configure(state="disabled")
 
@@ -412,6 +423,304 @@ class WopcApp(BaseApp):  # type: ignore
             font=ctk.CTkFont(size=12),
         )
         self.play_summary.grid(row=10, column=0, padx=20, pady=10, sticky="w")
+
+    # ------------------------------------------------------------------
+    # Player Slots
+    # ------------------------------------------------------------------
+
+    FACTION_NAMES: ClassVar[list[str]] = ["Random", "UEF", "Aeon", "Cybran", "Seraphim"]
+    AI_DISPLAY_NAMES: ClassVar[list[str]] = [
+        "Easy",
+        "Medium",
+        "Adaptive",
+        "Rush",
+        "Turtle",
+        "Tech",
+        "Random",
+    ]
+    MAX_SLOTS: ClassVar[int] = 16
+
+    def _build_player_slots(self) -> None:
+        """Build the player slots panel (left half of lower_panel)."""
+        slots_frame = ctk.CTkFrame(self.lower_panel, fg_color="transparent")
+        slots_frame.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(10, 5), pady=10)
+        slots_frame.grid_columnconfigure(0, weight=1)
+        slots_frame.grid_rowconfigure(1, weight=1)
+
+        header_row = ctk.CTkFrame(slots_frame, fg_color="transparent")
+        header_row.grid(row=0, column=0, sticky="ew")
+        header_row.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            header_row,
+            text="PLAYER SLOTS",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=0, sticky="w")
+
+        self.add_slot_btn = ctk.CTkButton(
+            header_row,
+            text="+ Add AI",
+            width=70,
+            height=24,
+            font=ctk.CTkFont(size=11),
+            command=self._add_ai_slot,
+        )
+        self.add_slot_btn.grid(row=0, column=1, padx=(5, 0))
+
+        self.slots_scroll = ctk.CTkScrollableFrame(slots_frame, fg_color="transparent")
+        self.slots_scroll.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
+        self.slots_scroll.grid_columnconfigure(1, weight=1)
+
+        # Internal slot data: list of dicts
+        # Each: {"type": "human"|"ai", "faction_var", "ai_var", "team_var", "widgets": [...]}
+        self.player_slots: list[dict[str, Any]] = []
+
+        # Always start with human player in slot 1
+        self._add_human_slot()
+        # Default: one AI opponent
+        self._add_ai_slot()
+
+    def _add_human_slot(self) -> None:
+        """Add the human player row (always slot 1, cannot be removed)."""
+        row = len(self.player_slots)
+        widgets: list[Any] = []
+
+        lbl = ctk.CTkLabel(
+            self.slots_scroll,
+            text="1",
+            width=20,
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
+        )
+        lbl.grid(row=row, column=0, padx=(0, 5), pady=2)
+        widgets.append(lbl)
+
+        type_lbl = ctk.CTkLabel(
+            self.slots_scroll,
+            text="Human",
+            text_color=COLOR_ACCENT,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        )
+        type_lbl.grid(row=row, column=1, sticky="w", pady=2)
+        widgets.append(type_lbl)
+
+        # Faction is controlled by the mod pane's faction selector for human
+        faction_lbl = ctk.CTkLabel(
+            self.slots_scroll,
+            text="(see Player Settings)",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        )
+        faction_lbl.grid(row=row, column=2, padx=5, pady=2)
+        widgets.append(faction_lbl)
+
+        team_var = ctk.StringVar(value="1")
+        team_menu = ctk.CTkOptionMenu(
+            self.slots_scroll,
+            values=["1", "2", "3", "4"],
+            variable=team_var,
+            width=50,
+            height=24,
+        )
+        team_menu.grid(row=row, column=3, padx=5, pady=2)
+        widgets.append(team_menu)
+
+        # No remove button for human
+        spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
+        spacer.grid(row=row, column=4, pady=2)
+        widgets.append(spacer)
+
+        self.player_slots.append({"type": "human", "team_var": team_var, "widgets": widgets})
+
+    def _add_ai_slot(self) -> None:
+        """Add an AI opponent slot row."""
+        if len(self.player_slots) >= self.MAX_SLOTS:
+            return
+
+        row = len(self.player_slots)
+        slot_num = row + 1
+        widgets: list[Any] = []
+
+        lbl = ctk.CTkLabel(
+            self.slots_scroll,
+            text=str(slot_num),
+            width=20,
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
+        )
+        lbl.grid(row=row, column=0, padx=(0, 5), pady=2)
+        widgets.append(lbl)
+
+        # AI difficulty
+        ai_var = ctk.StringVar(value="Medium")
+        ai_menu = ctk.CTkOptionMenu(
+            self.slots_scroll,
+            values=self.AI_DISPLAY_NAMES,
+            variable=ai_var,
+            width=90,
+            height=24,
+        )
+        ai_menu.grid(row=row, column=1, sticky="w", pady=2)
+        widgets.append(ai_menu)
+
+        # Faction
+        faction_var = ctk.StringVar(value="Random")
+        faction_menu = ctk.CTkOptionMenu(
+            self.slots_scroll,
+            values=self.FACTION_NAMES,
+            variable=faction_var,
+            width=90,
+            height=24,
+        )
+        faction_menu.grid(row=row, column=2, padx=5, pady=2)
+        widgets.append(faction_menu)
+
+        # Team
+        team_var = ctk.StringVar(value="2")
+        team_menu = ctk.CTkOptionMenu(
+            self.slots_scroll,
+            values=["1", "2", "3", "4"],
+            variable=team_var,
+            width=50,
+            height=24,
+        )
+        team_menu.grid(row=row, column=3, padx=5, pady=2)
+        widgets.append(team_menu)
+
+        # Remove button
+        slot_index = row  # capture for closure
+
+        def remove_this() -> None:
+            self._remove_slot(slot_index)
+
+        remove_btn = ctk.CTkButton(
+            self.slots_scroll,
+            text="✕",
+            width=24,
+            height=24,
+            fg_color="transparent",
+            hover_color="#ED4245",
+            text_color=COLOR_TEXT_MUTED,
+            command=remove_this,
+        )
+        remove_btn.grid(row=row, column=4, pady=2)
+        widgets.append(remove_btn)
+
+        self.player_slots.append(
+            {
+                "type": "ai",
+                "ai_var": ai_var,
+                "faction_var": faction_var,
+                "team_var": team_var,
+                "widgets": widgets,
+            }
+        )
+
+    def _remove_slot(self, index: int) -> None:
+        """Remove a player slot and re-layout remaining slots."""
+        if index < 1 or index >= len(self.player_slots):
+            return  # Can't remove human slot (index 0)
+
+        # Destroy widgets for the removed slot
+        slot = self.player_slots.pop(index)
+        for w in slot["widgets"]:
+            w.destroy()
+
+        # Re-layout all remaining slots
+        for i, s in enumerate(self.player_slots):
+            for w in s["widgets"]:
+                w.grid_configure(row=i)
+            # Update slot number label
+            s["widgets"][0].configure(text=str(i + 1))
+
+    def get_ai_opponents(self) -> list[dict[str, Any]]:
+        """Collect AI opponent config from the slot UI for game_config.py."""
+        opponents = []
+        for _i, slot in enumerate(self.player_slots):
+            if slot["type"] != "ai":
+                continue
+            ai_display = slot["ai_var"].get()
+            ai_key = ai_display.lower()
+            faction = slot["faction_var"].get().lower()
+            team = int(slot["team_var"].get())
+            opponents.append(
+                {
+                    "name": f"AI {len(opponents) + 1}: {ai_display}",
+                    "faction": faction,
+                    "ai": ai_key,
+                    "team": team,
+                }
+            )
+        return opponents
+
+    # ------------------------------------------------------------------
+    # Game Options
+    # ------------------------------------------------------------------
+
+    # Option definitions: (key, label, values, default)
+    GAME_OPTION_DEFS: ClassVar[list[tuple[str, str, list[str], str]]] = [
+        (
+            "Victory",
+            "Victory",
+            ["Demoralization", "Supremacy", "Assassination", "Sandbox"],
+            "Demoralization",
+        ),
+        ("UnitCap", "Unit Cap", ["500", "1000", "1500", "2000", "4000"], "1500"),
+        ("FogOfWar", "Fog of War", ["Explored", "Unexplored", "None"], "Explored"),
+        ("GameSpeed", "Game Speed", ["Normal", "Fast", "Adjustable"], "Normal"),
+        ("Share", "Share", ["FullShare", "ShareUntilDeath"], "FullShare"),
+    ]
+
+    def _build_game_options(self) -> None:
+        """Build the game options panel (right half of lower_panel)."""
+        opts_frame = ctk.CTkFrame(self.lower_panel, fg_color="transparent")
+        opts_frame.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(5, 10), pady=10)
+        opts_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            opts_frame,
+            text="GAME OPTIONS",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
+
+        self.game_option_vars: dict[str, ctk.StringVar] = {}
+
+        for idx, (key, label, values, default) in enumerate(self.GAME_OPTION_DEFS):
+            ctk.CTkLabel(
+                opts_frame,
+                text=f"{label}:",
+                text_color=COLOR_TEXT_MUTED,
+                font=ctk.CTkFont(size=12),
+            ).grid(row=idx + 1, column=0, sticky="w", padx=(0, 10), pady=2)
+
+            var = ctk.StringVar(value=default)
+            menu = ctk.CTkOptionMenu(
+                opts_frame,
+                values=values,
+                variable=var,
+                width=130,
+                height=24,
+            )
+            menu.grid(row=idx + 1, column=1, sticky="w", pady=2)
+            self.game_option_vars[key] = var
+
+    def get_game_options(self) -> dict[str, str]:
+        """Collect game options from the UI for game_config.py."""
+        opts: dict[str, str] = {}
+        for key, var in self.game_option_vars.items():
+            val = var.get()
+            # Normalize display names to engine values
+            if key == "FogOfWar":
+                val = {"Explored": "explored", "Unexplored": "unexplored", "None": "none"}.get(
+                    val, val.lower()
+                )
+            elif key in ("Victory", "GameSpeed"):
+                val = val.lower()
+            opts[key] = val
+        return opts
 
     def _refresh_mods_list(self) -> None:
         """Read available mods and content packs from disk and update the UI."""
@@ -717,7 +1026,11 @@ class WopcApp(BaseApp):  # type: ignore
         if hasattr(self, "name_entry"):
             prefs.set_player_name(self.name_entry.get())
 
-        ret = cmd_launch()
+        # Collect player slots and game options from the UI
+        ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
+        game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
+
+        ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options)
         if ret == 0:
             self.log("Game process started successfully.")
         else:

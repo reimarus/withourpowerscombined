@@ -137,6 +137,7 @@ class TestCmdLaunch:
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="solo"),
             patch("launcher.wopc.prefs.get_active_map", return_value="SCMP_002"),
             patch("launcher.wopc.prefs.get_player_name", return_value="Player"),
             patch(
@@ -176,6 +177,7 @@ class TestCmdLaunch:
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="solo"),
             patch("launcher.wopc.prefs.get_active_map", return_value=""),
             patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
         ):
@@ -319,6 +321,70 @@ class TestCmdLaunchModes:
             patch("launcher.wopc.prefs.get_join_address", return_value=""),
         ):
             assert cmd_launch() == 1
+
+    @patch("subprocess.Popen")
+    def test_solo_passes_ai_opponents_to_config(self, mock_popen, tmp_path):
+        """Solo mode passes AI opponents list to write_game_config."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        ai_opponents = [
+            {"name": "AI 1: Rush", "faction": "cybran", "ai": "rush", "team": 2},
+            {"name": "AI 2: Turtle", "faction": "aeon", "ai": "turtle", "team": 2},
+        ]
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="solo"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ) as mock_config,
+        ):
+            assert cmd_launch(ai_opponents=ai_opponents) == 0
+            mock_config.assert_called_once()
+            call_kwargs = mock_config.call_args
+            assert call_kwargs.kwargs.get("ai_opponents") == ai_opponents
+
+    @patch("subprocess.Popen")
+    def test_solo_passes_game_options_to_config(self, mock_popen, tmp_path):
+        """Solo mode merges game options with minimap pref."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        game_options = {"Victory": "supremacy", "UnitCap": "2000"}
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="solo"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ) as mock_config,
+        ):
+            assert cmd_launch(game_options=game_options) == 0
+            call_kwargs = mock_config.call_args
+            merged = call_kwargs.kwargs.get("game_options", {})
+            # Should have minimap_enabled from prefs PLUS our overrides
+            assert "minimap_enabled" in merged
+            assert merged["Victory"] == "supremacy"
+            assert merged["UnitCap"] == "2000"
 
 
 class TestCmdSetup:

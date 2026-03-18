@@ -3,6 +3,7 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from launcher import mods, prefs
 from launcher.config import (
@@ -138,13 +139,24 @@ def _resolve_map_vfs_path(active_map: str) -> str | None:
     return None
 
 
-def cmd_launch() -> int:
+def cmd_launch(
+    ai_opponents: list[dict[str, Any]] | None = None,
+    game_options: dict[str, str] | None = None,
+) -> int:
     """Launch the game from the WOPC directory.
 
     Supports three launch modes (configured in prefs):
     - **solo**: Quickstart bypass — 1 human + AI, no lobby UI.
     - **host**: Opens FAF's interactive lobby where friends can join.
     - **join**: Connects to a friend's hosted lobby.
+
+    Parameters
+    ----------
+    ai_opponents:
+        Optional list of AI opponent dicts for solo mode.
+        If None, a single medium AI is used (game_config default).
+    game_options:
+        Optional dict of game option overrides for solo mode.
     """
     exe_path = WOPC_BIN / GAME_EXE
 
@@ -203,11 +215,16 @@ def cmd_launch() -> int:
         if vfs_path:
             player_faction = prefs.get_player_faction()
             minimap_enabled = prefs.get_minimap_enabled()
+            # Merge caller-provided game options with minimap pref
+            merged_options: dict[str, str] = {"minimap_enabled": str(minimap_enabled)}
+            if game_options:
+                merged_options.update(game_options)
             config_path = write_game_config(
                 scenario_file=vfs_path,
                 player_name=player_name,
                 player_faction=player_faction,
-                game_options={"minimap_enabled": str(minimap_enabled)},
+                ai_opponents=ai_opponents,
+                game_options=merged_options,
                 active_mod_uids=all_mod_uids,
             )
             logger.info("Wrote game config: %s", config_path)
