@@ -24,11 +24,11 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 
 | Feature | FAF | WOPC | Priority | Notes |
 |---------|-----|------|----------|-------|
-| Player data structure (name, faction, team, color, slot) | ✅ playerdata.lua | 🔧 name+faction+slot only | **P1** | Need team + color |
+| Player data structure (name, faction, team, color, slot) | ✅ playerdata.lua | ✅ lobby.py _RemotePlayer | — | Added team + color fields |
 | Open/Close slot states | ✅ | ❌ | P2 | Host can lock out slots |
 | Move player to different slot | ✅ MovePlayerToEmptySlot | ❌ | P2 | Drag-and-drop slot rearrangement |
 | Swap players between slots | ✅ SwapPlayers | ❌ | P2 | |
-| Kick player | ✅ EjectPeer | ❌ | **P1** | Host must be able to remove griefers |
+| Kick player | ✅ EjectPeer | ✅ kick_player() | — | Host kicks with reason, client gets on_kicked callback |
 | Player slot sequential assignment | ✅ | ✅ | — | |
 | FindSlotForID / FindNameForID | ✅ | ✅ (server-side) | — | |
 
@@ -57,7 +57,7 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 | Prebuilt units | ✅ | ❌ | P3 | |
 | Timeouts | ✅ | ❌ | P3 | |
 | Minimap toggle | ✅ | ✅ | — | Already in launcher |
-| Game options sync to all peers | ✅ broadcast | ❌ | **P1** | Host changes must reach joiners live |
+| Game options sync to all peers | ✅ broadcast | ✅ _broadcast_game_state | — | Host changes reach joiners live |
 | Per-map custom options | ✅ scenario.options | ❌ | P2 | Maps can define their own options |
 
 ## 5. AI CONFIGURATION
@@ -82,7 +82,7 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 | Player color selector | ✅ full palette | ❌ | **P1** | Players want to pick their color |
 | Army color (separate from player color) | ✅ | ❌ | P3 | |
 | IsColorFree validation | ✅ | ❌ | **P1** | Prevent duplicates |
-| Faction sync to all peers | ✅ | 🔧 on join only | **P1** | Need real-time broadcast |
+| Faction sync to all peers | ✅ | ✅ via game state broadcast | — | Included in full state sync |
 
 ## 7. TEAM & ALLIANCE MANAGEMENT
 
@@ -100,8 +100,8 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 |---------|-----|------|----------|-------|
 | Player ready toggle | ✅ | ✅ | — | |
 | Ready indicator per player | ✅ | ✅ (✓ or —) | — | |
-| All-must-ready before launch | ✅ GetPlayersNotReady | ❌ | **P1** | Currently host can launch anytime |
-| Launch validation (connections, teams, options) | ✅ TryLaunch | ❌ | **P1** | Need pre-launch checks |
+| All-must-ready before launch | ✅ GetPlayersNotReady | ✅ _validate_before_launch | — | Lists not-ready players |
+| Launch validation (connections, teams, options) | ✅ TryLaunch | ✅ _validate_before_launch | — | Checks map, ready state, WOPC deploy |
 | Auto-convert victory to sandbox for 1-team | ✅ | ❌ | P2 | |
 | Asset prefetch before launch | ✅ Prefetch() | ❌ | P2 | |
 
@@ -110,8 +110,8 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 | Feature | FAF | WOPC | Priority | Notes |
 |---------|-----|------|----------|-------|
 | Map browser with preview | ✅ gameselect.lua | ✅ (in launcher) | — | |
-| Map sync — broadcast to all peers | ✅ | ❌ | **P1** | Joiners don't see map changes |
-| Map missing detection | ✅ ClientsMissingMap | ❌ | **P1** | Alert if joiner doesn't have the map |
+| Map sync — broadcast to all peers | ✅ | ✅ via game state broadcast | — | Map name+folder in GameState |
+| Map missing detection | ✅ ClientsMissingMap | ✅ _on_game_state_received | — | Warns joiner if map not found locally |
 | Random map option | ✅ Official/All | ❌ | P3 | |
 | Adaptive map support (spawn mex) | ✅ | ⏭ | — | LOUD/FAF handles at engine level |
 | Map position markers on preview | ✅ | ❌ | P2 | Show spawn points on minimap |
@@ -131,7 +131,7 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 
 | Feature | FAF | WOPC | Priority | Notes |
 |---------|-----|------|----------|-------|
-| Lobby text chat | ✅ chatarea.lua | ❌ | **P1** | Essential for coordination |
+| Lobby text chat | ✅ chatarea.lua | ✅ Chat msg type + GUI input | — | Host broadcasts, client relays, chat bar in GUI |
 | System messages (join/leave/kick) | ✅ | 🔧 log textbox only | — | Have events, need chat format |
 | Whisper / private message | ✅ /whisper | ❌ | P3 | |
 | Color-coded messages by player | ✅ | ❌ | P2 | |
@@ -151,19 +151,19 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 
 | Feature | FAF | WOPC | Priority | Notes |
 |---------|-----|------|----------|-------|
-| Broadcast game options changes | ✅ | ❌ | **P1** | Critical: joiners must see what host configures |
-| Broadcast map changes | ✅ | ❌ | **P1** | |
-| Broadcast AI slot changes | ✅ | ❌ | **P1** | Add/remove/modify AI |
-| Broadcast team changes | ✅ | ❌ | **P1** | |
-| Broadcast player color changes | ✅ | ❌ | **P1** | |
-| Broadcast mod/pack changes | ✅ | ❌ | **P1** | |
-| Full state snapshot on join | ✅ | 🔧 partial (name+faction) | **P1** | Joiner needs full game state on connect |
+| Broadcast game options changes | ✅ | ✅ _broadcast_game_state | — | Triggers on option change |
+| Broadcast map changes | ✅ | ✅ _broadcast_game_state | — | Triggers on map select |
+| Broadcast AI slot changes | ✅ | ✅ _broadcast_game_state | — | Triggers on slot add/remove |
+| Broadcast team changes | ✅ | ✅ TeamChange msg | — | Client→server→broadcast |
+| Broadcast player color changes | ✅ | ✅ ColorChange msg | — | Client→server→broadcast |
+| Broadcast mod/pack changes | ✅ | ❌ | **P1** | Need to include active mods in game state |
+| Full state snapshot on join | ✅ | ✅ game_state_provider | — | Full state sent via GameState msg on connect |
 
 ## 14. HOST ADMIN
 
 | Feature | FAF | WOPC | Priority | Notes |
 |---------|-----|------|----------|-------|
-| Kick player | ✅ EjectPeer | ❌ | **P1** | |
+| Kick player | ✅ EjectPeer | ✅ kick_player() | — | With kick button in GUI |
 | Force player not-ready | ✅ SetPlayerNotReady | ❌ | P2 | |
 | Close/open slots | ✅ | ❌ | P2 | |
 | Kick all observers | ✅ | ❌ | P3 | |
@@ -205,18 +205,19 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 ### P1 — Must Have (Next Sprint)
 These are the features that make multiplayer actually usable for game night:
 
-1. **Live state sync** — Host broadcasts ALL config changes to joiners in real-time
-   - Game options, map, AI slots, teams, colors, mods
-   - Full state snapshot sent to new joiners on connect
-2. **Player color selector** — Pick colors, prevent duplicates
-3. **Team assignment UI** — Dropdown per player/AI slot
-4. **Game options panel** — Victory condition, unit cap, share on death (the big 3)
-5. **All-must-ready enforcement** — Host can't launch until everyone is ready
-6. **Pre-launch validation** — Check connections, check map availability, check mod sync
-7. **Kick player** — Host can remove someone from lobby
-8. **Lobby chat** — Text chat between players while configuring
-9. **Map sync** — Detect if joiner is missing the selected map
-10. **Mod/manifest validation** — Verify all players have matching files before launch
+1. ~~**Live state sync** — Host broadcasts ALL config changes to joiners in real-time~~ ✅ DONE
+   - ✅ Game options, map, AI slots, teams, colors broadcast on every change
+   - ✅ Full state snapshot sent to new joiners on connect
+   - ❌ Mod/pack changes not yet in state snapshot
+2. **Player color selector** — Pick colors, prevent duplicates ❌
+3. **Team assignment UI** — Dropdown per player/AI slot ❌
+4. **Game options panel** — Victory condition, unit cap, share on death (the big 3) ❌
+5. ~~**All-must-ready enforcement** — Host can't launch until everyone is ready~~ ✅ DONE
+6. ~~**Pre-launch validation** — Check connections, check map availability, check mod sync~~ ✅ DONE
+7. ~~**Kick player** — Host can remove someone from lobby~~ ✅ DONE
+8. ~~**Lobby chat** — Text chat between players while configuring~~ ✅ DONE
+9. ~~**Map sync** — Detect if joiner is missing the selected map~~ ✅ DONE
+10. **Mod/manifest validation** — Verify all players have matching files before launch ❌
 
 ### P2 — Should Have (Following Sprint)
 11. Observer/spectator support
