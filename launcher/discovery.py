@@ -299,7 +299,7 @@ def _get_local_ips() -> set[str]:
     try:
         hostname = socket.gethostname()
         for info in socket.getaddrinfo(hostname, None):
-            ips.add(info[4][0])
+            ips.add(str(info[4][0]))
     except OSError:
         pass
     return ips

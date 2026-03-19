@@ -212,7 +212,7 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.mode_selector.grid(row=6, column=0, padx=20, pady=(0, 5), sticky="ew")
 
-        # Conditional widgets for HOST/JOIN modes
+        # Conditional widgets for multiplayer mode
         self.mode_widgets_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.mode_widgets_frame.grid(row=7, column=0, padx=20, sticky="ew")
 
@@ -236,7 +236,7 @@ class WopcApp(BaseApp):  # type: ignore
             "<FocusOut>", lambda e: prefs.set_join_address(self.address_entry.get())
         )
 
-        # Expected Players dropdown (HOST mode only)
+        # Expected Players dropdown (hosting only)
         self.expected_label = ctk.CTkLabel(
             self.mode_widgets_frame, text="Expected Players:", text_color=COLOR_TEXT_MUTED
         )
@@ -1947,7 +1947,7 @@ class WopcApp(BaseApp):  # type: ignore
     # ------------------------------------------------------------------
 
     def _start_lobby_server(self) -> None:
-        """Start the TCP lobby server for HOST mode."""
+        """Start the TCP lobby server when hosting a multiplayer game."""
         if self._lobby_server and self._lobby_server.is_running:
             return
         port = int(self.port_entry.get() or "15000")
@@ -1973,7 +1973,7 @@ class WopcApp(BaseApp):  # type: ignore
             self.log("Lobby server stopped")
 
     def _connect_lobby_client(self) -> None:
-        """Connect to a host's lobby server for JOIN mode."""
+        """Connect to a host's lobby server when joining a multiplayer game."""
         if self._lobby_client and self._lobby_client.is_connected:
             return
         raw_addr = self.address_entry.get().strip()
@@ -2252,19 +2252,20 @@ class WopcApp(BaseApp):  # type: ignore
             n_remote = len(self._remote_players)
             prefs.set_expected_humans(1 + n_remote)
             host_port = prefs.get_host_port()
-            self._lobby_server.broadcast_launch(host_port)
+            if self._lobby_server:
+                self._lobby_server.broadcast_launch(host_port)
             self.log(f"Broadcasting launch to {n_remote} peer(s)...")
             self.lobby_launch_btn.configure(text="LAUNCHING...", state="disabled")
             threading.Thread(target=self._launch_game_and_cleanup, daemon=True).start()
         else:
             # Joiner toggles ready
             btn_text = self.lobby_launch_btn.cget("text")
-            if btn_text == "READY":
+            if btn_text == "READY" and self._lobby_client:
                 self._lobby_client.send_ready(True)
                 self.lobby_launch_btn.configure(
                     text="UNREADY", fg_color="#ED4245", hover_color="#C53030"
                 )
-            elif btn_text == "UNREADY":
+            elif btn_text == "UNREADY" and self._lobby_client:
                 self._lobby_client.send_ready(False)
                 self.lobby_launch_btn.configure(
                     text="READY", fg_color=COLOR_ACCENT, hover_color="#4752C4"
