@@ -4,6 +4,14 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
+try:
+    from PIL import Image as PilImage
+
+    _PIL_AVAILABLE = True
+except ImportError:
+    PilImage = None  # type: ignore[assignment]
+    _PIL_AVAILABLE = False
+
 from launcher import map_scanner, mods
 from launcher.lobby import LobbyCallbacks, LobbyClient, LobbyServer
 
@@ -82,6 +90,10 @@ class WopcApp(BaseApp):  # type: ignore
     selected_map_label: Any
     map_scroll: Any
     map_buttons: list[Any]
+    map_preview_label: Any
+    map_preview_name: Any
+    map_preview_detail: Any
+    map_preview_desc: Any
     log_textbox: Any
     mod_pane: Any
     mod_header: Any
@@ -145,6 +157,49 @@ class WopcApp(BaseApp):  # type: ignore
     def _make_divider(self, parent: Any, color: str = COLOR_ACCENT_DIM) -> Any:
         """Return a thin 1-pixel accent line for use as a section separator."""
         return ctk.CTkFrame(parent, fg_color=color, height=1, corner_radius=0)
+
+    _PREVIEW_SIZE: ClassVar[int] = 220
+
+    def _update_map_preview(self, info: "map_scanner.MapInfo | None") -> None:
+        """Load and display the map preview image and metadata."""
+        if info is None:
+            self.map_preview_label.configure(image=None, text="No Preview")
+            self.map_preview_name.configure(text="")
+            self.map_preview_detail.configure(text="")
+            self.map_preview_desc.configure(text="")
+            return
+
+        # Metadata labels
+        parts = []
+        if info.max_players:
+            parts.append(f"{info.max_players} players")
+        if info.size_label and info.size_label != "?":
+            parts.append(info.size_label)
+        if info.is_campaign:
+            parts.append("Campaign")
+        self.map_preview_name.configure(text=info.display_name)
+        self.map_preview_detail.configure(text="  ·  ".join(parts) if parts else "")
+        self.map_preview_desc.configure(text=info.description or "")
+
+        # Preview image
+        if _PIL_AVAILABLE and info.preview_path and info.preview_path.exists():
+            try:
+                img = PilImage.open(info.preview_path).convert("RGB")
+                img = img.resize(
+                    (self._PREVIEW_SIZE, self._PREVIEW_SIZE), PilImage.LANCZOS
+                )
+                ctk_img = ctk.CTkImage(light_image=img, dark_image=img,
+                                       size=(self._PREVIEW_SIZE, self._PREVIEW_SIZE))
+                self.map_preview_label.configure(image=ctk_img, text="")
+                # Keep a reference so the image isn't garbage-collected
+                self._preview_ctk_image = ctk_img
+                return
+            except Exception as exc:
+                logger.warning("Failed to load map preview %s: %s", info.preview_path, exc)
+
+        # Fallback: no image available
+        self.map_preview_label.configure(image=None, text="No Preview")
+        self._preview_ctk_image = None
 
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
@@ -334,7 +389,8 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.config_panel.grid(row=1, column=0, sticky="nsew")
         self.config_panel.grid_rowconfigure(2, weight=1)
-        self.config_panel.grid_columnconfigure(0, weight=1)
+        self.config_panel.grid_columnconfigure(0, weight=2)  # list column
+        self.config_panel.grid_columnconfigure(1, weight=1)  # preview column
 
         self.selected_map_label = ctk.CTkLabel(
             self.config_panel,
@@ -395,6 +451,55 @@ class WopcApp(BaseApp):  # type: ignore
         self.map_scroll = ctk.CTkScrollableFrame(self.config_panel, fg_color="transparent")
         self.map_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
         self.map_buttons: list[Any] = []
+
+        # --- Map Preview Panel (right column of config_panel) ---
+        preview_panel = ctk.CTkFrame(
+            self.config_panel, fg_color=COLOR_PANEL, corner_radius=4
+        )
+        preview_panel.grid(row=0, column=1, rowspan=3, sticky="nsew", padx=(0, 10), pady=10)
+        preview_panel.grid_rowconfigure(1, weight=1)
+        preview_panel.grid_columnconfigure(0, weight=1)
+
+        # Preview image placeholder (shown when no image available)
+        _preview_size = 220
+        self.map_preview_label = ctk.CTkLabel(
+            preview_panel,
+            text="No Preview",
+            text_color=COLOR_TEXT_MUTED,
+            fg_color=COLOR_BG,
+            width=_preview_size,
+            height=_preview_size,
+            corner_radius=3,
+        )
+        self.map_preview_label.grid(row=0, column=0, padx=10, pady=(10, 6), sticky="n")
+
+        self.map_preview_name = ctk.CTkLabel(
+            preview_panel,
+            text="",
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            wraplength=_preview_size,
+            justify="left",
+        )
+        self.map_preview_name.grid(row=1, column=0, padx=10, pady=(0, 2), sticky="nw")
+
+        self.map_preview_detail = ctk.CTkLabel(
+            preview_panel,
+            text="",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        )
+        self.map_preview_detail.grid(row=2, column=0, padx=10, pady=(0, 4), sticky="nw")
+
+        self.map_preview_desc = ctk.CTkLabel(
+            preview_panel,
+            text="",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11, slant="italic"),
+            wraplength=_preview_size,
+            justify="left",
+        )
+        self.map_preview_desc.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="nw")
 
         # --- Player Slots + Game Options Panel ---
         self.lower_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
@@ -1559,7 +1664,9 @@ class WopcApp(BaseApp):  # type: ignore
                 parts.append(info.size_label)
             label = f"{parts[0]} — {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
 
-            def on_select(name=info.folder_name, disp=info.display_name) -> None:
+            def on_select(
+                name=info.folder_name, disp=info.display_name, _info=info
+            ) -> None:
                 prefs.set_active_map(name)
                 for map_btn in self.map_buttons:
                     map_btn.configure(
@@ -1576,6 +1683,7 @@ class WopcApp(BaseApp):  # type: ignore
                             hover_color=COLOR_ACCENT_HOVER,
                         )
                 self.selected_map_label.configure(text=f"Selected Map: {disp}")
+                self._update_map_preview(_info)
                 self._broadcast_game_state()
 
             color = COLOR_ACCENT if is_active else COLOR_SURFACE
@@ -1598,6 +1706,7 @@ class WopcApp(BaseApp):  # type: ignore
 
             if is_active:
                 self.selected_map_label.configure(text=f"Selected Map: {info.display_name}")
+                self._update_map_preview(info)
 
     def _on_faction_change(self, choice: str) -> None:
         """Persist faction preference when dropdown changes."""

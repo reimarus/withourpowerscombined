@@ -132,3 +132,55 @@ class TestSizeLabels:
             mock_config.WOPC_MAPS = maps
             results = map_scanner.scan_all_maps()
         assert results[0].size_label == "10km"
+
+
+class TestPreviewPath:
+    """Tests for preview image detection in parse_scenario."""
+
+    def test_finds_png_preview(self, tmp_path: Path) -> None:
+        map_dir = tmp_path / "scmp_007"
+        map_dir.mkdir()
+        scenario = map_dir / "scmp_007_scenario.lua"
+        scenario.write_text("ScenarioInfo = { name = 'Setons' }", encoding="utf-8")
+        preview = map_dir / "scmp_007_preview.png"
+        preview.write_bytes(b"PNG_FAKE_DATA")
+
+        info = map_scanner.parse_scenario(scenario)
+        assert info is not None
+        assert info.preview_path == preview
+
+    def test_finds_jpg_preview(self, tmp_path: Path) -> None:
+        map_dir = tmp_path / "mymap"
+        map_dir.mkdir()
+        scenario = map_dir / "mymap_scenario.lua"
+        scenario.write_text("ScenarioInfo = { name = 'My Map' }", encoding="utf-8")
+        preview = map_dir / "mymap_preview.jpg"
+        preview.write_bytes(b"JPEG_FAKE_DATA")
+
+        info = map_scanner.parse_scenario(scenario)
+        assert info is not None
+        assert info.preview_path == preview
+
+    def test_no_preview_when_absent(self, tmp_path: Path) -> None:
+        map_dir = tmp_path / "nopreview"
+        map_dir.mkdir()
+        scenario = map_dir / "nopreview_scenario.lua"
+        scenario.write_text("ScenarioInfo = { name = 'No Preview Map' }", encoding="utf-8")
+
+        info = map_scanner.parse_scenario(scenario)
+        assert info is not None
+        assert info.preview_path is None
+
+    def test_png_preferred_over_jpg(self, tmp_path: Path) -> None:
+        map_dir = tmp_path / "both"
+        map_dir.mkdir()
+        scenario = map_dir / "both_scenario.lua"
+        scenario.write_text("ScenarioInfo = { name = 'Both' }", encoding="utf-8")
+        png = map_dir / "both_preview.png"
+        png.write_bytes(b"PNG_DATA")
+        jpg = map_dir / "both_preview.jpg"
+        jpg.write_bytes(b"JPEG_DATA")
+
+        info = map_scanner.parse_scenario(scenario)
+        assert info is not None
+        assert info.preview_path == png  # PNG takes priority
