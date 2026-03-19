@@ -246,12 +246,17 @@ class TestContentPackAcquisition:
         from launcher.deploy import _acquire_content_packs
 
         # No LOUD directory exists — should attempt download
-        mock_retrieve = MagicMock(side_effect=lambda url, dst: Path(dst).write_bytes(b"\x00" * 50))
-        with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
+        def fake_download(url, dst, *, progress_cb=None):
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(b"\x00" * 50)
+            return True
+
+        mock_dl = MagicMock(side_effect=fake_download)
+        with patch("launcher.deploy._download_file", mock_dl):
             _acquire_content_packs()
 
         # blackops: 1 SCD + 2 sounds = 3; TotalMayhem: 1 SCD + 10 sounds = 11
-        assert mock_retrieve.call_count == 14
+        assert mock_dl.call_count == 14
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         assert (wopc_gd / "blackops.scd").exists()
@@ -285,19 +290,19 @@ class TestContentPackAcquisition:
         ]:
             (wopc_sounds / sfx).write_bytes(b"\x03")
 
-        mock_retrieve = MagicMock()
-        with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
+        mock_dl = MagicMock()
+        with patch("launcher.deploy._download_file", mock_dl):
             _acquire_content_packs()
 
         # Nothing should be downloaded
-        mock_retrieve.assert_not_called()
+        mock_dl.assert_not_called()
 
     def test_download_failure_does_not_crash(self, patched_config):
         """Gracefully handles download failures."""
         from launcher.deploy import _acquire_content_packs
 
-        mock_retrieve = MagicMock(side_effect=OSError("network error"))
-        with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
+        mock_dl = MagicMock(return_value=False)
+        with patch("launcher.deploy._download_file", mock_dl):
             # Should not raise
             _acquire_content_packs()
 
@@ -475,12 +480,17 @@ class TestContentIconExtraction:
         self._make_extracted_mod(patched_config, "TestMod", ["BRMT1PD"])
         # LOUD textures.scd does NOT exist
 
-        mock_retrieve = MagicMock()
-        with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
+        def fake_download(url, dst, *, progress_cb=None):
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(b"\x00" * 50)
+            return True
+
+        mock_dl = MagicMock(side_effect=fake_download)
+        with patch("launcher.deploy._download_file", mock_dl):
             _build_content_icons_scd()
 
-        mock_retrieve.assert_called_once()
-        assert "content_icons.scd" in str(mock_retrieve.call_args)
+        mock_dl.assert_called_once()
+        assert "content_icons.scd" in str(mock_dl.call_args)
 
     def test_skips_download_when_cached(self, patched_config):
         """Does not re-download if content_icons.scd already exists."""
@@ -492,11 +502,11 @@ class TestContentIconExtraction:
         wopc_gd.mkdir(parents=True, exist_ok=True)
         (wopc_gd / "content_icons.scd").write_bytes(b"\x00" * 50)
 
-        mock_retrieve = MagicMock()
-        with patch("launcher.deploy.urllib.request.urlretrieve", mock_retrieve):
+        mock_dl = MagicMock()
+        with patch("launcher.deploy._download_file", mock_dl):
             _build_content_icons_scd()
 
-        mock_retrieve.assert_not_called()
+        mock_dl.assert_not_called()
 
     def test_rebuilds_from_loud_even_if_cached(self, patched_config):
         """Always rebuilds from LOUD textures.scd when available (picks up new packs)."""

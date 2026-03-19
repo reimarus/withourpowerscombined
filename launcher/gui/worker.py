@@ -1,3 +1,4 @@
+import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -21,8 +22,12 @@ class SetupWorker(threading.Thread):
         try:
             # We override the direct console print/logging by wrapping it or just running
             # its success/failure status.
-            repo_root = Path(__file__).resolve().parent.parent.parent
-            init_dir = repo_root / "init"
+            # In frozen exe, init/ is bundled inside _MEIPASS
+            if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+                init_dir = Path(sys._MEIPASS) / "init"
+            else:
+                repo_root = Path(__file__).resolve().parent.parent.parent
+                init_dir = repo_root / "init"
             run_setup(init_dir)
 
             success = True
