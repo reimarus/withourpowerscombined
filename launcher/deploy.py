@@ -2,6 +2,8 @@
 
 import logging
 import shutil
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from collections.abc import Callable
@@ -64,49 +66,84 @@ def copy_file(src: Path, dst: Path) -> None:
     logger.info("  copied  %s", dst.name)
 
 
-def _download_file(
-    url: str, dst: Path, *, progress_cb: Callable[[int, int], None] | None = None
-) -> bool:
-    """Download a file from *url* to *dst* with optional progress callback.
+_DL_MAX_RETRIES = 3
+_DL_TIMEOUT = 30  # seconds
 
+
+def _download_file(
+    url: str,
+    dst: Path,
+    *,
+    progress_cb: Callable[[int, int], None] | None = None,
+    max_retries: int = _DL_MAX_RETRIES,
+    timeout: int = _DL_TIMEOUT,
+) -> bool:
+    """Download a file from *url* to *dst* with retry and progress.
+
+    Retries up to *max_retries* times with exponential backoff (1s, 2s, 4s).
     Returns True on success, False on failure.
     """
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(dst.suffix + ".tmp")
-    try:
-        logger.info("  downloading %s ...", dst.name)
-        req = urllib.request.urlopen(url)
-        total = int(req.headers.get("Content-Length", 0))
-        downloaded = 0
-        chunk_size = 256 * 1024  # 256 KB chunks
-        last_pct = -1
 
-        with tmp.open("wb") as f:
-            while True:
-                chunk = req.read(chunk_size)
-                if not chunk:
-                    break
-                f.write(chunk)
-                downloaded += len(chunk)
-                if total > 0:
-                    pct = int(downloaded * 100 / total)
-                    if pct >= last_pct + 5:  # Report every 5%
-                        last_pct = pct
-                        mb_done = downloaded / 1e6
-                        mb_total = total / 1e6
-                        logger.info("  %s: %d%% (%.1f / %.1f MB)", dst.name, pct, mb_done, mb_total)
-                        if progress_cb:
-                            progress_cb(downloaded, total)
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info("  downloading %s (attempt %d/%d) ...", dst.name, attempt, max_retries)
+            req = urllib.request.urlopen(url, timeout=timeout)
+            total = int(req.headers.get("Content-Length", 0))
+            downloaded = 0
+            chunk_size = 256 * 1024  # 256 KB chunks
+            last_pct = -1
 
-        tmp.replace(dst)
-        size_mb = dst.stat().st_size / 1e6
-        logger.info("  saved %s (%.1f MB)", dst.name, size_mb)
-        return True
-    except (OSError, urllib.error.URLError) as exc:
-        logger.warning("  WARNING: download failed for %s: %s", dst.name, exc)
-        if tmp.exists():
-            tmp.unlink()
-        return False
+            with tmp.open("wb") as f:
+                while True:
+                    chunk = req.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total > 0:
+                        pct = int(downloaded * 100 / total)
+                        if pct >= last_pct + 5:  # Report every 5%
+                            last_pct = pct
+                            mb_done = downloaded / 1e6
+                            mb_total = total / 1e6
+                            logger.info(
+                                "  %s: %d%% (%.1f / %.1f MB)",
+                                dst.name,
+                                pct,
+                                mb_done,
+                                mb_total,
+                            )
+                            if progress_cb:
+                                progress_cb(downloaded, total)
+
+            tmp.replace(dst)
+            size_mb = dst.stat().st_size / 1e6
+            logger.info("  saved %s (%.1f MB)", dst.name, size_mb)
+            return True
+        except (OSError, urllib.error.URLError) as exc:
+            logger.warning(
+                "  WARNING: download attempt %d/%d failed for %s: %s",
+                attempt,
+                max_retries,
+                dst.name,
+                exc,
+            )
+            if tmp.exists():
+                tmp.unlink()
+            if attempt < max_retries:
+                backoff = 2 ** (attempt - 1)  # 1s, 2s, 4s
+                logger.info("  retrying in %ds ...", backoff)
+                time.sleep(backoff)
+
+    logger.error(
+        "  FAILED: could not download %s after %d attempts from %s",
+        dst.name,
+        max_retries,
+        url,
+    )
+    return False
 
 
 def _download_and_extract(url: str, dst_dir: Path) -> bool:
@@ -288,12 +325,23 @@ def _acquire_content_packs() -> None:
             logger.info("  removed excluded mod: %s", excluded)
 
 
-def run_setup(repo_init_dir: Path) -> None:
+def run_setup(
+    repo_init_dir: Path,
+    *,
+    progress_cb: Callable[[str, int, int], None] | None = None,
+) -> None:
     """Create the WOPC game directory at C:\\ProgramData\\WOPC\\ and populate it.
 
     Args:
         repo_init_dir: path to the init/ directory in the repo (contains init_wopc.lua)
+        progress_cb: optional ``(message, step, total_steps)`` callback for GUI updates
     """
+
+    def _report(msg: str, step: int) -> None:
+        logger.info(msg)
+        if progress_cb:
+            progress_cb(msg, step, 6)
+
     logger.info("\n=== WOPC Setup v%s ===\n", config.VERSION)
     logger.info("WOPC directory: %s", config.WOPC_ROOT)
 
@@ -306,12 +354,12 @@ def run_setup(repo_init_dir: Path) -> None:
     patched_exe = config.PATCH_BUILD_DIR / "ForgedAlliance_exxt.exe"
     exe_dst = config.WOPC_BIN / config.GAME_EXE
     if patched_exe.is_file():
-        logger.info("\n[1/6] Copying FAF-patched game binaries")
+        _report("[1/6] Copying FAF-patched game binaries", 1)
         # Always overwrite exe with latest patched version
         shutil.copy2(patched_exe, exe_dst)
         logger.info("  copied  %s (FAF-patched)", config.GAME_EXE)
     else:
-        logger.info("\n[1/6] Copying game binaries from %s", config.SCFA_BIN)
+        _report("[1/6] Copying game binaries from SCFA", 1)
         logger.info("  NOTE: Using stock exe. Run 'wopc patch' to build FAF-patched version.")
 
     missing = []
@@ -329,7 +377,7 @@ def run_setup(repo_init_dir: Path) -> None:
         logger.warning("  WARNING: missing files: %s", ", ".join(missing))
 
     # --- Step 2: Copy bundled bin files (icons SCD, etc) ---
-    logger.info("\n[2/6] Copying bundled bin files")
+    _report("[2/6] Copying bundled bin files", 2)
     if config.REPO_BUNDLED_BIN.exists():
         for f in config.REPO_BUNDLED_BIN.iterdir():
             if f.is_file():
@@ -350,7 +398,7 @@ def run_setup(repo_init_dir: Path) -> None:
                 _download_file(icons_info["url"], icons_dst)
 
     # --- Step 3: Copy init files from repo ---
-    logger.info("\n[3/6] Copying init files from repo")
+    _report("[3/6] Copying init files", 3)
     for fname in ["init_wopc.lua", "CommonDataPath.lua"]:
         src = repo_init_dir / fname
         dst = config.WOPC_BIN / fname
@@ -371,7 +419,7 @@ def run_setup(repo_init_dir: Path) -> None:
     logger.info("  generated wopc_paths.lua (SCFA = %s)", config.SCFA_STEAM)
 
     # --- Step 4: Copy bundled content ---
-    logger.info("\n[4/6] Copying bundled content")
+    _report("[4/6] Downloading and building game content", 4)
 
     # Gamedata: copy individual SCD files
     if config.REPO_BUNDLED_GAMEDATA.exists():
@@ -493,11 +541,11 @@ def run_setup(repo_init_dir: Path) -> None:
             logger.info("  patched faf_ui.scd with fixed StructureUnit.lua")
 
     # --- Step 4b: Acquire content packs (LOUD mods) ---
-    logger.info("\n[4b] Acquiring content packs")
+    _report("[4/6] Downloading content packs", 4)
     _acquire_content_packs()
 
     # --- Step 4c: Build unit icon SCD for content packs ---
-    logger.info("\n[4c] Building content pack icons")
+    _report("[4/6] Building content pack icons", 4)
     _build_content_icons_scd()
 
     # Maps, sounds: copy entire directories
@@ -522,7 +570,7 @@ def run_setup(repo_init_dir: Path) -> None:
         shutil.copytree(config.REPO_BUNDLED_SOUNDS, config.WOPC_SOUNDS, dirs_exist_ok=True)
 
     # --- Step 5: Copy usermods (not symlink - user may add/remove mods) ---
-    logger.info("\n[5/6] Copying user mods")
+    _report("[5/6] Copying user mods", 5)
     if config.REPO_BUNDLED_USERMODS.exists() and not config.WOPC_USERMODS.exists():
         shutil.copytree(config.REPO_BUNDLED_USERMODS, config.WOPC_USERMODS)
         logger.info(
@@ -535,7 +583,7 @@ def run_setup(repo_init_dir: Path) -> None:
         logger.info("  created empty usermods/")
 
     # --- Step 6: Setup user maps ---
-    logger.info("\n[6/6] Setting up user maps")
+    _report("[6/6] Setting up user maps", 6)
     config.WOPC_USERMAPS.mkdir(parents=True, exist_ok=True)
     logger.info("  ensured empty usermaps/ exists")
 

@@ -2,39 +2,53 @@
 
 Items to tackle over time, roughly grouped by priority.
 
+## Critical Bugs — First-Time Setup Broken
+
+1. **Asset download stuck / no progress shown** — first-time launcher gets stuck fetching assets with no visible feedback. Add a real progress bar or status text to the GUI showing what's downloading, percentage, and file sizes. Users must be able to see what's happening.
+2. **Auto-discover SCFA install path** — the launcher fails to find SCFA assets on a fresh machine. Scan Steam libraryfolders.vdf, common registry keys (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`), and default Steam paths to auto-locate the SCFA install. Fall back to a folder picker if auto-detect fails.
+3. **WOPC asset download failing** — content-v1/v2 downloads from GitHub Releases aren't completing. Debug the download pipeline (URL resolution, redirect handling, large file support) and fix.
+4. **Publish launcher exe to GitHub Release** — the exe must be the most prominent download on the repo. Upload `WOPC-Launcher.exe` to a pinned release so players can find it immediately.
+5. **Map preview not working (solo)** — map preview panel was added but isn't displaying images. Debug and fix.
+6. **Map preview not working (multiplayer)** — map preview not visible in multiplayer lobby at all. Wire it up.
+7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
+
 ## High Priority — Player Experience
 
-1. **Launcher self-update** — when a new launcher version is available on GitHub Releases, download and replace the exe from within the launcher itself. Players should never need to visit GitHub manually. Check on startup, show update button, download in background, restart.
-2. **Content-v2 release build** — run `scripts/build_content_release.py` and upload faf_ui.scd, wopc-maps.zip, strategic icons to `content-v2` GitHub Release so the standalone installer can download them
-3. **Player ratings / balancing** — track skill ratings for fairer matchmaking (ELO or similar)
+5. **Launcher self-update** — when a new launcher version is available on GitHub Releases, download and replace the exe from within the launcher itself. Players should never need to visit GitHub manually. Check on startup, show update button, download in background, restart.
+6. **SupCom-authentic UI assets** — the launcher currently uses generic CustomTkinter buttons and backgrounds. Extract and implement actual Supreme Commander design assets (metallic button frames, brushed-metal backgrounds, faction-themed borders, glowing hover states) so the launcher feels like a modern SupCom experience, not a generic app with a color theme.
+7. **Remember launcher window size** — persist the user's last window dimensions and restore on next launch.
+8. **LOUD color picker** — use LOUD's color palette/picker for faction and player colors instead of the generic one.
+9. **Content-v2 release build** — run `scripts/build_content_release.py` and upload faf_ui.scd, wopc-maps.zip, strategic icons to `content-v2` GitHub Release so the standalone installer can download them
+10. **Player ratings / balancing** — track skill ratings for fairer matchmaking (ELO or similar)
 
 ## Multiplayer UX (Phase 6 — complete)
 
-4. ~~**"Add AI" in multiplayer lobby**~~ ✅ — wired to lobby screen with proper slot management
-5. ~~**"Change Map" in multiplayer lobby**~~ ✅ — searchable map picker dialog
-6. ~~**Remove players from solo screen**~~ ✅ — AI slots have ✕ remove buttons (human slot 1 is protected)
-7. ~~**Victory type tooltips**~~ ✅ — descriptions shown on both solo and multiplayer screens
-8. ~~**Team auto-assignment**~~ ✅ — new AI slots auto-balanced to team with fewest players via `_next_team()`
-9. ~~**Solo ↔ multiplayer UI consistency**~~ ✅ — lobby options now reuse `GAME_OPTION_DEFS`, matching labels/values/defaults; headers and button styles unified
-10. ~~**UI polish**~~ ✅ — FAF/SupCom visual redesign (gold + navy palette, dividers, warm cream text)
-11. ~~**Map preview in launcher**~~ ✅ — preview image, player count, size, description shown on map selection
+11. ~~**"Add AI" in multiplayer lobby**~~ ✅ — wired to lobby screen with proper slot management
+12. ~~**"Change Map" in multiplayer lobby**~~ ✅ — searchable map picker dialog
+13. ~~**Remove players from solo screen**~~ ✅ — AI slots have ✕ remove buttons (human slot 1 is protected)
+14. ~~**Victory type tooltips**~~ ✅ — descriptions shown on both solo and multiplayer screens
+15. ~~**Team auto-assignment**~~ ✅ — new AI slots auto-balanced to team with fewest players via `_next_team()`
+16. ~~**Solo ↔ multiplayer UI consistency**~~ ✅ — lobby options now reuse `GAME_OPTION_DEFS`, matching labels/values/defaults; headers and button styles unified
+17. ~~**UI polish**~~ ✅ — FAF/SupCom visual redesign (gold + navy palette, dividers, warm cream text)
+18. ~~**Map preview in launcher**~~ ✅ — preview image, player count, size, description shown on map selection
 
 ## Features
 
-12. **Map Library Browser** — searchable map library where players can browse, preview, and download maps (replaces flat list)
-13. **Mini-map size persistence** — remember the user's preferred mini-map size between sessions
-14. **Merge LOUD unit mods** — BrewLAN, TotalMayhem, etc. (BlackOps done ✅, though some strategic icons still missing: brb1302, brb1106, brb2306, brb4309, brb4401)
-15. **Save game function** — save/load mid-game
-16. **Hotkeys for factory queueing** — keyboard shortcuts for build queue management
-17. **Discoball Czars** — cosmetic fun
-18. **Unit pathing (StarCraft 2 style)** — better pathing than SCFA's stop-and-wait A* (Phase 7 — C++ patch territory)
-19. **Game speed controls** — adjust sim speed from launcher or in-game
-20. **Voice alerts** — audio callouts for: mex under attack, commander under attack, units under attack, incoming artillery
-21. **Mod manager UI** — full UI for enabling/disabling/ordering mods with dependency resolution and conflict detection
-22. **Fix scoreboard** — scoreboard issues in-game
-23. **Launcher settings persistence** — remember window size, position, panel state, last-used filters across sessions
-24. **Modern matchmaking UX** — Steam friends integration, game browser (find visible games), invite system (replaces manual IP/port)
-25. **Steam friends integration** — Steam API for multiplayer invites and presence
+19. **Map Library Browser** — searchable map library where players can browse, preview, and download maps (replaces flat list)
+20. **Mini-map size persistence** — remember the user's preferred mini-map size between sessions
+21. **Merge LOUD unit mods** — BrewLAN, TotalMayhem, etc. (BlackOps done ✅, though some strategic icons still missing: brb1302, brb1106, brb2306, brb4309, brb4401)
+22. **Save game function** — save/load mid-game
+23. **Hotkeys for factory queueing** — keyboard shortcuts for build queue management
+24. **Discoball Czars** — cosmetic fun
+25. **Unit pathing (StarCraft 2 style)** — better pathing than SCFA's stop-and-wait A* (Phase 7 — C++ patch territory)
+26. **Game speed controls** — adjust sim speed from launcher or in-game
+27. **Voice alerts** — audio callouts for: mex under attack, commander under attack, units under attack, incoming artillery
+28. **Mod manager UI** — full UI for enabling/disabling/ordering mods with dependency resolution and conflict detection
+29. **Fix scoreboard** — scoreboard issues in-game
+30. **Launcher settings persistence** — remember window size, position, panel state, last-used filters across sessions
+31. **Modern matchmaking UX** — Steam friends integration, game browser (find visible games), invite system (replaces manual IP/port)
+32. **Steam friends integration** — Steam API for multiplayer invites and presence
+33. **"Leave a comment or idea" feature** — in-launcher feedback button that lets players submit ideas, bug reports, or feature requests (e.g. opens a GitHub Issue template or a simple form that creates an issue). We review and implement what makes sense.
 
 ## Architecture Refactors
 

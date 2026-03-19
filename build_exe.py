@@ -37,6 +37,9 @@ def main() -> int:
         # Bundle CustomTkinter theme assets (required for the GUI)
         "--collect-all",
         "customtkinter",
+        # Bundle Pillow for map preview image rendering
+        "--hidden-import",
+        "PIL",
         # Bundle init scripts (needed by deploy.py at runtime)
         "--add-data",
         f"{repo_root / 'init'}{os.pathsep}init",

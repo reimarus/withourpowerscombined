@@ -2,6 +2,7 @@ import logging
 import sys
 import threading
 import time
+import tkinter.filedialog
 from typing import TYPE_CHECKING, Any, ClassVar
 
 try:
@@ -167,6 +168,8 @@ class WopcApp(BaseApp):  # type: ignore
             self.map_preview_name.configure(text="")
             self.map_preview_detail.configure(text="")
             self.map_preview_desc.configure(text="")
+            if hasattr(self, "lobby_map_preview_label"):
+                self.lobby_map_preview_label.configure(image=None, text="No Preview")
             return
 
         # Metadata labels
@@ -182,24 +185,31 @@ class WopcApp(BaseApp):  # type: ignore
         self.map_preview_desc.configure(text=info.description or "")
 
         # Preview image
+        ctk_img = None
         if _PIL_AVAILABLE and info.preview_path and info.preview_path.exists():
             try:
                 img = PilImage.open(info.preview_path).convert("RGB")
-                img = img.resize(
-                    (self._PREVIEW_SIZE, self._PREVIEW_SIZE), PilImage.LANCZOS
+                img = img.resize((self._PREVIEW_SIZE, self._PREVIEW_SIZE), PilImage.LANCZOS)
+                ctk_img = ctk.CTkImage(
+                    light_image=img,
+                    dark_image=img,
+                    size=(self._PREVIEW_SIZE, self._PREVIEW_SIZE),
                 )
-                ctk_img = ctk.CTkImage(light_image=img, dark_image=img,
-                                       size=(self._PREVIEW_SIZE, self._PREVIEW_SIZE))
                 self.map_preview_label.configure(image=ctk_img, text="")
-                # Keep a reference so the image isn't garbage-collected
                 self._preview_ctk_image = ctk_img
-                return
             except Exception as exc:
                 logger.warning("Failed to load map preview %s: %s", info.preview_path, exc)
 
-        # Fallback: no image available
-        self.map_preview_label.configure(image=None, text="No Preview")
-        self._preview_ctk_image = None
+        if ctk_img is None:
+            self.map_preview_label.configure(image=None, text="No Preview")
+            self._preview_ctk_image = None
+
+        # Also update lobby preview widget
+        if hasattr(self, "lobby_map_preview_label"):
+            if ctk_img is not None:
+                self.lobby_map_preview_label.configure(image=ctk_img, text="")
+            else:
+                self.lobby_map_preview_label.configure(image=None, text="No Preview")
 
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
@@ -248,19 +258,25 @@ class WopcApp(BaseApp):  # type: ignore
 
         # --- Status indicators ---
         self.status_scfa = ctk.CTkLabel(
-            self.sidebar, text="◌  SCFA: Checking...", text_color=COLOR_TEXT_MUTED,
+            self.sidebar,
+            text="◌  SCFA: Checking...",
+            text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
         self.status_scfa.grid(row=3, column=0, padx=20, pady=(4, 2), sticky="w")
 
         self.status_bundled = ctk.CTkLabel(
-            self.sidebar, text="◌  Assets: Checking...", text_color=COLOR_TEXT_MUTED,
+            self.sidebar,
+            text="◌  Assets: Checking...",
+            text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
         self.status_bundled.grid(row=4, column=0, padx=20, pady=2, sticky="w")
 
         self.status_wopc = ctk.CTkLabel(
-            self.sidebar, text="◌  WOPC: Checking...", text_color=COLOR_TEXT_MUTED,
+            self.sidebar,
+            text="◌  WOPC: Checking...",
+            text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
         self.status_wopc.grid(row=5, column=0, padx=20, pady=(2, 8), sticky="w")
@@ -301,7 +317,9 @@ class WopcApp(BaseApp):  # type: ignore
         self.mode_widgets_frame.grid(row=9, column=0, padx=20, sticky="ew")
 
         self.port_label = ctk.CTkLabel(
-            self.mode_widgets_frame, text="Port:", text_color=COLOR_TEXT_MUTED,
+            self.mode_widgets_frame,
+            text="Port:",
+            text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
         self.port_entry = ctk.CTkEntry(self.mode_widgets_frame, width=120, placeholder_text="15000")
@@ -309,7 +327,9 @@ class WopcApp(BaseApp):  # type: ignore
         self.port_entry.bind("<FocusOut>", lambda e: prefs.set_host_port(self.port_entry.get()))
 
         self.address_label = ctk.CTkLabel(
-            self.mode_widgets_frame, text="Host Address:", text_color=COLOR_TEXT_MUTED,
+            self.mode_widgets_frame,
+            text="Host Address:",
+            text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
         self.address_entry = ctk.CTkEntry(
@@ -324,7 +344,9 @@ class WopcApp(BaseApp):  # type: ignore
 
         # Expected Players dropdown (hosting only)
         self.expected_label = ctk.CTkLabel(
-            self.mode_widgets_frame, text="Expected Players:", text_color=COLOR_TEXT_MUTED,
+            self.mode_widgets_frame,
+            text="Expected Players:",
+            text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
         saved_expected = str(prefs.get_expected_humans())
@@ -353,6 +375,23 @@ class WopcApp(BaseApp):  # type: ignore
             command=self._on_primary_click,
         )
         self.primary_btn.grid(row=10, column=0, padx=20, pady=(10, 6), sticky="ew")
+
+        # Progress bar (hidden until setup runs)
+        self.setup_progress = ctk.CTkProgressBar(
+            self.sidebar,
+            height=6,
+            progress_color=COLOR_ACCENT,
+            fg_color=COLOR_PANEL,
+            corner_radius=3,
+        )
+        self.setup_progress.set(0)
+        # Hidden by default — shown during install
+        self.setup_progress_label = ctk.CTkLabel(
+            self.sidebar,
+            text="",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        )
 
         # Version tag
         self.version_label = ctk.CTkLabel(
@@ -384,9 +423,7 @@ class WopcApp(BaseApp):  # type: ignore
         header_div.grid(row=0, column=0, sticky="ews", pady=(0, 0))
 
         # --- Map Selector Panel ---
-        self.config_panel = ctk.CTkFrame(
-            self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4
-        )
+        self.config_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         self.config_panel.grid(row=1, column=0, sticky="nsew")
         self.config_panel.grid_rowconfigure(2, weight=1)
         self.config_panel.grid_columnconfigure(0, weight=2)  # list column
@@ -453,9 +490,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.map_buttons: list[Any] = []
 
         # --- Map Preview Panel (right column of config_panel) ---
-        preview_panel = ctk.CTkFrame(
-            self.config_panel, fg_color=COLOR_PANEL, corner_radius=4
-        )
+        preview_panel = ctk.CTkFrame(self.config_panel, fg_color=COLOR_PANEL, corner_radius=4)
         preview_panel.grid(row=0, column=1, rowspan=3, sticky="nsew", padx=(0, 10), pady=10)
         preview_panel.grid_rowconfigure(1, weight=1)
         preview_panel.grid_columnconfigure(0, weight=1)
@@ -666,7 +701,7 @@ class WopcApp(BaseApp):  # type: ignore
         # --- Map Section (top-left) ---
         map_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         map_frame.grid(row=0, column=0, padx=(20, 5), pady=(20, 5), sticky="nsew")
-        map_frame.grid_rowconfigure(2, weight=1)
+        map_frame.grid_rowconfigure(3, weight=1)
         map_frame.grid_columnconfigure(0, weight=1)
 
         map_header = ctk.CTkLabel(
@@ -677,13 +712,26 @@ class WopcApp(BaseApp):  # type: ignore
         )
         map_header.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
 
+        # Lobby map preview image
+        self.lobby_map_preview_label = ctk.CTkLabel(
+            map_frame,
+            text="No Preview",
+            width=180,
+            height=180,
+            fg_color=COLOR_PANEL,
+            corner_radius=4,
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        )
+        self.lobby_map_preview_label.grid(row=1, column=0, padx=10, pady=(6, 4), sticky="n")
+
         self.lobby_map_label = ctk.CTkLabel(
             map_frame,
             text="No map selected",
             text_color=COLOR_TEXT_PRIMARY,
             font=ctk.CTkFont(size=16, weight="bold"),
         )
-        self.lobby_map_label.grid(row=1, column=0, padx=10, pady=(5, 0), sticky="w")
+        self.lobby_map_label.grid(row=2, column=0, padx=10, pady=(5, 0), sticky="w")
 
         # Map info (type, size, players)
         self.lobby_map_info = ctk.CTkLabel(
@@ -691,7 +739,7 @@ class WopcApp(BaseApp):  # type: ignore
             text="",
             text_color=COLOR_TEXT_MUTED,
         )
-        self.lobby_map_info.grid(row=2, column=0, padx=10, pady=5, sticky="nw")
+        self.lobby_map_info.grid(row=3, column=0, padx=10, pady=5, sticky="nw")
 
         self.lobby_change_map_btn = ctk.CTkButton(
             map_frame,
@@ -704,7 +752,7 @@ class WopcApp(BaseApp):  # type: ignore
             corner_radius=3,
             command=self._on_lobby_change_map,
         )
-        self.lobby_change_map_btn.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="w")
+        self.lobby_change_map_btn.grid(row=4, column=0, padx=10, pady=(0, 10), sticky="w")
 
         # --- Players Section (top-right) ---
         players_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
@@ -1664,9 +1712,7 @@ class WopcApp(BaseApp):  # type: ignore
                 parts.append(info.size_label)
             label = f"{parts[0]} — {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
 
-            def on_select(
-                name=info.folder_name, disp=info.display_name, _info=info
-            ) -> None:
+            def on_select(name=info.folder_name, disp=info.display_name, _info=info) -> None:
                 prefs.set_active_map(name)
                 for map_btn in self.map_buttons:
                     map_btn.configure(
@@ -2473,11 +2519,38 @@ class WopcApp(BaseApp):  # type: ignore
 
         if not scfa_ok:
             self.primary_btn.configure(
-                text="MISSING GAME FILES", state="disabled", fg_color=COLOR_TEXT_MUTED,
+                text="MISSING GAME FILES",
+                state="disabled",
+                fg_color=COLOR_TEXT_MUTED,
                 text_color=COLOR_BG,
             )
-            self.log("ERROR: SCFA installation not found.")
-        elif not wopc_ok:
+            self.log("ERROR: SCFA installation not found. Click 'Browse...' to locate it.")
+            # Show browse button if not already shown
+            if not hasattr(self, "_scfa_browse_btn"):
+                self._scfa_browse_btn = ctk.CTkButton(
+                    self.sidebar,
+                    text="📂  Browse for SCFA...",
+                    font=ctk.CTkFont(size=12),
+                    height=30,
+                    fg_color=COLOR_ACCENT,
+                    hover_color=COLOR_ACCENT_HOVER,
+                    text_color=COLOR_BG,
+                    corner_radius=4,
+                    command=self._browse_for_scfa,
+                )
+            self._scfa_browse_btn.grid(row=3, column=0, padx=20, pady=(2, 2), sticky="ew")
+            self.status_scfa.grid(row=4, column=0, padx=20, pady=(2, 2), sticky="w")
+            self.status_bundled.grid(row=5, column=0, padx=20, pady=2, sticky="w")
+            self.status_wopc.grid(row=6, column=0, padx=20, pady=(2, 8), sticky="w")
+        else:
+            # Hide browse button if SCFA is found
+            if hasattr(self, "_scfa_browse_btn"):
+                self._scfa_browse_btn.grid_forget()
+            self.status_scfa.grid(row=3, column=0, padx=20, pady=(4, 2), sticky="w")
+            self.status_bundled.grid(row=4, column=0, padx=20, pady=2, sticky="w")
+            self.status_wopc.grid(row=5, column=0, padx=20, pady=(2, 8), sticky="w")
+
+        if scfa_ok and not wopc_ok:
             self.primary_btn.configure(
                 text="⬇  INSTALL / UPDATE",
                 fg_color=COLOR_WARN,
@@ -2485,7 +2558,7 @@ class WopcApp(BaseApp):  # type: ignore
                 text_color=COLOR_BG,
             )
             self.log("WOPC is not deployed. Click Install to begin.")
-        else:
+        elif scfa_ok and wopc_ok:
             mode = self.mode_var.get()
             label = self._PLAY_LABELS.get(mode, "PLAY MATCH")
             self.primary_btn.configure(
@@ -2501,28 +2574,79 @@ class WopcApp(BaseApp):  # type: ignore
         self._refresh_mods_list()
         self._refresh_map_list()
 
+    def _browse_for_scfa(self) -> None:
+        """Open a folder picker to locate the SCFA installation."""
+        from launcher.scfa_finder import save_scfa_path, validate_scfa_path
+
+        folder = tkinter.filedialog.askdirectory(
+            title="Select Supreme Commander: Forged Alliance install folder",
+            mustexist=True,
+        )
+        if not folder:
+            return
+        path = __import__("pathlib").Path(folder)
+        if validate_scfa_path(path):
+            config.SCFA_STEAM = path
+            config.SCFA_BIN = path / "bin"
+            save_scfa_path(config.WOPC_ROOT / "wopc_prefs.ini", path)
+            self.log(f"SCFA found at: {path}")
+            self._check_installation_status()
+        else:
+            self.log(
+                "ERROR: Selected folder does not look like an SCFA installation. "
+                "Expected bin/SupremeCommander.exe and gamedata/ directory."
+            )
+
     def _on_primary_click(self) -> None:
         """Handle main button action -- SOLO mode only."""
         btn_text = self.primary_btn.cget("text")
 
         if "INSTALL" in btn_text or "UPDATE" in btn_text:
             self.log("Starting asynchronous installation...")
-            self.primary_btn.configure(state="disabled", text="INSTALLING...")
-            worker = SetupWorker(on_complete=self._on_setup_complete, on_log=self.log)
+            self.primary_btn.configure(state="disabled", text="⬇  INSTALLING...")
+            # Show progress bar
+            self.setup_progress.set(0)
+            self.setup_progress.grid(row=11, column=0, padx=20, pady=(2, 0), sticky="ew")
+            self.setup_progress_label.configure(text="Preparing...")
+            self.setup_progress_label.grid(row=12, column=0, padx=20, pady=(2, 0), sticky="w")
+            # Move version label down
+            self.version_label.grid(row=13, column=0, padx=20, pady=(0, 20), sticky="w")
+            worker = SetupWorker(
+                on_complete=self._on_setup_complete,
+                on_log=self.log,
+                on_progress=self._on_setup_progress,
+            )
             worker.start()
             return
 
-        play_values = {f"▶  {v}" for v in self._PLAY_LABELS.values()} | set(
-            self._PLAY_LABELS.values()
-        ) | {"PLAY MATCH"}
+        play_values = (
+            {f"▶  {v}" for v in self._PLAY_LABELS.values()}
+            | set(self._PLAY_LABELS.values())
+            | {"PLAY MATCH"}
+        )
         if btn_text in play_values or btn_text.startswith("▶"):
             self.log("Launching game (solo mode)...")
             threading.Thread(target=self._launch_game, daemon=True).start()
+
+    def _on_setup_progress(self, message: str, step: int, total: int) -> None:
+        """Callback from SetupWorker — update progress bar from worker thread."""
+
+        def _update():
+            self.setup_progress.set(step / total)
+            self.setup_progress_label.configure(text=message)
+            self.primary_btn.configure(text=f"⬇  {message}")
+
+        self.after(0, _update)
 
     def _on_setup_complete(self, success: bool) -> None:
         """Callback executed when the SetupWorker finishes."""
 
         def _update():
+            # Hide progress bar
+            self.setup_progress.grid_forget()
+            self.setup_progress_label.grid_forget()
+            self.version_label.grid(row=11, column=0, padx=20, pady=(0, 20), sticky="w")
+
             self.primary_btn.configure(state="normal")
             if success:
                 self._check_installation_status()
