@@ -582,7 +582,7 @@ class WopcApp(BaseApp):  # type: ignore
             height=24,
             fg_color=COLOR_ACCENT,
             font=ctk.CTkFont(size=11),
-            command=self._add_ai_slot,
+            command=self._add_lobby_ai_slot,
         )
         self.lobby_add_ai_btn.grid(row=0, column=1, sticky="e")
 
@@ -592,6 +592,7 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.lobby_slots_scroll.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
         self.lobby_slots_scroll.grid_columnconfigure(1, weight=1)
+        self.lobby_player_slots: list[dict[str, Any]] = []
 
         # --- Options Section (bottom-left) ---
         opts_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
@@ -638,6 +639,25 @@ class WopcApp(BaseApp):  # type: ignore
             menu.grid(row=i + 1, column=1, padx=(5, 10), pady=2, sticky="w")
             self.lobby_option_vars[key] = var
             self.lobby_option_widgets.extend([lbl, menu])
+
+        # Victory description label (below all option rows)
+        victory_row = len(options_config) + 1
+        self.lobby_victory_desc = ctk.CTkLabel(
+            opts_frame,
+            text=self.VICTORY_DESCRIPTIONS.get(defaults.get("Victory", ""), ""),
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11, slant="italic"),
+            wraplength=250,
+        )
+        self.lobby_victory_desc.grid(
+            row=victory_row, column=0, columnspan=2, padx=10, pady=(2, 5), sticky="w"
+        )
+
+        def _update_lobby_victory_desc(*_a: Any) -> None:
+            desc = self.VICTORY_DESCRIPTIONS.get(self.lobby_option_vars["Victory"].get(), "")
+            self.lobby_victory_desc.configure(text=desc)
+
+        self.lobby_option_vars["Victory"].trace_add("write", _update_lobby_victory_desc)
 
         # --- Chat Section (bottom-right) ---
         chat_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
@@ -824,6 +844,12 @@ class WopcApp(BaseApp):  # type: ignore
         "Random",
     ]
     MAX_SLOTS: ClassVar[int] = 16
+    VICTORY_DESCRIPTIONS: ClassVar[dict[str, str]] = {
+        "Demoralization": "Destroy 70% of an enemy's units to eliminate them",
+        "Supremacy": "Destroy all enemy structures and engineers to win",
+        "Assassination": "Kill the enemy Commander (ACU) to eliminate them",
+        "Sandbox": "No victory condition \u2014 play until you quit",
+    }
 
     def _build_player_slots(self) -> None:
         """Build the player slots panel (left half of lower_panel)."""
@@ -1072,6 +1098,156 @@ class WopcApp(BaseApp):  # type: ignore
             s["widgets"][0].configure(text=str(i + 1))
         self._broadcast_game_state()
 
+    # ------------------------------------------------------------------
+    # Lobby Player Slots (mirror of solo slots for the lobby screen)
+    # ------------------------------------------------------------------
+
+    def _add_lobby_ai_slot(self) -> None:
+        """Add an AI opponent slot row in the lobby screen."""
+        if len(self.lobby_player_slots) >= self.MAX_SLOTS:
+            return
+
+        row = len(self.lobby_player_slots)
+        slot_num = row + 1
+        widgets: list[Any] = []
+
+        lbl = ctk.CTkLabel(
+            self.lobby_slots_scroll,
+            text=str(slot_num),
+            width=20,
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
+        )
+        lbl.grid(row=row, column=0, padx=(0, 5), pady=2)
+        widgets.append(lbl)
+
+        # AI difficulty
+        ai_var = ctk.StringVar(value="Medium")
+        ai_menu = ctk.CTkOptionMenu(
+            self.lobby_slots_scroll,
+            values=self.AI_DISPLAY_NAMES,
+            variable=ai_var,
+            width=90,
+            height=24,
+        )
+        ai_menu.grid(row=row, column=1, sticky="w", pady=2)
+        widgets.append(ai_menu)
+
+        # Faction
+        faction_var = ctk.StringVar(value="Random")
+        faction_menu = ctk.CTkOptionMenu(
+            self.lobby_slots_scroll,
+            values=self.FACTION_NAMES,
+            variable=faction_var,
+            width=90,
+            height=24,
+        )
+        faction_menu.grid(row=row, column=2, padx=5, pady=2)
+        widgets.append(faction_menu)
+
+        # Team
+        team_var = ctk.StringVar(value="2")
+        team_menu = ctk.CTkOptionMenu(
+            self.lobby_slots_scroll,
+            values=["1", "2", "3", "4"],
+            variable=team_var,
+            width=50,
+            height=24,
+        )
+        team_menu.grid(row=row, column=3, padx=5, pady=2)
+        widgets.append(team_menu)
+
+        # Color selector
+        color_var = ctk.StringVar(value=self._next_free_color())
+        color_menu = ctk.CTkOptionMenu(
+            self.lobby_slots_scroll,
+            values=self._get_color_names(),
+            variable=color_var,
+            command=self._on_color_change,
+            width=70,
+            height=24,
+        )
+        color_menu.grid(row=row, column=4, padx=5, pady=2)
+        widgets.append(color_menu)
+
+        # Remove button
+        slot_index = row  # capture for closure
+
+        def remove_this() -> None:
+            self._remove_lobby_slot(slot_index)
+
+        remove_btn = ctk.CTkButton(
+            self.lobby_slots_scroll,
+            text="\u2715",
+            width=24,
+            height=24,
+            fg_color="transparent",
+            hover_color="#ED4245",
+            text_color=COLOR_TEXT_MUTED,
+            command=remove_this,
+        )
+        remove_btn.grid(row=row, column=5, pady=2)
+        widgets.append(remove_btn)
+
+        self.lobby_player_slots.append(
+            {
+                "type": "ai",
+                "ai_var": ai_var,
+                "faction_var": faction_var,
+                "team_var": team_var,
+                "color_var": color_var,
+                "widgets": widgets,
+            }
+        )
+        self._broadcast_game_state()
+
+    def _remove_lobby_slot(self, index: int) -> None:
+        """Remove a player slot from the lobby screen and re-layout remaining slots."""
+        if index < 0 or index >= len(self.lobby_player_slots):
+            return
+
+        # Destroy widgets for the removed slot
+        slot = self.lobby_player_slots.pop(index)
+        for w in slot["widgets"]:
+            w.destroy()
+
+        # Re-layout all remaining slots
+        for i, s in enumerate(self.lobby_player_slots):
+            for w in s["widgets"]:
+                w.grid_configure(row=i)
+            # Update slot number label
+            s["widgets"][0].configure(text=str(i + 1))
+        self._broadcast_game_state()
+
+    def _get_lobby_ai_opponents(self) -> list[dict[str, Any]]:
+        """Collect AI opponent config from the lobby slot UI."""
+        opponents: list[dict[str, Any]] = []
+        for slot in self.lobby_player_slots:
+            if slot.get("type") != "ai":
+                continue
+            ai_display = slot["ai_var"].get()
+            ai_key = ai_display.lower()
+            faction = slot["faction_var"].get().lower()
+            team = int(slot["team_var"].get())
+            color = self._color_name_to_index(slot["color_var"].get())
+            opponents.append(
+                {
+                    "name": f"AI {len(opponents) + 1}: {ai_display}",
+                    "faction": faction,
+                    "ai": ai_key,
+                    "team": team,
+                    "color": color,
+                }
+            )
+        return opponents
+
+    def _clear_lobby_player_slots(self) -> None:
+        """Destroy all lobby player slot widgets and clear the list."""
+        for slot in self.lobby_player_slots:
+            for w in slot["widgets"]:
+                w.destroy()
+        self.lobby_player_slots.clear()
+
     @staticmethod
     def _color_name_to_index(name: str) -> int:
         """Convert a color display name to the 1-based SCFA engine color index."""
@@ -1160,6 +1336,25 @@ class WopcApp(BaseApp):  # type: ignore
             )
             menu.grid(row=idx + 1, column=1, sticky="w", pady=2)
             self.game_option_vars[key] = var
+
+        # Victory description label (below all option rows)
+        victory_row = len(self.GAME_OPTION_DEFS) + 1
+        self.solo_victory_desc = ctk.CTkLabel(
+            opts_frame,
+            text=self.VICTORY_DESCRIPTIONS.get("Demoralization", ""),
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11, slant="italic"),
+            wraplength=250,
+        )
+        self.solo_victory_desc.grid(
+            row=victory_row, column=0, columnspan=2, sticky="w", padx=(0, 10), pady=(2, 5)
+        )
+
+        def _update_solo_victory_desc(*_a: Any) -> None:
+            desc = self.VICTORY_DESCRIPTIONS.get(self.game_option_vars["Victory"].get(), "")
+            self.solo_victory_desc.configure(text=desc)
+
+        self.game_option_vars["Victory"].trace_add("write", _update_solo_victory_desc)
 
     def _on_game_option_change(self, key: str) -> None:
         """Broadcast state when a game option changes (host only)."""
@@ -1659,6 +1854,8 @@ class WopcApp(BaseApp):  # type: ignore
             for key, val in state["game_options"].items():
                 if key in self.game_option_vars:
                     self.game_option_vars[key].set(val)
+                if key in getattr(self, "lobby_option_vars", {}):
+                    self.lobby_option_vars[key].set(val)
 
         # Update AI slots display for joiner
         if "ai_slots" in state:
@@ -1707,7 +1904,11 @@ class WopcApp(BaseApp):  # type: ignore
             "map_folder": active_map,
             "map_name": map_display,
             "game_options": self.get_game_options(),
-            "ai_slots": self.get_ai_opponents(),
+            "ai_slots": (
+                self._get_lobby_ai_opponents()
+                if self._current_screen == "lobby"
+                else self.get_ai_opponents()
+            ),
             "players": self._lobby_server.connected_players if self._lobby_server else [],
             "content_packs": mods.get_enabled_packs(),
         }
@@ -1753,21 +1954,34 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _apply_remote_ai_slots(self, ai_slots: list[dict[str, Any]]) -> None:
         """Update the joiner's AI slot display to match host's config."""
-        # Remove existing AI slots
-        while len(self.player_slots) > 1:
-            slot = self.player_slots.pop()
-            for w in slot["widgets"]:
-                w.destroy()
+        # Determine which scroll area and slot list to use
+        if self._current_screen == "lobby":
+            scroll = self.lobby_slots_scroll
+            slots = self.lobby_player_slots
+            # Clear all lobby slots
+            self._clear_lobby_player_slots()
+        else:
+            scroll = self.slots_scroll
+            slots = self.player_slots
+            # Remove existing AI slots (keep human slot at index 0)
+            while len(slots) > 1:
+                slot = slots.pop()
+                for w in slot["widgets"]:
+                    w.destroy()
+
         # Disable add button for joiners
         if hasattr(self, "add_slot_btn"):
             self.add_slot_btn.configure(state="disabled")
+        if hasattr(self, "lobby_add_ai_btn"):
+            self.lobby_add_ai_btn.configure(state="disabled")
+
         # Add read-only rows for each AI the host has configured
         for ai in ai_slots:
-            row = len(self.player_slots) + len(self._remote_players)
+            row = len(slots) + len(self._remote_players)
             widgets: list[Any] = []
-            slot_num = len(self.player_slots) + 1
+            slot_num = len(slots) + 1
             lbl = ctk.CTkLabel(
-                self.slots_scroll,
+                scroll,
                 text=str(slot_num),
                 width=20,
                 text_color=COLOR_TEXT_MUTED,
@@ -1777,7 +1991,7 @@ class WopcApp(BaseApp):  # type: ignore
             widgets.append(lbl)
 
             name_lbl = ctk.CTkLabel(
-                self.slots_scroll,
+                scroll,
                 text=ai.get("name", "AI"),
                 text_color=COLOR_TEXT_MUTED,
                 font=ctk.CTkFont(size=12),
@@ -1787,7 +2001,7 @@ class WopcApp(BaseApp):  # type: ignore
             widgets.append(name_lbl)
 
             faction_lbl = ctk.CTkLabel(
-                self.slots_scroll,
+                scroll,
                 text=ai.get("faction", "random").capitalize(),
                 text_color=COLOR_TEXT_MUTED,
                 font=ctk.CTkFont(size=11),
@@ -1796,7 +2010,7 @@ class WopcApp(BaseApp):  # type: ignore
             widgets.append(faction_lbl)
 
             team_lbl = ctk.CTkLabel(
-                self.slots_scroll,
+                scroll,
                 text=str(ai.get("team", 2)),
                 text_color=COLOR_TEXT_MUTED,
                 font=ctk.CTkFont(size=11),
@@ -1813,8 +2027,8 @@ class WopcApp(BaseApp):  # type: ignore
                 else COLOR_TEXT_MUTED
             )
             color_lbl = ctk.CTkLabel(
-                self.slots_scroll,
-                text="●",
+                scroll,
+                text="\u25cf",
                 text_color=color_hex,
                 font=ctk.CTkFont(size=14),
                 width=70,
@@ -1822,11 +2036,11 @@ class WopcApp(BaseApp):  # type: ignore
             color_lbl.grid(row=row, column=4, padx=5, pady=2)
             widgets.append(color_lbl)
 
-            spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
+            spacer = ctk.CTkLabel(scroll, text="", width=24)
             spacer.grid(row=row, column=5, pady=2)
             widgets.append(spacer)
 
-            self.player_slots.append({"type": "ai_remote", "widgets": widgets})
+            slots.append({"type": "ai_remote", "widgets": widgets})
 
     # ------------------------------------------------------------------
     # Remote player display
@@ -2236,6 +2450,7 @@ class WopcApp(BaseApp):  # type: ignore
                 self._lobby_client.disconnect()
                 self._lobby_client = None
         self._clear_remote_players()
+        self._clear_lobby_player_slots()
         self._show_screen("browser")
         self._start_beacon_listener()
         self.log("Left the lobby.")
@@ -2272,9 +2487,79 @@ class WopcApp(BaseApp):  # type: ignore
                 )
 
     def _on_lobby_change_map(self) -> None:
-        """Open map picker for the host in lobby mode."""
-        # TODO: Build a proper map picker modal/dropdown
-        pass
+        """Open map picker dialog for the host in lobby mode."""
+        if not getattr(self, "_all_maps", None):
+            self._all_maps = map_scanner.scan_all_maps()
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Select Map")
+        dialog.geometry("400x500")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(fg_color=COLOR_BG)
+
+        # Search bar
+        search_var = ctk.StringVar()
+        search_entry = ctk.CTkEntry(
+            dialog,
+            placeholder_text="Search maps...",
+            textvariable=search_var,
+            height=32,
+            fg_color=COLOR_MOD_PANEL,
+        )
+        search_entry.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="ew")
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(1, weight=1)
+
+        # Scrollable map list
+        scroll = ctk.CTkScrollableFrame(dialog, fg_color=COLOR_PANEL)
+        scroll.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="nsew")
+        scroll.grid_columnconfigure(0, weight=1)
+
+        map_buttons: list[Any] = []
+        active_map = prefs.get_active_map()
+
+        def populate(filter_text: str = "") -> None:
+            for btn in map_buttons:
+                btn.destroy()
+            map_buttons.clear()
+
+            for idx, info in enumerate(self._all_maps):
+                name_match = filter_text in info.display_name.lower()
+                folder_match = filter_text in info.folder_name.lower()
+                if filter_text and not name_match and not folder_match:
+                    continue
+
+                parts = [info.display_name]
+                if info.max_players:
+                    parts.append(f"{info.max_players}p")
+                if info.size_label != "?":
+                    parts.append(info.size_label)
+                label = f"{parts[0]} \u2014 {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
+
+                is_active = info.folder_name == active_map
+
+                def on_pick(name: str = info.folder_name, disp: str = info.display_name) -> None:
+                    prefs.set_active_map(name)
+                    self.lobby_map_label.configure(text=disp)
+                    self._broadcast_game_state()
+                    dialog.destroy()
+
+                btn = ctk.CTkButton(
+                    scroll,
+                    text=label,
+                    anchor="w",
+                    height=30,
+                    fg_color=COLOR_ACCENT if is_active else "transparent",
+                    text_color="white" if is_active else COLOR_TEXT_PRIMARY,
+                    hover_color="#4752C4",
+                    command=on_pick,
+                )
+                btn.grid(row=idx, column=0, pady=1, sticky="ew")
+                map_buttons.append(btn)
+
+        populate()
+        search_var.trace_add("write", lambda *_a: populate(search_var.get().lower()))
 
     def _on_lobby_option_change(self, key: str) -> None:
         """Handle game option change in the lobby screen."""
@@ -2315,6 +2600,19 @@ class WopcApp(BaseApp):  # type: ignore
         # Update map label
         active_map = prefs.get_active_map()
         self.lobby_map_label.configure(text=active_map or "No map selected")
+        # Initialize lobby player slots with host row + one default AI
+        self._clear_lobby_player_slots()
+        name = self.name_entry.get() if hasattr(self, "name_entry") else "Player"
+        host_lbl = ctk.CTkLabel(
+            self.lobby_slots_scroll,
+            text=f"Host: {name or 'Player'}",
+            text_color=COLOR_ACCENT,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w",
+        )
+        host_lbl.grid(row=0, column=0, columnspan=6, padx=(0, 5), pady=2, sticky="w")
+        self.lobby_player_slots.append({"type": "host", "widgets": [host_lbl]})
+        self._add_lobby_ai_slot()
 
     def _update_lobby_for_joiner(self) -> None:
         """Configure lobby screen widgets for joining."""

@@ -4,10 +4,10 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Multiplayer UX (Phase 6 — in progress)
 
-1. **"Add AI" in multiplayer lobby** — button exists but not wired up; needs to add AI slots to game state and sync to all players
-2. **"Change Map" in multiplayer lobby** — button exists but not wired up; needs map picker dialog and state broadcast
+1. ~~**"Add AI" in multiplayer lobby**~~ ✅ — wired to lobby screen with proper slot management
+2. ~~**"Change Map" in multiplayer lobby**~~ ✅ — searchable map picker dialog
 3. **Remove players from solo screen** — no way to delete a player slot once added
-4. **Victory type tooltips** — players can't tell what "Assassination" vs "Supremacy" vs "Sandbox" actually mean; add descriptions
+4. ~~**Victory type tooltips**~~ ✅ — descriptions shown on both solo and multiplayer screens
 5. **Team auto-assignment** — automatically balance teams as players join instead of manual assignment
 6. **Player ratings / balancing** — track skill ratings for fairer matchmaking (ELO or similar)
 7. **UI polish** — modern styling, better spacing, visual hierarchy, fancier look overall
