@@ -29,9 +29,7 @@ That's it — no Python, no LOUD, no FAF needed.
 
 ### Staying up to date
 
-The launcher checks for updates on startup. If you see **"UPDATE AVAILABLE"** on the Install button, click it to download the latest patches and content.
-
-For major launcher updates, download the newest `WOPC-Launcher.exe` from [Releases](https://github.com/reimarus/withourpowerscombined/releases/latest).
+The launcher handles everything automatically. It checks for updates on startup and will update itself and game content when new versions are available — no need to visit GitHub again.
 
 ### Playing multiplayer
 
