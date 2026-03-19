@@ -6,12 +6,12 @@ Items to tackle over time, roughly grouped by priority.
 
 1. ~~**"Add AI" in multiplayer lobby**~~ ✅ — wired to lobby screen with proper slot management
 2. ~~**"Change Map" in multiplayer lobby**~~ ✅ — searchable map picker dialog
-3. **Remove players from solo screen** — no way to delete a player slot once added
+3. ~~**Remove players from solo screen**~~ ✅ — AI slots have ✕ remove buttons (human slot 1 is protected)
 4. ~~**Victory type tooltips**~~ ✅ — descriptions shown on both solo and multiplayer screens
-5. **Team auto-assignment** — automatically balance teams as players join instead of manual assignment
+5. ~~**Team auto-assignment**~~ ✅ — new AI slots auto-balanced to team with fewest players via `_next_team()`
 6. **Player ratings / balancing** — track skill ratings for fairer matchmaking (ELO or similar)
 7. **UI polish** — modern styling, better spacing, visual hierarchy, fancier look overall
-8. **Solo ↔ multiplayer UI consistency** — shared concepts (map selector, player slots, game options) must look and behave the same in both screens (see CLAUDE.md rule #5)
+8. ~~**Solo ↔ multiplayer UI consistency**~~ ✅ — lobby options now reuse `GAME_OPTION_DEFS`, matching labels/values/defaults; headers and button styles unified
 
 ## Features
 
