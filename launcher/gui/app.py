@@ -609,25 +609,17 @@ class WopcApp(BaseApp):  # type: ignore
 
         self.lobby_option_vars: dict[str, Any] = {}
         self.lobby_option_widgets: list[Any] = []
-        options_config = [
-            ("Victory", ["Demoralization", "Supremacy", "Assassination", "Sandbox"]),
-            ("UnitCap", ["500", "1000", "1500", "2000", "4000"]),
-            ("FogOfWar", ["Explored", "Unexplored", "None"]),
-            ("GameSpeed", ["Normal", "Fast", "Adjustable"]),
-            ("Share", ["FullShare", "ShareUntilDeath"]),
-        ]
-        defaults = {
-            "Victory": "Demoralization",
-            "UnitCap": "1500",
-            "FogOfWar": "Explored",
-            "GameSpeed": "Normal",
-            "Share": "FullShare",
-        }
 
-        for i, (key, values) in enumerate(options_config):
-            lbl = ctk.CTkLabel(opts_frame, text=f"{key}:", text_color=COLOR_TEXT_MUTED)
+        # Reuse the same option definitions as the solo screen for consistency
+        for i, (key, label, values, default) in enumerate(self.GAME_OPTION_DEFS):
+            lbl = ctk.CTkLabel(
+                opts_frame,
+                text=f"{label}:",
+                text_color=COLOR_TEXT_MUTED,
+                font=ctk.CTkFont(size=12),
+            )
             lbl.grid(row=i + 1, column=0, padx=(10, 5), pady=2, sticky="w")
-            var = ctk.StringVar(value=defaults.get(key, values[0]))
+            var = ctk.StringVar(value=default)
             menu = ctk.CTkOptionMenu(
                 opts_frame,
                 values=values,
@@ -641,10 +633,10 @@ class WopcApp(BaseApp):  # type: ignore
             self.lobby_option_widgets.extend([lbl, menu])
 
         # Victory description label (below all option rows)
-        victory_row = len(options_config) + 1
+        victory_row = len(self.GAME_OPTION_DEFS) + 1
         self.lobby_victory_desc = ctk.CTkLabel(
             opts_frame,
-            text=self.VICTORY_DESCRIPTIONS.get(defaults.get("Victory", ""), ""),
+            text=self.VICTORY_DESCRIPTIONS.get("Demoralization", ""),
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=11, slant="italic"),
             wraplength=250,
@@ -864,7 +856,7 @@ class WopcApp(BaseApp):  # type: ignore
 
         ctk.CTkLabel(
             header_row,
-            text="PLAYER SLOTS",
+            text="PLAYERS",
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12, weight="bold"),
         ).grid(row=0, column=0, sticky="w")
@@ -874,6 +866,7 @@ class WopcApp(BaseApp):  # type: ignore
             text="+ Add AI",
             width=70,
             height=24,
+            fg_color=COLOR_ACCENT,
             font=ctk.CTkFont(size=11),
             command=self._add_ai_slot,
         )
@@ -912,6 +905,22 @@ class WopcApp(BaseApp):  # type: ignore
     def _on_color_change(self, _val: str) -> None:
         """Broadcast state when a color changes."""
         self._broadcast_game_state()
+
+    def _next_team(self, slots: list[dict[str, Any]]) -> str:
+        """Return the team number string with the fewest players for auto-balance.
+
+        Counts team assignments across the given slot list and returns the
+        team ("1"-"4") that has the fewest members. Ties break to the lower
+        numbered team.
+        """
+        counts: dict[str, int] = {"1": 0, "2": 0, "3": 0, "4": 0}
+        for slot in slots:
+            team = slot.get("team_var")
+            if team:
+                val = team.get() if hasattr(team, "get") else str(team)
+                if val in counts:
+                    counts[val] += 1
+        return min(counts, key=lambda t: (counts[t], int(t)))
 
     def _add_human_slot(self) -> None:
         """Add the human player row (always slot 1, cannot be removed)."""
@@ -1024,8 +1033,8 @@ class WopcApp(BaseApp):  # type: ignore
         faction_menu.grid(row=row, column=2, padx=5, pady=2)
         widgets.append(faction_menu)
 
-        # Team
-        team_var = ctk.StringVar(value="2")
+        # Team (auto-balanced)
+        team_var = ctk.StringVar(value=self._next_team(self.player_slots))
         team_menu = ctk.CTkOptionMenu(
             self.slots_scroll,
             values=["1", "2", "3", "4"],
@@ -1145,8 +1154,8 @@ class WopcApp(BaseApp):  # type: ignore
         faction_menu.grid(row=row, column=2, padx=5, pady=2)
         widgets.append(faction_menu)
 
-        # Team
-        team_var = ctk.StringVar(value="2")
+        # Team (auto-balanced)
+        team_var = ctk.StringVar(value=self._next_team(self.lobby_player_slots))
         team_menu = ctk.CTkOptionMenu(
             self.lobby_slots_scroll,
             values=["1", "2", "3", "4"],
