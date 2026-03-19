@@ -32,15 +32,22 @@ if ctk is not None:
     # We'll use the built-in dark-blue theme as a sleek base
     ctk.set_default_color_theme("dark-blue")
 
-# Custom colors for Discord-style aesthetic
-COLOR_BG = "#1E1F22"  # Deepest background (Sidebar)
-COLOR_PANEL = "#313338"  # Main chat/content area
-COLOR_MOD_PANEL = "#2B2D31"  # Secondary sidebar (Mods/Members lists)
-COLOR_ACCENT = "#5865F2"  # Discord Blurple for interactive elements
-COLOR_READY = "#23A559"  # Discord Green for PLAY state
-COLOR_WARN = "#FEE75C"  # Discord Yellow for UPDATE/INSTALL state
-COLOR_TEXT_PRIMARY = "#F2F3F5"
-COLOR_TEXT_MUTED = "#949BA4"
+# FAF/SupCom-inspired color palette — deep space navy + gold
+COLOR_BG = "#080C14"  # Deep space black-navy (sidebar, deepest level)
+COLOR_PANEL = "#0D1220"  # Dark navy main background
+COLOR_MOD_PANEL = "#111827"  # Secondary panel (mod pane, cards)
+COLOR_SURFACE = "#162030"  # Card/elevated surface
+COLOR_BORDER = "#1E2D42"  # Subtle panel border
+COLOR_ACCENT = "#C8A84B"  # FAF Gold — primary interactive
+COLOR_ACCENT_HOVER = "#E8C870"  # Gold hover state
+COLOR_ACCENT_DIM = "#6B5A28"  # Dimmed gold for decorative lines/dividers
+COLOR_READY = "#C8A84B"  # Gold — PLAY MATCH (matches accent)
+COLOR_LAUNCH = "#4DC3F5"  # Electric cyan — LAUNCH GAME in lobby
+COLOR_WARN = "#FF8C42"  # Orange — warning state
+COLOR_DANGER = "#E84855"  # Red — LEAVE / destructive actions
+COLOR_TEXT_PRIMARY = "#E8E4D4"  # Warm cream (not cold white)
+COLOR_TEXT_MUTED = "#4A5A70"  # Muted navy-grey
+COLOR_TEXT_GOLD = "#C8A84B"  # Gold text (headers, section labels)
 
 # SCFA player colors (index 1-8 match engine's color system)
 PLAYER_COLORS: list[tuple[str, str]] = [
@@ -98,7 +105,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.title("WOPC - Match Lobby")
         self.geometry("1024x768")
         self.minsize(800, 600)
-        self.configure(fg_color=COLOR_PANEL)
+        self.configure(fg_color=COLOR_BG)
         self._set_window_icon()
 
     def _set_window_icon(self) -> None:
@@ -135,6 +142,10 @@ class WopcApp(BaseApp):  # type: ignore
         self._check_installation_status()
         self._bind_hotkeys()
 
+    def _make_divider(self, parent: Any, color: str = COLOR_ACCENT_DIM) -> Any:
+        """Return a thin 1-pixel accent line for use as a section separator."""
+        return ctk.CTkFrame(parent, fg_color=color, height=1, corner_radius=0)
+
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
         self.bind("<Return>", lambda e: self._on_primary_click())
@@ -156,49 +167,61 @@ class WopcApp(BaseApp):  # type: ignore
         """Construct the left sidebar navigation and status area."""
         self.sidebar = ctk.CTkFrame(self, fg_color=COLOR_BG, corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.sidebar.grid_columnconfigure(0, weight=1)
         self.sidebar.grid_rowconfigure(9, weight=1)
 
-        # Logo / Title
+        # --- Logo / Title ---
         self.logo_label = ctk.CTkLabel(
             self.sidebar,
             text="WOPC",
-            text_color=COLOR_TEXT_PRIMARY,
-            font=ctk.CTkFont(size=28, weight="bold"),
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=32, weight="bold"),
         )
         self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 0), sticky="w")
 
         self.subtitle_label = ctk.CTkLabel(
             self.sidebar,
-            text="LOBBY TERMINAL",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            text="WITH OUR POWERS COMBINED",
+            text_color=COLOR_ACCENT_DIM,
+            font=ctk.CTkFont(size=9, weight="bold"),
         )
-        self.subtitle_label.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="w")
+        self.subtitle_label.grid(row=1, column=0, padx=20, pady=(2, 10), sticky="w")
 
-        # Status indicators
+        # Gold accent divider below logo
+        logo_div = self._make_divider(self.sidebar)
+        logo_div.grid(row=2, column=0, padx=16, pady=(0, 12), sticky="ew")
+
+        # --- Status indicators ---
         self.status_scfa = ctk.CTkLabel(
-            self.sidebar, text="SCFA: Checking...", text_color=COLOR_TEXT_MUTED
+            self.sidebar, text="◌  SCFA: Checking...", text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
         )
-        self.status_scfa.grid(row=2, column=0, padx=20, pady=5, sticky="w")
+        self.status_scfa.grid(row=3, column=0, padx=20, pady=(4, 2), sticky="w")
 
         self.status_bundled = ctk.CTkLabel(
-            self.sidebar, text="Assets: Checking...", text_color=COLOR_TEXT_MUTED
+            self.sidebar, text="◌  Assets: Checking...", text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
         )
-        self.status_bundled.grid(row=3, column=0, padx=20, pady=5, sticky="w")
+        self.status_bundled.grid(row=4, column=0, padx=20, pady=2, sticky="w")
 
         self.status_wopc = ctk.CTkLabel(
-            self.sidebar, text="WOPC: Checking...", text_color=COLOR_TEXT_MUTED
+            self.sidebar, text="◌  WOPC: Checking...", text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
         )
-        self.status_wopc.grid(row=4, column=0, padx=20, pady=5, sticky="w")
+        self.status_wopc.grid(row=5, column=0, padx=20, pady=(2, 8), sticky="w")
+
+        # Divider before launch mode
+        mode_div = self._make_divider(self.sidebar)
+        mode_div.grid(row=6, column=0, padx=16, pady=(0, 10), sticky="ew")
 
         # --- Launch Mode Selector ---
         self.mode_label = ctk.CTkLabel(
             self.sidebar,
             text="LAUNCH MODE",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=11, weight="bold"),
         )
-        self.mode_label.grid(row=5, column=0, padx=20, pady=(20, 5), sticky="w")
+        self.mode_label.grid(row=7, column=0, padx=20, pady=(0, 6), sticky="w")
 
         saved_mode = prefs.get_launch_mode()
         # Map old host/join modes to multiplayer
@@ -209,22 +232,30 @@ class WopcApp(BaseApp):  # type: ignore
             values=["SOLO", "MULTIPLAYER"],
             variable=self.mode_var,
             command=self._on_mode_change,
+            selected_color=COLOR_ACCENT,
+            selected_hover_color=COLOR_ACCENT_HOVER,
+            unselected_color=COLOR_SURFACE,
+            unselected_hover_color=COLOR_BORDER,
+            fg_color=COLOR_BORDER,
+            text_color=COLOR_TEXT_PRIMARY,
         )
-        self.mode_selector.grid(row=6, column=0, padx=20, pady=(0, 5), sticky="ew")
+        self.mode_selector.grid(row=8, column=0, padx=20, pady=(0, 5), sticky="ew")
 
         # Conditional widgets for multiplayer mode
         self.mode_widgets_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        self.mode_widgets_frame.grid(row=7, column=0, padx=20, sticky="ew")
+        self.mode_widgets_frame.grid(row=9, column=0, padx=20, sticky="ew")
 
         self.port_label = ctk.CTkLabel(
-            self.mode_widgets_frame, text="Port:", text_color=COLOR_TEXT_MUTED
+            self.mode_widgets_frame, text="Port:", text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
         )
         self.port_entry = ctk.CTkEntry(self.mode_widgets_frame, width=120, placeholder_text="15000")
         self.port_entry.insert(0, prefs.get_host_port())
         self.port_entry.bind("<FocusOut>", lambda e: prefs.set_host_port(self.port_entry.get()))
 
         self.address_label = ctk.CTkLabel(
-            self.mode_widgets_frame, text="Host Address:", text_color=COLOR_TEXT_MUTED
+            self.mode_widgets_frame, text="Host Address:", text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
         )
         self.address_entry = ctk.CTkEntry(
             self.mode_widgets_frame, width=180, placeholder_text="192.168.1.50:15000"
@@ -238,7 +269,8 @@ class WopcApp(BaseApp):  # type: ignore
 
         # Expected Players dropdown (hosting only)
         self.expected_label = ctk.CTkLabel(
-            self.mode_widgets_frame, text="Expected Players:", text_color=COLOR_TEXT_MUTED
+            self.mode_widgets_frame, text="Expected Players:", text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
         )
         saved_expected = str(prefs.get_expected_humans())
         self.expected_var = ctk.StringVar(value=saved_expected)
@@ -253,27 +285,28 @@ class WopcApp(BaseApp):  # type: ignore
 
         self._update_mode_widgets()
 
-        # Play Button (Bottom of Sidebar)
+        # Play Button (anchored above version)
         self.primary_btn = ctk.CTkButton(
             self.sidebar,
-            text="PLAY MATCH",
-            font=ctk.CTkFont(size=18, weight="bold"),
+            text="▶  PLAY MATCH",
+            font=ctk.CTkFont(size=16, weight="bold"),
             height=50,
             fg_color=COLOR_READY,
-            hover_color="#1F8B4C",
-            text_color="white",
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color=COLOR_BG,
+            corner_radius=4,
             command=self._on_primary_click,
         )
-        self.primary_btn.grid(row=8, column=0, padx=20, pady=(10, 10), sticky="ew")
+        self.primary_btn.grid(row=10, column=0, padx=20, pady=(10, 6), sticky="ew")
 
         # Version tag
         self.version_label = ctk.CTkLabel(
             self.sidebar,
             text=f"v{config.VERSION}",
-            text_color=COLOR_TEXT_MUTED,
+            text_color=COLOR_ACCENT_DIM,
             font=ctk.CTkFont(size=11),
         )
-        self.version_label.grid(row=10, column=0, padx=20, pady=(0, 20), sticky="w")
+        self.version_label.grid(row=11, column=0, padx=20, pady=(0, 20), sticky="w")
 
     def _build_main_lobby(self) -> None:
         """Construct the central matching routing/configuration area."""
@@ -286,15 +319,18 @@ class WopcApp(BaseApp):  # type: ignore
 
         self.header_label = ctk.CTkLabel(
             self.solo_screen,
-            text="Game Configuration",
-            text_color=COLOR_TEXT_PRIMARY,
-            font=ctk.CTkFont(size=20, weight="bold"),
+            text="GAME CONFIGURATION",
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=18, weight="bold"),
         )
-        self.header_label.grid(row=0, column=0, sticky="w", pady=(0, 10))
+        self.header_label.grid(row=0, column=0, sticky="w", pady=(0, 6))
+
+        header_div = self._make_divider(self.solo_screen)
+        header_div.grid(row=0, column=0, sticky="ews", pady=(0, 0))
 
         # --- Map Selector Panel ---
         self.config_panel = ctk.CTkFrame(
-            self.solo_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8
+            self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4
         )
         self.config_panel.grid(row=1, column=0, sticky="nsew")
         self.config_panel.grid_rowconfigure(2, weight=1)
@@ -361,7 +397,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.map_buttons: list[Any] = []
 
         # --- Player Slots + Game Options Panel ---
-        self.lower_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
+        self.lower_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         self.lower_panel.grid(row=2, column=0, sticky="nsew", pady=(10, 0))
         self.lower_panel.grid_columnconfigure(0, weight=1)
         self.lower_panel.grid_columnconfigure(1, weight=1)
@@ -372,7 +408,7 @@ class WopcApp(BaseApp):  # type: ignore
 
         # --- Log / Chat Window ---
         self.log_chat_frame = ctk.CTkFrame(
-            self.solo_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8
+            self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4
         )
         self.log_chat_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         self.log_chat_frame.grid_columnconfigure(0, weight=1)
@@ -381,7 +417,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.log_textbox = ctk.CTkTextbox(
             self.log_chat_frame,
             height=100,
-            fg_color=COLOR_MOD_PANEL,
+            fg_color=COLOR_PANEL,
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
@@ -422,17 +458,17 @@ class WopcApp(BaseApp):  # type: ignore
         # Header
         header = ctk.CTkLabel(
             self.browser_screen,
-            text="Find a Game",
-            text_color=COLOR_TEXT_PRIMARY,
-            font=ctk.CTkFont(size=24, weight="bold"),
+            text="FIND A GAME",
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=22, weight="bold"),
         )
         header.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
 
         # Game list (scrollable)
         self.game_list_frame = ctk.CTkScrollableFrame(
             self.browser_screen,
-            fg_color=COLOR_MOD_PANEL,
-            corner_radius=8,
+            fg_color=COLOR_SURFACE,
+            corner_radius=4,
         )
         self.game_list_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="nsew")
         self.game_list_frame.grid_columnconfigure(0, weight=1)
@@ -455,11 +491,13 @@ class WopcApp(BaseApp):  # type: ignore
 
         self.create_game_btn = ctk.CTkButton(
             bottom,
-            text="CREATE GAME",
+            text="▶  CREATE GAME",
             font=ctk.CTkFont(size=16, weight="bold"),
             height=44,
             fg_color=COLOR_READY,
-            hover_color="#1F8B4C",
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color=COLOR_BG,
+            corner_radius=4,
             command=self._on_create_game,
         )
         self.create_game_btn.grid(row=0, column=0, sticky="w")
@@ -469,7 +507,7 @@ class WopcApp(BaseApp):  # type: ignore
             bottom,
             text="\u25b8 Direct Connect",
             fg_color="transparent",
-            hover_color=COLOR_MOD_PANEL,
+            hover_color=COLOR_SURFACE,
             text_color=COLOR_TEXT_MUTED,
             anchor="e",
             width=140,
@@ -478,7 +516,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.direct_connect_toggle.grid(row=0, column=2, sticky="e")
 
         self.direct_connect_frame = ctk.CTkFrame(
-            self.browser_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8
+            self.browser_screen, fg_color=COLOR_SURFACE, corner_radius=4
         )
         # Not gridded initially (collapsed)
         self.direct_connect_frame.grid_columnconfigure(1, weight=1)
@@ -501,6 +539,9 @@ class WopcApp(BaseApp):  # type: ignore
             text="Connect",
             width=80,
             fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color=COLOR_BG,
+            corner_radius=3,
             command=self._on_direct_connect,
         )
         self.dc_connect_btn.grid(row=0, column=2, padx=(5, 10), pady=10)
@@ -518,7 +559,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.lobby_screen.grid_columnconfigure(1, weight=1)
 
         # --- Map Section (top-left) ---
-        map_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
+        map_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         map_frame.grid(row=0, column=0, padx=(20, 5), pady=(20, 5), sticky="nsew")
         map_frame.grid_rowconfigure(2, weight=1)
         map_frame.grid_columnconfigure(0, weight=1)
@@ -526,7 +567,7 @@ class WopcApp(BaseApp):  # type: ignore
         map_header = ctk.CTkLabel(
             map_frame,
             text="MAP",
-            text_color=COLOR_TEXT_MUTED,
+            text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=12, weight="bold"),
         )
         map_header.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
@@ -553,12 +594,15 @@ class WopcApp(BaseApp):  # type: ignore
             width=100,
             height=28,
             fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color=COLOR_BG,
+            corner_radius=3,
             command=self._on_lobby_change_map,
         )
         self.lobby_change_map_btn.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="w")
 
         # --- Players Section (top-right) ---
-        players_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
+        players_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         players_frame.grid(row=0, column=1, padx=(5, 20), pady=(20, 5), sticky="nsew")
         players_frame.grid_rowconfigure(1, weight=1)
         players_frame.grid_columnconfigure(0, weight=1)
@@ -570,7 +614,7 @@ class WopcApp(BaseApp):  # type: ignore
         players_label = ctk.CTkLabel(
             players_header_frame,
             text="PLAYERS",
-            text_color=COLOR_TEXT_MUTED,
+            text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=12, weight="bold"),
         )
         players_label.grid(row=0, column=0, sticky="w")
@@ -581,7 +625,10 @@ class WopcApp(BaseApp):  # type: ignore
             width=70,
             height=24,
             fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color=COLOR_BG,
             font=ctk.CTkFont(size=11),
+            corner_radius=3,
             command=self._add_lobby_ai_slot,
         )
         self.lobby_add_ai_btn.grid(row=0, column=1, sticky="e")
@@ -595,14 +642,14 @@ class WopcApp(BaseApp):  # type: ignore
         self.lobby_player_slots: list[dict[str, Any]] = []
 
         # --- Options Section (bottom-left) ---
-        opts_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
+        opts_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         opts_frame.grid(row=1, column=0, padx=(20, 5), pady=(5, 5), sticky="nsew")
         opts_frame.grid_columnconfigure(1, weight=1)
 
         opts_header = ctk.CTkLabel(
             opts_frame,
             text="GAME OPTIONS",
-            text_color=COLOR_TEXT_MUTED,
+            text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=12, weight="bold"),
         )
         opts_header.grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 5), sticky="w")
@@ -652,7 +699,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.lobby_option_vars["Victory"].trace_add("write", _update_lobby_victory_desc)
 
         # --- Chat Section (bottom-right) ---
-        chat_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
+        chat_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         chat_frame.grid(row=1, column=1, padx=(5, 20), pady=(5, 5), sticky="nsew")
         chat_frame.grid_rowconfigure(1, weight=1)
         chat_frame.grid_columnconfigure(0, weight=1)
@@ -660,7 +707,7 @@ class WopcApp(BaseApp):  # type: ignore
         chat_header = ctk.CTkLabel(
             chat_frame,
             text="CHAT",
-            text_color=COLOR_TEXT_MUTED,
+            text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=12, weight="bold"),
         )
         chat_header.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="nw")
@@ -703,38 +750,43 @@ class WopcApp(BaseApp):  # type: ignore
             text="LEAVE",
             width=100,
             height=44,
-            fg_color="#ED4245",
-            hover_color="#C53030",
+            fg_color=COLOR_DANGER,
+            hover_color="#BF3040",
+            text_color=COLOR_TEXT_PRIMARY,
             font=ctk.CTkFont(size=14, weight="bold"),
+            corner_radius=4,
             command=self._on_leave_lobby,
         )
         self.lobby_leave_btn.grid(row=0, column=0, sticky="w")
 
         self.lobby_launch_btn = ctk.CTkButton(
             action_bar,
-            text="LAUNCH GAME",
-            width=160,
+            text="▶  LAUNCH GAME",
+            width=180,
             height=44,
-            fg_color=COLOR_READY,
-            hover_color="#1F8B4C",
+            fg_color=COLOR_LAUNCH,
+            hover_color="#35A8D8",
+            text_color=COLOR_BG,
             font=ctk.CTkFont(size=16, weight="bold"),
+            corner_radius=4,
             command=self._on_lobby_launch_click,
         )
         self.lobby_launch_btn.grid(row=0, column=2, sticky="e")
 
     def _build_mod_pane(self) -> None:
         """Construct the right-hand sidebar for Mod management."""
-        self.mod_pane = ctk.CTkFrame(self, fg_color=COLOR_MOD_PANEL, corner_radius=0)
+        self.mod_pane = ctk.CTkFrame(self, fg_color=COLOR_BG, corner_radius=0)
         self.mod_pane.grid(row=0, column=2, sticky="nsew")
-        self.mod_pane.grid_rowconfigure(1, weight=1)  # Content packs
-        self.mod_pane.grid_rowconfigure(3, weight=1)  # User mods
+        self.mod_pane.grid_columnconfigure(0, weight=1)
+        self.mod_pane.grid_rowconfigure(1, weight=1)  # Content packs scroll
+        self.mod_pane.grid_rowconfigure(4, weight=1)  # User mods scroll
 
         # --- Content Packs Section ---
         self.packs_header = ctk.CTkLabel(
             self.mod_pane,
             text="CONTENT PACKS",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=11, weight="bold"),
         )
         self.packs_header.grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
 
@@ -742,27 +794,35 @@ class WopcApp(BaseApp):  # type: ignore
         self.packs_scroll.grid(row=1, column=0, sticky="nsew", padx=10)
         self.pack_checkboxes: dict[str, Any] = {}
 
+        # Divider
+        packs_div = self._make_divider(self.mod_pane)
+        packs_div.grid(row=2, column=0, padx=16, pady=(8, 0), sticky="ew")
+
         # --- User Mods Section ---
         self.mod_header = ctk.CTkLabel(
             self.mod_pane,
             text="USER MODS",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=11, weight="bold"),
         )
-        self.mod_header.grid(row=2, column=0, padx=20, pady=(15, 5), sticky="w")
+        self.mod_header.grid(row=3, column=0, padx=20, pady=(10, 5), sticky="w")
 
         self.mods_scroll = ctk.CTkScrollableFrame(self.mod_pane, fg_color="transparent")
-        self.mods_scroll.grid(row=3, column=0, sticky="nsew", padx=10)
+        self.mods_scroll.grid(row=4, column=0, sticky="nsew", padx=10)
         self.mod_checkboxes: dict[str, Any] = {}
+
+        # Divider
+        mods_div = self._make_divider(self.mod_pane)
+        mods_div.grid(row=5, column=0, padx=16, pady=(8, 0), sticky="ew")
 
         # --- Player Settings Section ---
         self.settings_header = ctk.CTkLabel(
             self.mod_pane,
             text="PLAYER SETTINGS",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=11, weight="bold"),
         )
-        self.settings_header.grid(row=4, column=0, padx=20, pady=(15, 5), sticky="w")
+        self.settings_header.grid(row=6, column=0, padx=20, pady=(10, 5), sticky="w")
 
         # Player name
         self.name_label = ctk.CTkLabel(
@@ -771,7 +831,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.name_label.grid(row=5, column=0, padx=30, pady=(3, 0), sticky="w")
+        self.name_label.grid(row=7, column=0, padx=30, pady=(3, 0), sticky="w")
         self.name_entry = ctk.CTkEntry(self.mod_pane, width=160, placeholder_text="Player")
         saved_name = prefs.get_player_name()
         if saved_name and saved_name != "Player":
@@ -780,7 +840,7 @@ class WopcApp(BaseApp):  # type: ignore
             "<FocusOut>",
             lambda e: prefs.set_player_name(self.name_entry.get()),
         )
-        self.name_entry.grid(row=6, column=0, padx=30, pady=(0, 5), sticky="w")
+        self.name_entry.grid(row=8, column=0, padx=30, pady=(0, 5), sticky="w")
 
         # Faction selector
         saved_faction = prefs.get_player_faction()
@@ -792,7 +852,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.faction_label.grid(row=7, column=0, padx=30, pady=(3, 0), sticky="w")
+        self.faction_label.grid(row=9, column=0, padx=30, pady=(3, 0), sticky="w")
         self.faction_menu = ctk.CTkOptionMenu(
             self.mod_pane,
             values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
@@ -800,7 +860,7 @@ class WopcApp(BaseApp):  # type: ignore
             command=self._on_faction_change,
             width=160,
         )
-        self.faction_menu.grid(row=8, column=0, padx=30, pady=(0, 5), sticky="w")
+        self.faction_menu.grid(row=10, column=0, padx=30, pady=(0, 5), sticky="w")
 
         # Minimap toggle
         self.minimap_var = ctk.BooleanVar(value=prefs.get_minimap_enabled())
@@ -810,7 +870,7 @@ class WopcApp(BaseApp):  # type: ignore
             command=self._on_minimap_toggle,
             variable=self.minimap_var,
         )
-        self.minimap_cb.grid(row=9, column=0, padx=30, pady=3, sticky="w")
+        self.minimap_cb.grid(row=11, column=0, padx=30, pady=3, sticky="w")
 
         # Summary Status
         self.play_summary = ctk.CTkLabel(
@@ -819,7 +879,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.play_summary.grid(row=10, column=0, padx=20, pady=10, sticky="w")
+        self.play_summary.grid(row=12, column=0, padx=20, pady=10, sticky="w")
 
     # ------------------------------------------------------------------
     # Player Slots
@@ -857,7 +917,7 @@ class WopcApp(BaseApp):  # type: ignore
         ctk.CTkLabel(
             header_row,
             text="PLAYERS",
-            text_color=COLOR_TEXT_MUTED,
+            text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=12, weight="bold"),
         ).grid(row=0, column=0, sticky="w")
 
@@ -867,7 +927,10 @@ class WopcApp(BaseApp):  # type: ignore
             width=70,
             height=24,
             fg_color=COLOR_ACCENT,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color=COLOR_BG,
             font=ctk.CTkFont(size=11),
+            corner_radius=3,
             command=self._add_ai_slot,
         )
         self.add_slot_btn.grid(row=0, column=1, padx=(5, 0))
@@ -1070,7 +1133,7 @@ class WopcApp(BaseApp):  # type: ignore
             width=24,
             height=24,
             fg_color="transparent",
-            hover_color="#ED4245",
+            hover_color=COLOR_DANGER,
             text_color=COLOR_TEXT_MUTED,
             command=remove_this,
         )
@@ -1191,7 +1254,7 @@ class WopcApp(BaseApp):  # type: ignore
             width=24,
             height=24,
             fg_color="transparent",
-            hover_color="#ED4245",
+            hover_color=COLOR_DANGER,
             text_color=COLOR_TEXT_MUTED,
             command=remove_this,
         )
@@ -1320,7 +1383,7 @@ class WopcApp(BaseApp):  # type: ignore
         ctk.CTkLabel(
             opts_frame,
             text="GAME OPTIONS",
-            text_color=COLOR_TEXT_MUTED,
+            text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=12, weight="bold"),
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
 
@@ -1500,25 +1563,33 @@ class WopcApp(BaseApp):  # type: ignore
                 prefs.set_active_map(name)
                 for map_btn in self.map_buttons:
                     map_btn.configure(
-                        fg_color="transparent",
+                        fg_color=COLOR_SURFACE,
                         text_color=COLOR_TEXT_PRIMARY,
+                        hover_color=COLOR_BORDER,
                     )
                 # Re-highlight selected
                 for map_btn in self.map_buttons:
                     if getattr(map_btn, "_wopc_folder", None) == name:
-                        map_btn.configure(fg_color=COLOR_ACCENT, text_color="white")
+                        map_btn.configure(
+                            fg_color=COLOR_ACCENT,
+                            text_color=COLOR_BG,
+                            hover_color=COLOR_ACCENT_HOVER,
+                        )
                 self.selected_map_label.configure(text=f"Selected Map: {disp}")
                 self._broadcast_game_state()
 
-            color = COLOR_ACCENT if is_active else "transparent"
-            tcolor = "white" if is_active else COLOR_TEXT_PRIMARY
+            color = COLOR_ACCENT if is_active else COLOR_SURFACE
+            tcolor = COLOR_BG if is_active else COLOR_TEXT_PRIMARY
+            hover = COLOR_ACCENT_HOVER if is_active else COLOR_BORDER
 
             btn = ctk.CTkButton(
                 self.map_scroll,
                 text=label,
                 fg_color=color,
                 text_color=tcolor,
+                hover_color=hover,
                 anchor="w",
+                corner_radius=3,
                 command=on_select,
             )
             btn._wopc_folder = info.folder_name
@@ -2123,7 +2194,7 @@ class WopcApp(BaseApp):  # type: ignore
                 width=24,
                 height=24,
                 fg_color="transparent",
-                hover_color="#ED4245",
+                hover_color=COLOR_DANGER,
                 text_color=COLOR_TEXT_MUTED,
                 command=kick_this,
             )
@@ -2161,9 +2232,9 @@ class WopcApp(BaseApp):  # type: ignore
         total = 1 + n_remote  # host + connected peers
         if self._current_screen == "lobby":
             if n_remote == 0:
-                self.lobby_launch_btn.configure(text="LAUNCH GAME (Waiting...)")
+                self.lobby_launch_btn.configure(text="▶  LAUNCH GAME (Waiting...)")
             else:
-                self.lobby_launch_btn.configure(text=f"LAUNCH ({total}/{expected} players)")
+                self.lobby_launch_btn.configure(text=f"▶  LAUNCH ({total}/{expected} players)")
 
     # ------------------------------------------------------------------
     # Lobby lifecycle management
@@ -2277,33 +2348,42 @@ class WopcApp(BaseApp):  # type: ignore
         scfa_ok = config.SCFA_STEAM.exists() and (config.SCFA_BIN / config.GAME_EXE).exists()
         wopc_ok = config.WOPC_BIN.exists() and (config.WOPC_BIN / config.GAME_EXE).exists()
 
+        assets_ok = (config.WOPC_ROOT / "gamedata").exists()
         self.status_scfa.configure(
-            text=f"SCFA: {'FOUND' if scfa_ok else 'MISSING'}",
-            text_color="white" if scfa_ok else COLOR_WARN,
+            text=f"{'✓' if scfa_ok else '✗'}  SCFA: {'Found' if scfa_ok else 'Missing'}",
+            text_color=COLOR_LAUNCH if scfa_ok else COLOR_DANGER,
+        )
+        self.status_bundled.configure(
+            text=f"{'✓' if assets_ok else '✗'}  Assets: {'Ready' if assets_ok else 'Not Deployed'}",
+            text_color=COLOR_LAUNCH if assets_ok else COLOR_TEXT_MUTED,
         )
         self.status_wopc.configure(
-            text=f"WOPC: {'READY' if wopc_ok else 'NOT SETUP'}",
-            text_color="white" if wopc_ok else COLOR_WARN,
+            text=f"{'✓' if wopc_ok else '✗'}  WOPC: {'Ready' if wopc_ok else 'Not Setup'}",
+            text_color=COLOR_LAUNCH if wopc_ok else COLOR_WARN,
         )
 
         if not scfa_ok:
-            self.primary_btn.configure(text="MISSING GAME FILES", state="disabled", fg_color="gray")
+            self.primary_btn.configure(
+                text="MISSING GAME FILES", state="disabled", fg_color=COLOR_TEXT_MUTED,
+                text_color=COLOR_BG,
+            )
             self.log("ERROR: SCFA installation not found.")
         elif not wopc_ok:
             self.primary_btn.configure(
-                text="INSTALL / UPDATE",
+                text="⬇  INSTALL / UPDATE",
                 fg_color=COLOR_WARN,
                 hover_color="#CC8F00",
-                text_color="black",
+                text_color=COLOR_BG,
             )
             self.log("WOPC is not deployed. Click Install to begin.")
         else:
             mode = self.mode_var.get()
+            label = self._PLAY_LABELS.get(mode, "PLAY MATCH")
             self.primary_btn.configure(
-                text=self._PLAY_LABELS.get(mode, "PLAY MATCH"),
+                text=f"▶  {label}",
                 fg_color=COLOR_READY,
-                hover_color="#1F8B4C",
-                text_color="white",
+                hover_color=COLOR_ACCENT_HOVER,
+                text_color=COLOR_BG,
                 state="normal",
             )
             self.log("All systems ready.")
@@ -2316,14 +2396,17 @@ class WopcApp(BaseApp):  # type: ignore
         """Handle main button action -- SOLO mode only."""
         btn_text = self.primary_btn.cget("text")
 
-        if btn_text == "INSTALL / UPDATE":
+        if "INSTALL" in btn_text or "UPDATE" in btn_text:
             self.log("Starting asynchronous installation...")
             self.primary_btn.configure(state="disabled", text="INSTALLING...")
             worker = SetupWorker(on_complete=self._on_setup_complete, on_log=self.log)
             worker.start()
             return
 
-        if btn_text in self._PLAY_LABELS.values() or btn_text == "PLAY MATCH":
+        play_values = {f"▶  {v}" for v in self._PLAY_LABELS.values()} | set(
+            self._PLAY_LABELS.values()
+        ) | {"PLAY MATCH"}
+        if btn_text in play_values or btn_text.startswith("▶"):
             self.log("Launching game (solo mode)...")
             threading.Thread(target=self._launch_game, daemon=True).start()
 
@@ -2337,11 +2420,11 @@ class WopcApp(BaseApp):  # type: ignore
             else:
                 self.log("Installation failed. Check logs and retry.")
                 self.primary_btn.configure(
-                    text="INSTALL / UPDATE",
+                    text="⬇  INSTALL / UPDATE",
                     state="normal",
                     fg_color=COLOR_WARN,
                     hover_color="#CC8F00",
-                    text_color="black",
+                    text_color=COLOR_BG,
                 )
 
         self.after(0, _update)
@@ -2378,7 +2461,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.after(
             0,
             lambda: self.lobby_launch_btn.configure(
-                text="LAUNCH GAME", fg_color=COLOR_READY, state="normal"
+                text="▶  LAUNCH GAME", fg_color=COLOR_LAUNCH, state="normal"
             ),
         )
 
@@ -2487,12 +2570,12 @@ class WopcApp(BaseApp):  # type: ignore
             if btn_text == "READY" and self._lobby_client:
                 self._lobby_client.send_ready(True)
                 self.lobby_launch_btn.configure(
-                    text="UNREADY", fg_color="#ED4245", hover_color="#C53030"
+                    text="UNREADY", fg_color=COLOR_DANGER, hover_color="#BF3040"
                 )
             elif btn_text == "UNREADY" and self._lobby_client:
                 self._lobby_client.send_ready(False)
                 self.lobby_launch_btn.configure(
-                    text="READY", fg_color=COLOR_ACCENT, hover_color="#4752C4"
+                    text="READY", fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER
                 )
 
     def _on_lobby_change_map(self) -> None:
@@ -2560,8 +2643,8 @@ class WopcApp(BaseApp):  # type: ignore
                     anchor="w",
                     height=30,
                     fg_color=COLOR_ACCENT if is_active else "transparent",
-                    text_color="white" if is_active else COLOR_TEXT_PRIMARY,
-                    hover_color="#4752C4",
+                    text_color=COLOR_BG if is_active else COLOR_TEXT_PRIMARY,
+                    hover_color=COLOR_ACCENT_HOVER,
                     command=on_pick,
                 )
                 btn.grid(row=idx, column=0, pady=1, sticky="ew")
@@ -2601,7 +2684,9 @@ class WopcApp(BaseApp):  # type: ignore
         """Configure lobby screen widgets for hosting."""
         self.lobby_change_map_btn.grid()
         self.lobby_add_ai_btn.grid()
-        self.lobby_launch_btn.configure(text="LAUNCH GAME", fg_color=COLOR_READY, state="normal")
+        self.lobby_launch_btn.configure(
+            text="▶  LAUNCH GAME", fg_color=COLOR_LAUNCH, state="normal"
+        )
         # Enable option dropdowns
         for w in self.lobby_option_widgets:
             if hasattr(w, "configure") and isinstance(w, ctk.CTkOptionMenu):
