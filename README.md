@@ -9,7 +9,64 @@ WOPC merges two community projects that independently improved Supreme Commander
 
 Neither project benefits from the other today. WOPC combines them into a single self-contained distribution and provides a foundation for **replacing the game's compiled C++ subsystems** (pathfinding, steering, collision) one at a time.
 
-## Quick Start
+---
+
+## Download & Play
+
+### What you need
+
+1. **Supreme Commander: Forged Alliance** on Steam
+2. **LOUD** installed ([LOUD install guide](https://github.com/LOUD-Project/Git-LOUD))
+3. **Python 3.10+** ([python.org/downloads](https://www.python.org/downloads/))
+
+### First-time setup
+
+1. **Clone this repo** (or download as ZIP and extract):
+   ```
+   git clone https://github.com/reimarus/withourpowerscombined.git
+   cd withourpowerscombined
+   ```
+
+2. **Run the launcher**:
+   ```
+   python build_exe.py
+   dist\WOPC-Launcher.exe
+   ```
+   Or run directly without building the `.exe`:
+   ```
+   pip install -r requirements.txt
+   python -m launcher.gui
+   ```
+
+3. **Click Install** in the launcher. It will detect your Steam and LOUD installations, copy game files to `C:\ProgramData\WOPC\`, and download content packs. This takes a few minutes the first time.
+
+4. **Click Play** to launch a solo game, or switch to **Multiplayer** to host/join LAN games.
+
+### Staying up to date
+
+When we push updates, pull the latest code and rebuild the launcher:
+
+```
+cd withourpowerscombined
+git pull
+python build_exe.py
+```
+
+Then open `dist\WOPC-Launcher.exe` and click **Install** again if prompted. The launcher will detect what changed and only update what's needed.
+
+> **Tip:** If you see "UPDATE AVAILABLE" on the Install button, click it before playing to make sure you have the latest patches and content.
+
+### Playing multiplayer
+
+1. Make sure all players are on the **same version** (everyone runs `git pull` + rebuild)
+2. One player clicks **Multiplayer → Create Game** (they become the host)
+3. Other players on the same LAN click **Multiplayer** and the game appears automatically in the browser
+4. Not on the same LAN? Expand **Direct Connect** and enter the host's IP address
+5. Once everyone is in the lobby, the host clicks **Launch Game**
+
+---
+
+## Developer Quick Start
 
 ```
 # Requirements: Python 3.10+, Steam copy of Supreme Commander: Forged Alliance, LOUD installed
@@ -35,15 +92,14 @@ WOPC creates an isolated game directory at `C:\ProgramData\WOPC\` containing:
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 0 | Complete | Project foundation - launcher, init file, repo structure |
-| 1 | Complete | Validate LOUD gameplay works from WOPC directory |
-| 2 | Complete | Integrate FAF binary patches - patched exe with engine improvements |
-| 3 | Complete | WOPC Lua overlay - compatibility patches, new features |
-| 4 | Complete | Multiplayer support - content manifests, version checking |
-| 5 | Planned | First C++ engine patch - pathfinding improvement |
-| 6 | Complete | WOPC Advanced Launcher - GUI, discrete mod selection |
-| 7 | Complete | Match Lobby - Discord UI, standalone direct launch |
-| 8 | Planned | Deep C++ Refactoring - rendering optimizations, simulation speed |
+| 1 | ✅ Complete | Project foundation, LOUD validation, FAF binary patches |
+| 2 | ✅ Complete | WOPC Lua overlay, compatibility patches |
+| 3 | ✅ Complete | Multiplayer — content manifests, TCP lobby, file transfer |
+| 4 | ✅ Complete | GUI Launcher — install/play, mod selection, map browser |
+| 5 | ✅ Complete | Match Lobby — Discord-style UI, standalone direct launch |
+| 6 | ✅ Complete | Modern Multiplayer UX — LAN discovery, game browser, lobby room |
+| 7 | 🔧 In Progress | Polish — UI styling, player ratings, map library |
+| 8 | Planned | C++ Engine Patches — pathfinding, rendering, simulation speed |
 
 See [docs/architecture.md](docs/architecture.md) for the full technical plan.
 
@@ -78,7 +134,7 @@ The init file loads content in this order (later entries shadow earlier ones):
 
 ## Contributing
 
-This project is in early development. See [docs/architecture.md](docs/architecture.md) for the technical plan and [docs/setup-guide.md](docs/setup-guide.md) for development setup.
+See [docs/architecture.md](docs/architecture.md) for the technical plan and [docs/backlog.md](docs/backlog.md) for what's next.
 
 ## License
 
