@@ -13,11 +13,6 @@ Items to tackle over time, roughly grouped by priority.
 7. **UI polish** — modern styling, better spacing, visual hierarchy, fancier look overall
 8. **Solo ↔ multiplayer UI consistency** — shared concepts (map selector, player slots, game options) must look and behave the same in both screens (see CLAUDE.md rule #5)
 
-things to add: 
-couple other items for the backlog. add ai to players in the multiplayer screen doesnt work. change map button in multiplayer screen doesnt work, i dont know what each of the different victory types mean, I cant remove players from the solo map, there is no team auto assignment, we dont have player ratings for balancing, UI style is still very basic need to make it fancier, and solo and multiplayer games ui isnt consistent between them(that should be a rule for you so you remember)
-another rule to add, always review and update backlog.md with what we accomplished, ideas since the last PR, and one peice of improvement that we can work on in the future.
-I want you to use claude.md to make you an expert on this project as quickly as possible so you are as efficient as possible in navigating it. make sure you are always considering things that can be CRUDed to improve your ability to work with this project. 
-
 ## Features
 
 9. **Map Library Browser** — searchable map library where players can browse, preview, and download maps (replaces flat list)
