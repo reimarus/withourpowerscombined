@@ -1,4 +1,9 @@
-"""Tests for launcher.lobby — TCP lobby server and client."""
+"""Tests for launcher.lobby — TCP lobby server and client.
+
+These tests spin up real TCP servers and are slow (~6 min).
+Marked as 'slow' — excluded from default runs, included in CI/PR checks.
+Run locally with: pytest -m slow
+"""
 
 from __future__ import annotations
 
@@ -6,6 +11,8 @@ import json
 import socket
 import threading
 import time
+
+import pytest
 
 from launcher.lobby import (
     ENCODING,
@@ -15,6 +22,8 @@ from launcher.lobby import (
     LobbyServer,
     _send_msg,
 )
+
+pytestmark = pytest.mark.slow
 
 
 def _find_free_port() -> int:
