@@ -30,8 +30,26 @@
 
 ### Status
 
-- [ ] `launcher/discovery.py` — BeaconBroadcaster + BeaconListener
-- [ ] `tests/test_discovery.py` — socket tests
-- [ ] `launcher/gui/app.py` — screen switching, browser screen, lobby room screen
-- [ ] `launcher/prefs.py` — update launch_mode values
-- [ ] Verification and testing
+- [x] `launcher/discovery.py` — BeaconBroadcaster + BeaconListener
+- [x] `tests/test_discovery.py` — socket tests
+- [x] `launcher/gui/app.py` — screen switching, browser screen, lobby room screen
+- [x] `launcher/prefs.py` — update launch_mode values
+- [x] `launcher/wopc.py` — explicit launch_mode param
+- [x] Verification and testing (196 fast tests pass)
+- **PR #17** — open, all code committed
+
+### Backlog (Phase 6 follow-up)
+
+**Broken / stubbed:**
+- [ ] "Add AI" button in multiplayer lobby — not wired up
+- [ ] "Change Map" button in multiplayer lobby — not wired up
+- [ ] Remove players from solo screen — no remove/delete button
+
+**Missing features:**
+- [ ] Victory type tooltips — explain what each victory condition means
+- [ ] Team auto-assignment — automatically balance teams when players join
+- [ ] Player ratings / balancing — track skill for fairer matchmaking
+
+**UI polish:**
+- [ ] Fancy up the UI — modern styling, better spacing, visual hierarchy
+- [ ] Solo ↔ multiplayer UI consistency — same visual patterns for shared concepts (see CLAUDE.md rule)
