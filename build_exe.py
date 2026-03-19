@@ -3,7 +3,7 @@
 This is the *only* way to build the launcher exe. Do not invoke
 PyInstaller directly — use this script so the flags stay consistent.
 
-Output: dist/WOPC-Launcher.exe
+Output: WOPC-Launcher.exe (repo root)
 """
 
 import os
@@ -46,6 +46,9 @@ def main() -> int:
         # Bundle gamedata overlay (needed by deploy.py at runtime)
         "--add-data",
         f"{repo_root / 'gamedata'}{os.pathsep}gamedata",
+        # Output directly to repo root (not dist/)
+        "--distpath",
+        str(repo_root),
         str(entry_point),
     ]
 
@@ -55,9 +58,15 @@ def main() -> int:
 
     result = subprocess.run(cmd, cwd=str(repo_root))
     if result.returncode == 0:
-        exe_path = repo_root / "dist" / "WOPC-Launcher.exe"
+        exe_path = repo_root / "WOPC-Launcher.exe"
         print(f"\nBuild successful: {exe_path}")
         print(f"  Size: {exe_path.stat().st_size / 1_048_576:.1f} MB")
+        # Clean up leftover dist/ directory if present
+        dist_dir = repo_root / "dist"
+        if dist_dir.exists():
+            import shutil
+
+            shutil.rmtree(dist_dir, ignore_errors=True)
         return 0
     else:
         print("\nBuild failed.")

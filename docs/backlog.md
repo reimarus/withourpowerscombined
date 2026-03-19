@@ -4,12 +4,12 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Critical Bugs — First-Time Setup Broken
 
-1. **Asset download stuck / no progress shown** — first-time launcher gets stuck fetching assets with no visible feedback. Add a real progress bar or status text to the GUI showing what's downloading, percentage, and file sizes. Users must be able to see what's happening.
-2. **Auto-discover SCFA install path** — the launcher fails to find SCFA assets on a fresh machine. Scan Steam libraryfolders.vdf, common registry keys (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`), and default Steam paths to auto-locate the SCFA install. Fall back to a folder picker if auto-detect fails.
-3. **WOPC asset download failing** — content-v1/v2 downloads from GitHub Releases aren't completing. Debug the download pipeline (URL resolution, redirect handling, large file support) and fix.
+1. ~~**Asset download stuck / no progress shown**~~ ✅ — progress bar + step labels in GUI (PR #26)
+2. ~~**Auto-discover SCFA install path**~~ ✅ — Steam VDF, registry, common paths, folder picker fallback (PR #26)
+3. ~~**WOPC asset download failing**~~ ✅ — 30s timeout, 3 retries with backoff, clear error messages (PR #26)
 4. **Publish launcher exe to GitHub Release** — the exe must be the most prominent download on the repo. Upload `WOPC-Launcher.exe` to a pinned release so players can find it immediately.
-5. **Map preview not working (solo)** — map preview panel was added but isn't displaying images. Debug and fix.
-6. **Map preview not working (multiplayer)** — map preview not visible in multiplayer lobby at all. Wire it up.
+5. ~~**Map preview not working (solo)**~~ ✅ — Pillow bundled in exe (PR #26)
+6. ~~**Map preview not working (multiplayer)**~~ ✅ — lobby preview image widget added (PR #26)
 7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
 
 ## High Priority — Player Experience
