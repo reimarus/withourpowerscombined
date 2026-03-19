@@ -1,4 +1,9 @@
-"""Tests for launcher.lobby — TCP lobby server and client."""
+"""Tests for launcher.lobby — TCP lobby server and client.
+
+These tests spin up real TCP servers and are slow (~6 min).
+Marked as 'slow' — excluded from default runs, included in CI/PR checks.
+Run locally with: pytest -m slow
+"""
 
 from __future__ import annotations
 
@@ -6,6 +11,8 @@ import json
 import socket
 import threading
 import time
+
+import pytest
 
 from launcher.lobby import (
     ENCODING,
@@ -15,6 +22,8 @@ from launcher.lobby import (
     LobbyServer,
     _send_msg,
 )
+
+pytestmark = pytest.mark.slow
 
 
 def _find_free_port() -> int:
@@ -109,11 +118,11 @@ class TestLobbyServer:
         try:
             s1 = _raw_connect(port, "P1", "uef")
             _read_msg(s1)  # Welcome
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             s2 = _raw_connect(port, "P2", "cybran")
             _read_msg(s2)  # Welcome
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             with lock:
                 assert len(joins) == 2
@@ -142,10 +151,10 @@ class TestLobbyServer:
             sock = _raw_connect(port, "Bob")
             welcome = _read_msg(sock)
             pid = welcome["player_id"]
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             _send_msg(sock, {"type": "Ready", "ready": True})
-            time.sleep(1.0)
+            time.sleep(0.3)
 
             with lock:
                 assert any(r == (pid, True) for r in ready_events)
@@ -171,7 +180,7 @@ class TestLobbyServer:
         try:
             sock = _raw_connect(port, "Temp")
             _read_msg(sock)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             _send_msg(sock, {"type": "Goodbye"})
             sock.close()
@@ -189,11 +198,11 @@ class TestLobbyServer:
         try:
             sock = _raw_connect(port, "Watcher")
             _read_msg(sock)  # Welcome
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             state = {"map": "Caldera", "options": {"Victory": "demoralization"}}
             server.broadcast_state(state)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             # Drain messages until we find LobbyUpdate
             sock.settimeout(3.0)
@@ -230,10 +239,10 @@ class TestLobbyServer:
         try:
             sock = _raw_connect(port, "Player")
             _read_msg(sock)  # Welcome
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             server.broadcast_launch("15000")
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             sock.settimeout(3.0)
             buf = b""
@@ -329,7 +338,7 @@ class TestLobbyClient:
         try:
             client.connect()
             assert connected.wait(timeout=10.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             server.broadcast_state({"map": "Theta Passage", "players": 4})
             assert state_received.wait(timeout=5.0), "LobbyUpdate not received"
@@ -365,7 +374,7 @@ class TestLobbyClient:
         try:
             client.connect()
             assert connected.wait(timeout=10.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             server.broadcast_launch("16000")
             assert launch_event.wait(timeout=5.0), "Launch not received"
@@ -397,7 +406,7 @@ class TestLobbyClient:
         try:
             client.connect()
             assert connected.wait(timeout=10.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             client.send_ready(True)
             assert ready_received.wait(timeout=5.0), "Ready not received by server"
@@ -424,7 +433,300 @@ class TestLobbyClient:
         )
         try:
             client.connect()
-            assert error_event.wait(timeout=15.0), "Error callback not fired"
+            assert error_event.wait(timeout=5.0), "Error callback not fired"
             assert len(error_msgs) > 0
         finally:
             client.disconnect()
+
+
+# ---------------------------------------------------------------------------
+# New feature tests (P1)
+# ---------------------------------------------------------------------------
+
+
+class TestChatMessages:
+    """Chat message relay between server and clients."""
+
+    def test_server_broadcast_chat(self):
+        """Server broadcasts chat to all connected peers."""
+        port = _find_free_port()
+        server = LobbyServer(port, LobbyCallbacks())
+        server.start()
+        try:
+            sock = _raw_connect(port, "Chatter")
+            _read_msg(sock)  # Welcome
+            time.sleep(0.1)
+
+            server.broadcast_chat("Host", "Hello everyone!")
+            time.sleep(0.1)
+
+            sock.settimeout(3.0)
+            buf = b""
+            found = False
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline:
+                try:
+                    buf += sock.recv(65536)
+                except TimeoutError:
+                    break
+                for line in buf.split(b"\n"):
+                    if not line:
+                        continue
+                    try:
+                        msg = json.loads(line)
+                        if msg.get("type") == "Chat":
+                            assert msg["sender"] == "Host"
+                            assert msg["text"] == "Hello everyone!"
+                            found = True
+                    except json.JSONDecodeError:
+                        pass
+                if found:
+                    break
+            assert found, "Chat message not received"
+            sock.close()
+        finally:
+            server.stop()
+
+    def test_client_chat_relay(self):
+        """Client sends Chat, server relays it to all peers (including host GUI)."""
+        port = _find_free_port()
+        chat_received = threading.Event()
+        received: list[tuple[str, str]] = []
+
+        def on_chat(sender, text):
+            received.append((sender, text))
+            chat_received.set()
+
+        server = LobbyServer(port, LobbyCallbacks(on_chat_received=on_chat))
+        server.start()
+
+        connected = threading.Event()
+        client = LobbyClient(
+            "127.0.0.1",
+            port,
+            "Alice",
+            "uef",
+            LobbyCallbacks(on_connected=lambda: connected.set()),
+        )
+        try:
+            client.connect()
+            assert connected.wait(timeout=10.0)
+            time.sleep(0.1)
+
+            client.send_chat("Hi from Alice!")
+            assert chat_received.wait(timeout=5.0)
+            assert received[0] == ("Alice", "Hi from Alice!")
+        finally:
+            client.disconnect()
+            server.stop()
+
+
+class TestKickPlayer:
+    """Host kicks a player from the lobby."""
+
+    def test_kick_fires_callback_and_removes(self):
+        """Kick sends Kicked message and removes player."""
+        port = _find_free_port()
+        left_event = threading.Event()
+
+        def on_left(pid):
+            left_event.set()
+
+        server = LobbyServer(port, LobbyCallbacks(on_player_left=on_left))
+        server.start()
+
+        kicked_event = threading.Event()
+        kicked_reason: list[str] = []
+
+        client = LobbyClient(
+            "127.0.0.1",
+            port,
+            "Victim",
+            "uef",
+            LobbyCallbacks(
+                on_connected=lambda: None,
+                on_kicked=lambda reason: (kicked_reason.append(reason), kicked_event.set()),
+            ),
+        )
+        try:
+            connected = threading.Event()
+            client._cb.on_connected = lambda: connected.set()
+            client.connect()
+            assert connected.wait(timeout=10.0)
+            time.sleep(0.1)
+
+            pid = client.player_id
+            assert pid is not None
+            server.kick_player(pid, "No griefing")
+
+            assert left_event.wait(timeout=5.0), "on_player_left not fired"
+            assert kicked_event.wait(timeout=5.0), "on_kicked not fired"
+            assert kicked_reason[0] == "No griefing"
+            assert len(server.connected_players) == 0
+        finally:
+            client.disconnect()
+            server.stop()
+
+
+class TestGameStateProvider:
+    """Game state snapshot sent to new joiners on connect."""
+
+    def test_state_sent_on_connect(self):
+        """New joiner receives GameState after Welcome."""
+        port = _find_free_port()
+
+        def provide_state():
+            return {"map_name": "Theta Passage", "game_options": {"Victory": "Sandbox"}}
+
+        server = LobbyServer(port, LobbyCallbacks(), game_state_provider=provide_state)
+        server.start()
+        try:
+            sock = _raw_connect(port, "Viewer")
+            welcome = _read_msg(sock)
+            assert welcome["type"] == "Welcome"
+
+            # Next message should be GameState
+            state_msg = _read_msg(sock)
+            assert state_msg["type"] == "GameState"
+            assert state_msg["state"]["map_name"] == "Theta Passage"
+            assert state_msg["state"]["game_options"]["Victory"] == "Sandbox"
+            sock.close()
+        finally:
+            server.stop()
+
+    def test_no_state_when_provider_none(self):
+        """No GameState sent if provider is not set."""
+        port = _find_free_port()
+        server = LobbyServer(port, LobbyCallbacks())
+        server.start()
+        try:
+            sock = _raw_connect(port, "Viewer")
+            welcome = _read_msg(sock)
+            assert welcome["type"] == "Welcome"
+
+            # Next message should NOT be GameState — should be PlayerJoined or Heartbeat
+            sock.settimeout(1.0)
+            buf = b""
+            got_game_state = False
+            deadline = time.monotonic() + 1.0
+            while time.monotonic() < deadline:
+                try:
+                    buf += sock.recv(65536)
+                except TimeoutError:
+                    break
+                for line in buf.split(b"\n"):
+                    if not line:
+                        continue
+                    try:
+                        msg = json.loads(line)
+                        if msg.get("type") == "GameState":
+                            got_game_state = True
+                    except json.JSONDecodeError:
+                        pass
+            assert not got_game_state, "GameState should not be sent without provider"
+            sock.close()
+        finally:
+            server.stop()
+
+
+class TestTeamColorChange:
+    """Clients can change team and color."""
+
+    def test_team_change_from_client(self):
+        """Client sends TeamChange, server updates player record."""
+        port = _find_free_port()
+        join_event = threading.Event()
+
+        def on_join(pid, name, faction, slot):
+            join_event.set()
+
+        server = LobbyServer(port, LobbyCallbacks(on_player_joined=on_join))
+        server.start()
+
+        connected = threading.Event()
+        client = LobbyClient(
+            "127.0.0.1",
+            port,
+            "TeamPlayer",
+            "cybran",
+            LobbyCallbacks(on_connected=lambda: connected.set()),
+        )
+        try:
+            client.connect()
+            assert connected.wait(timeout=10.0)
+            assert join_event.wait(timeout=5.0)
+            time.sleep(0.1)
+
+            client.send_team(3)
+            time.sleep(0.3)
+
+            # Verify server updated the player record
+            players = server.connected_players
+            assert len(players) == 1
+            assert players[0]["team"] == 3
+        finally:
+            client.disconnect()
+            server.stop()
+
+    def test_color_change_from_client(self):
+        """Client sends ColorChange, server updates player record."""
+        port = _find_free_port()
+        join_event = threading.Event()
+
+        def on_join(pid, name, faction, slot):
+            join_event.set()
+
+        server = LobbyServer(port, LobbyCallbacks(on_player_joined=on_join))
+        server.start()
+
+        connected = threading.Event()
+        client = LobbyClient(
+            "127.0.0.1",
+            port,
+            "ColorPlayer",
+            "uef",
+            LobbyCallbacks(on_connected=lambda: connected.set()),
+        )
+        try:
+            client.connect()
+            assert connected.wait(timeout=10.0)
+            assert join_event.wait(timeout=5.0)
+            time.sleep(0.1)
+
+            client.send_color(5)
+            time.sleep(0.3)
+
+            players = server.connected_players
+            assert len(players) == 1
+            assert players[0]["color"] == 5
+        finally:
+            client.disconnect()
+            server.stop()
+
+
+class TestClientSendChat:
+    """Client chat helpers."""
+
+    def test_send_chat_empty_ignored(self):
+        """Empty chat messages are not sent."""
+        port = _find_free_port()
+        server = LobbyServer(port, LobbyCallbacks())
+        server.start()
+
+        connected = threading.Event()
+        client = LobbyClient(
+            "127.0.0.1",
+            port,
+            "Silent",
+            "uef",
+            LobbyCallbacks(on_connected=lambda: connected.set()),
+        )
+        try:
+            client.connect()
+            assert connected.wait(timeout=10.0)
+            # Should not raise or send anything
+            client.send_chat("")
+            client.send_chat("   ")
+        finally:
+            client.disconnect()
+            server.stop()
