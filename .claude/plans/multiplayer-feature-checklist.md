@@ -46,10 +46,10 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 
 | Feature | FAF | WOPC | Priority | Notes |
 |---------|-----|------|----------|-------|
-| Victory condition selector | ✅ 5 options | ❌ | **P1** | Demoralization/Domination/Eradication/Sandbox/Decapitation |
-| Unit cap selector | ✅ 125-1500 | ❌ | **P1** | Critical for performance tuning |
+| Victory condition selector | ✅ 5 options | ✅ 4 options in GUI | — | Demoralization/Supremacy/Assassination/Sandbox + correct engine mapping |
+| Unit cap selector | ✅ 125-1500 | ✅ 500-4000 in GUI | — | 5 options in dropdown |
 | Game speed option | ✅ normal/fast/adjustable | ❌ | P2 | |
-| Share on death | ✅ 6 modes | ❌ | **P1** | FullShare vs ShareUntilDeath matters a lot |
+| Share on death | ✅ 6 modes | ✅ 2 modes in GUI | — | FullShare / ShareUntilDeath |
 | Fog of war | ✅ none/explored | ❌ | P2 | |
 | Cheats toggle | ✅ | ❌ | P2 | |
 | No rush timer | ✅ 0-60 min | ❌ | P2 | |
@@ -79,16 +79,16 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 |---------|-----|------|----------|-------|
 | Faction selector (UEF/Aeon/Cybran/Sera/Random) | ✅ | ✅ | — | |
 | Random faction resolution at launch | ✅ | ✅ multilobby.lua | — | |
-| Player color selector | ✅ full palette | ❌ | **P1** | Players want to pick their color |
+| Player color selector | ✅ full palette | ✅ color dropdown per slot | — | 8 SCFA colors, wired to game_config |
 | Army color (separate from player color) | ✅ | ❌ | P3 | |
-| IsColorFree validation | ✅ | ❌ | **P1** | Prevent duplicates |
+| IsColorFree validation | ✅ | ✅ _validate_before_launch | — | Blocks launch on duplicate colors |
 | Faction sync to all peers | ✅ | ✅ via game state broadcast | — | Included in full state sync |
 
 ## 7. TEAM & ALLIANCE MANAGEMENT
 
 | Feature | FAF | WOPC | Priority | Notes |
 |---------|-----|------|----------|-------|
-| Manual team assignment per slot | ✅ teams 1-8 | 🔧 static only | **P1** | Need dropdown per slot |
+| Manual team assignment per slot | ✅ teams 1-8 | ✅ dropdown 1-4 per slot | — | Human + AI slots both have team selector |
 | Auto-team strategies (TopVsBottom, LeftVsRight, etc.) | ✅ 9 modes | ❌ | P2 | |
 | Team lock (prevent changes after set) | ✅ | ❌ | P3 | |
 | Team rating display | ✅ TrueSkill | ❌ | P3 | |
@@ -156,7 +156,7 @@ Legend: ✅ Done | 🔧 Partial | ❌ Missing | ⏭ Not Needed
 | Broadcast AI slot changes | ✅ | ✅ _broadcast_game_state | — | Triggers on slot add/remove |
 | Broadcast team changes | ✅ | ✅ TeamChange msg | — | Client→server→broadcast |
 | Broadcast player color changes | ✅ | ✅ ColorChange msg | — | Client→server→broadcast |
-| Broadcast mod/pack changes | ✅ | ❌ | **P1** | Need to include active mods in game state |
+| Broadcast mod/pack changes | ✅ | ✅ content_packs in GameState | — | Joiner warned about mismatched packs |
 | Full state snapshot on join | ✅ | ✅ game_state_provider | — | Full state sent via GameState msg on connect |
 
 ## 14. HOST ADMIN
@@ -208,16 +208,16 @@ These are the features that make multiplayer actually usable for game night:
 1. ~~**Live state sync** — Host broadcasts ALL config changes to joiners in real-time~~ ✅ DONE
    - ✅ Game options, map, AI slots, teams, colors broadcast on every change
    - ✅ Full state snapshot sent to new joiners on connect
-   - ❌ Mod/pack changes not yet in state snapshot
-2. **Player color selector** — Pick colors, prevent duplicates ❌
-3. **Team assignment UI** — Dropdown per player/AI slot ❌
-4. **Game options panel** — Victory condition, unit cap, share on death (the big 3) ❌
+   - ✅ Content packs included in state, joiner warned about mismatches
+2. ~~**Player color selector** — Pick colors, prevent duplicates~~ ✅ DONE
+3. ~~**Team assignment UI** — Dropdown per player/AI slot~~ ✅ DONE (was already built)
+4. ~~**Game options panel** — Victory condition, unit cap, share on death~~ ✅ DONE (was already built)
 5. ~~**All-must-ready enforcement** — Host can't launch until everyone is ready~~ ✅ DONE
 6. ~~**Pre-launch validation** — Check connections, check map availability, check mod sync~~ ✅ DONE
 7. ~~**Kick player** — Host can remove someone from lobby~~ ✅ DONE
 8. ~~**Lobby chat** — Text chat between players while configuring~~ ✅ DONE
-9. ~~**Map sync** — Detect if joiner is missing the selected map~~ ✅ DONE
-10. **Mod/manifest validation** — Verify all players have matching files before launch ❌
+9. ~~**Map sync** — Detect + auto-download missing maps from host~~ ✅ DONE
+10. **Mod/manifest validation** — Verify all players have matching files before launch ❌ (partial — content pack warnings exist)
 
 ### P2 — Should Have (Following Sprint)
 11. Observer/spectator support
