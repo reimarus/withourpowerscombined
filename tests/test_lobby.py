@@ -109,11 +109,11 @@ class TestLobbyServer:
         try:
             s1 = _raw_connect(port, "P1", "uef")
             _read_msg(s1)  # Welcome
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             s2 = _raw_connect(port, "P2", "cybran")
             _read_msg(s2)  # Welcome
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             with lock:
                 assert len(joins) == 2
@@ -142,10 +142,10 @@ class TestLobbyServer:
             sock = _raw_connect(port, "Bob")
             welcome = _read_msg(sock)
             pid = welcome["player_id"]
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             _send_msg(sock, {"type": "Ready", "ready": True})
-            time.sleep(1.0)
+            time.sleep(0.3)
 
             with lock:
                 assert any(r == (pid, True) for r in ready_events)
@@ -171,7 +171,7 @@ class TestLobbyServer:
         try:
             sock = _raw_connect(port, "Temp")
             _read_msg(sock)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             _send_msg(sock, {"type": "Goodbye"})
             sock.close()
@@ -189,11 +189,11 @@ class TestLobbyServer:
         try:
             sock = _raw_connect(port, "Watcher")
             _read_msg(sock)  # Welcome
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             state = {"map": "Caldera", "options": {"Victory": "demoralization"}}
             server.broadcast_state(state)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             # Drain messages until we find LobbyUpdate
             sock.settimeout(3.0)
@@ -230,10 +230,10 @@ class TestLobbyServer:
         try:
             sock = _raw_connect(port, "Player")
             _read_msg(sock)  # Welcome
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             server.broadcast_launch("15000")
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             sock.settimeout(3.0)
             buf = b""
@@ -329,7 +329,7 @@ class TestLobbyClient:
         try:
             client.connect()
             assert connected.wait(timeout=10.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             server.broadcast_state({"map": "Theta Passage", "players": 4})
             assert state_received.wait(timeout=5.0), "LobbyUpdate not received"
@@ -365,7 +365,7 @@ class TestLobbyClient:
         try:
             client.connect()
             assert connected.wait(timeout=10.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             server.broadcast_launch("16000")
             assert launch_event.wait(timeout=5.0), "Launch not received"
@@ -397,7 +397,7 @@ class TestLobbyClient:
         try:
             client.connect()
             assert connected.wait(timeout=10.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             client.send_ready(True)
             assert ready_received.wait(timeout=5.0), "Ready not received by server"
@@ -424,7 +424,7 @@ class TestLobbyClient:
         )
         try:
             client.connect()
-            assert error_event.wait(timeout=15.0), "Error callback not fired"
+            assert error_event.wait(timeout=5.0), "Error callback not fired"
             assert len(error_msgs) > 0
         finally:
             client.disconnect()
@@ -446,10 +446,10 @@ class TestChatMessages:
         try:
             sock = _raw_connect(port, "Chatter")
             _read_msg(sock)  # Welcome
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             server.broadcast_chat("Host", "Hello everyone!")
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             sock.settimeout(3.0)
             buf = b""
@@ -502,7 +502,7 @@ class TestChatMessages:
         try:
             client.connect()
             assert connected.wait(timeout=10.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             client.send_chat("Hi from Alice!")
             assert chat_received.wait(timeout=5.0)
@@ -544,7 +544,7 @@ class TestKickPlayer:
             client._cb.on_connected = lambda: connected.set()
             client.connect()
             assert connected.wait(timeout=10.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             pid = client.player_id
             assert pid is not None
@@ -596,10 +596,10 @@ class TestGameStateProvider:
             assert welcome["type"] == "Welcome"
 
             # Next message should NOT be GameState — should be PlayerJoined or Heartbeat
-            sock.settimeout(2.0)
+            sock.settimeout(1.0)
             buf = b""
             got_game_state = False
-            deadline = time.monotonic() + 2.0
+            deadline = time.monotonic() + 1.0
             while time.monotonic() < deadline:
                 try:
                     buf += sock.recv(65536)
@@ -646,10 +646,10 @@ class TestTeamColorChange:
             client.connect()
             assert connected.wait(timeout=10.0)
             assert join_event.wait(timeout=5.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             client.send_team(3)
-            time.sleep(1.0)
+            time.sleep(0.3)
 
             # Verify server updated the player record
             players = server.connected_players
@@ -682,10 +682,10 @@ class TestTeamColorChange:
             client.connect()
             assert connected.wait(timeout=10.0)
             assert join_event.wait(timeout=5.0)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             client.send_color(5)
-            time.sleep(1.0)
+            time.sleep(0.3)
 
             players = server.connected_players
             assert len(players) == 1
