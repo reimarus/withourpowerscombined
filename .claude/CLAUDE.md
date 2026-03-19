@@ -109,7 +109,7 @@ C:\Users\roskv\wopc\          (repo)
     manifest.py                Patch manifest parsing (wopc_patches.toml)
     patcher.py                 Build orchestration for patched exe
     gui/                       GUI launcher (customtkinter)
-      app.py                   WopcApp — main window, map selector, mode selector (SOLO/HOST/JOIN)
+      app.py                   WopcApp — main window, map selector, multiplayer lobby, game browser
       worker.py                SetupWorker — async setup in background thread
       wopc.ico                 Application icon
   build_exe.py                 PyInstaller build script → dist/WOPC-Launcher.exe
@@ -189,9 +189,10 @@ quickstart.lua
 - **Phase 1** ✅ Game launches from WOPC directory
 - **Phase 2** ✅ FAF binary patches integration
 - **Phase 3** ✅ WOPC Lua overlay (quickstart system + content packs)
-- **Phase 4** 🔧 Multiplayer support (Phase 1 done: SOLO/HOST/JOIN launch modes)
-- **Phase 5** → Player slot management + game options
-- **Phase 6** → C++ pathfinding patch
+- **Phase 4** ✅ Multiplayer support — TCP lobby, game state sync, file transfer, chat, kick, ready
+- **Phase 5** ✅ Player slot management + game options (colors, teams, victory, unit cap, share)
+- **Phase 6** 🔧 Modern multiplayer UX — game browser, LAN discovery, unified lobby room
+- **Phase 7** → C++ pathfinding patch
 
 ## Key Technical Gotchas
 

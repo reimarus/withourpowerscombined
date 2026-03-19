@@ -22,7 +22,7 @@ DEFAULT_PREFS = {
         "player_name": "Player",
         "minimap_enabled": "True",
         "player_faction": "random",
-        "launch_mode": "solo",  # solo | host | join
+        "launch_mode": "solo",  # solo | multiplayer
         "host_port": "15000",
         "join_address": "",  # e.g. "192.168.1.50:15000"
         "expected_humans": "2",  # number of human players for host mode
@@ -118,21 +118,21 @@ def set_player_name(name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Launch mode (solo / host / join)
+# Launch mode (solo / multiplayer)
 # ---------------------------------------------------------------------------
 
-VALID_LAUNCH_MODES = ("solo", "host", "join")
+VALID_LAUNCH_MODES = ("solo", "multiplayer")
 
 
 def get_launch_mode() -> str:
-    """Return the current launch mode: 'solo', 'host', or 'join'."""
+    """Return the current launch mode: 'solo' or 'multiplayer'."""
     parser = load_prefs()
     mode = parser.get("Game", "launch_mode", fallback="solo")
     return mode if mode in VALID_LAUNCH_MODES else "solo"
 
 
 def set_launch_mode(mode: str) -> None:
-    """Set the launch mode. Must be 'solo', 'host', or 'join'."""
+    """Set the launch mode. Must be 'solo' or 'multiplayer'."""
     if mode not in VALID_LAUNCH_MODES:
         mode = "solo"
     parser = load_prefs()
