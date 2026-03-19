@@ -10,34 +10,37 @@ from launcher.config import BIN_FILES, GAME_EXE, INIT_FILES
 class TestPathConstants:
     """Test that config paths resolve correctly."""
 
-    def test_default_scfa_path_is_steam(self):
-        """SCFA_STEAM defaults to the standard Steam path."""
-        with patch.dict(os.environ, {}, clear=False):
-            # Remove SCFA_STEAM if set, keep rest of env
-            env = os.environ.copy()
-            env.pop("SCFA_STEAM", None)
-            with patch.dict(os.environ, env, clear=True):
-                # Re-import to test fresh value
-                import importlib
+    def test_default_scfa_path_resolves(self):
+        """SCFA_STEAM resolves to a valid path (via discovery or default)."""
+        import importlib
 
-                import launcher.config
+        import launcher.config
 
-                importlib.reload(launcher.config)
-                expected = Path(
-                    r"C:\Program Files (x86)\Steam\steamapps\common"
-                    r"\Supreme Commander Forged Alliance"
-                )
-                assert expected == launcher.config.SCFA_STEAM
+        # Remove env override to test auto-discovery
+        env = os.environ.copy()
+        env.pop("SCFA_STEAM", None)
+        with patch.dict(os.environ, env, clear=True):
+            importlib.reload(launcher.config)
+            # Should resolve to either the real SCFA (if installed) or the default
+            assert launcher.config.SCFA_STEAM is not None
+            assert isinstance(launcher.config.SCFA_STEAM, Path)
+        importlib.reload(launcher.config)
 
-    def test_scfa_env_override(self):
+    def test_scfa_env_override(self, tmp_path):
         """SCFA_STEAM can be overridden by environment variable."""
         import importlib
 
         import launcher.config
 
-        with patch.dict(os.environ, {"SCFA_STEAM": r"D:\Games\SCFA"}):
+        # Create a fake SCFA that passes validation
+        fake_scfa = tmp_path / "FakeSCFA"
+        (fake_scfa / "bin").mkdir(parents=True)
+        (fake_scfa / "bin" / "SupremeCommander.exe").write_bytes(b"EXE")
+        (fake_scfa / "gamedata").mkdir()
+
+        with patch.dict(os.environ, {"SCFA_STEAM": str(fake_scfa)}):
             importlib.reload(launcher.config)
-            assert Path(r"D:\Games\SCFA") == launcher.config.SCFA_STEAM
+            assert fake_scfa == launcher.config.SCFA_STEAM
         # Reload again to restore
         importlib.reload(launcher.config)
 

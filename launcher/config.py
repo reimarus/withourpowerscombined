@@ -11,17 +11,29 @@ except PackageNotFoundError:
 
 # --- Game installation paths ---
 
-# Steam SCFA root (override with SCFA_STEAM environment variable)
-SCFA_STEAM = Path(
-    os.environ.get(
-        "SCFA_STEAM",
-        r"C:\Program Files (x86)\Steam\steamapps\common\Supreme Commander Forged Alliance",
-    )
+# WOPC deployed directory (defined early so scfa_finder can use prefs path)
+WOPC_ROOT = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "WOPC"
+
+# Steam SCFA root — auto-discovered via fallback chain:
+#   1. SCFA_STEAM env var  2. saved prefs  3. Steam VDF  4. registry  5. common paths
+_SCFA_DEFAULT = Path(
+    r"C:\Program Files (x86)\Steam\steamapps\common\Supreme Commander Forged Alliance"
 )
 
-# --- WOPC deployed directory ---
 
-WOPC_ROOT = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "WOPC"
+def _resolve_scfa_path() -> Path:
+    """Resolve the SCFA install path using auto-discovery."""
+    from launcher.scfa_finder import find_scfa_path
+
+    prefs_file = WOPC_ROOT / "wopc_prefs.ini"
+    result = find_scfa_path(prefs_file)
+    return result if result is not None else _SCFA_DEFAULT
+
+
+SCFA_STEAM = _resolve_scfa_path()
+
+# --- WOPC deployed subdirectories ---
+
 WOPC_BIN = WOPC_ROOT / "bin"
 WOPC_GAMEDATA = WOPC_ROOT / "gamedata"
 WOPC_MAPS = WOPC_ROOT / "maps"

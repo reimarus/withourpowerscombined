@@ -37,6 +37,7 @@ dev = [
 ]
 gui = [
     "customtkinter>=5.2",
+    "Pillow>=10.0",
 ]
 
 # --- Tool configurations ---
