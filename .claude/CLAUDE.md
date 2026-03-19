@@ -4,18 +4,25 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 
 ## Session Startup (MANDATORY)
 
-**Before doing ANY work in a new session, read these files:**
-1. `C:\Users\roskv\wopc\.claude\CLAUDE.md` — this file (code standards, architecture)
+**Step 1 — Read project context (do this FIRST, before any work):**
+1. `C:\Users\roskv\wopc\.claude\CLAUDE.md` — this file (code standards, rules, architecture)
 2. `C:\Users\roskv\wopc\.claude\SCFA_ENGINE_REFERENCE.md` — SCFA engine API reference (moho methods, callbacks, Lua dialect, VFS)
 3. `C:\Users\roskv\wopc\.claude\QUICKSTART_STATE.md` — session recovery breadcrumbs
-3. `C:\Users\roskv\wopc\docs\architecture.md` — system architecture and VFS design
-4. `C:\Users\roskv\wopc\docs\plan.md` — current implementation plan (what are we working on?)
-5. `C:\Users\roskv\wopc\docs\utils-list.md` — available developer utilities
-6. All other `C:\Users\roskv\wopc\docs\*.md` files — setup guide, vision, patching
-7. `C:\Users\roskv\.claude\projects\C--Users-roskv-loudmod\memory\MEMORY.md` — cross-session memory
-8. Any `.claude/plans/*.md` files — active implementation plans
+4. `C:\Users\roskv\wopc\docs\architecture.md` — system architecture and VFS design
+5. `C:\Users\roskv\wopc\docs\plan.md` — current implementation plan (what are we working on?)
+6. `C:\Users\roskv\wopc\docs\backlog.md` — prioritized feature/fix backlog
+7. `C:\Users\roskv\wopc\docs\utils-list.md` — available developer utilities
+8. All other `C:\Users\roskv\wopc\docs\*.md` files — setup guide, vision, patching
+9. `C:\Users\roskv\.claude\projects\C--Users-roskv-loudmod\memory\MEMORY.md` — cross-session memory
+10. Any `.claude/plans/*.md` files — active implementation plans
 
-**Before executing any implementation plan:**
+**Step 2 — Verify project state (catch stale info before it bites):**
+- Run `git branch` + `gh pr list --state open` — know what branch you're on and what's in flight
+- If `QUICKSTART_STATE.md` references a merged PR or deleted branch, **update it immediately**
+- If `docs/plan.md` shows completed items with no active next step, flag it to the user
+- If any doc references architecture that no longer exists (e.g., "FAF lobby"), fix it before proceeding (see Rule #2)
+
+**Step 3 — Before executing any implementation plan:**
 - Write or update the plan in `.claude/plans/`
 - **Commit the plan FIRST** before writing any code
 - Plans are committed artifacts, not throwaway notes
@@ -77,16 +84,28 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 
 ## Workflow
 
-1. Feature branch off `main`
-2. Write code + tests
-3. `pytest` — all pass, coverage ≥ 70%
-4. `ruff check launcher/ tests/` — clean
-5. `mypy launcher/` — clean
-6. `git commit` — pre-commit hooks auto-run (ruff, trailing whitespace, large file check)
-7. `python build_exe.py` — rebuild `dist/WOPC-Launcher.exe` and smoke-test launch
-8. `git push` + `gh pr create` — CI runs 4 jobs (lint, typecheck, test, lua-check)
-9. CodeRabbit reviews PR automatically
-10. Merge only when CI is green
+### Development cycle
+1. `git checkout main && git pull` — always start from fresh main
+2. `git checkout -b <type>/<short-name>` — feature branch off main (types: `feature/`, `fix/`, `docs/`, `refactor/`)
+3. Write code + tests
+4. `pytest` — all pass, coverage ≥ 70%
+5. `ruff check launcher/ tests/` — clean
+6. `mypy launcher/` — clean
+7. `git commit` — pre-commit hooks auto-run (ruff, trailing whitespace, large file check)
+8. `python build_exe.py` — rebuild `dist/WOPC-Launcher.exe` and smoke-test launch
+9. Update `docs/backlog.md` — mark completed items, add new ideas, identify next improvement (Rule #6)
+10. `git push -u origin <branch>` + `gh pr create`
+11. CI runs 4 jobs (lint, typecheck, test, lua-check). CodeRabbit reviews automatically.
+12. Merge only when CI is green
+
+### GitHub hygiene (keep the repo clean)
+- **Never commit directly to main.** All work goes through feature branches + PRs.
+- **One active feature branch at a time** unless explicitly working on parallel efforts.
+- **After merge, delete the branch** — both local (`git branch -d`) and remote (`git push origin --delete`).
+- **After merge, update main** — `git checkout main && git pull`.
+- **No stale PRs.** If a PR sits unmerged for more than a session, either merge it, close it, or note why it's blocked in the PR description.
+- **No orphan branches.** Run `git branch -a` at session start. If remote branches exist for merged PRs, delete them.
+- **Update `QUICKSTART_STATE.md` after merge** — clear references to the old branch/PR, update "Current State" to reflect what's on main now.
 
 ## Cross-AI Handoff
 
@@ -203,6 +222,7 @@ quickstart.lua
 5. **Solo and multiplayer UI must be visually consistent.** Shared concepts (map selector, player slots, game options, victory conditions) must use the same widgets, styling, and layout patterns in both solo and multiplayer screens. If you change a UI element in one screen, update the other to match. No visual drift between modes.
 6. **Always review and update `docs/backlog.md` at PR time.** Before every PR: (a) mark completed items, (b) add new ideas discovered during the work, (c) identify one improvement to work on next. The backlog is a living document — never let it go stale.
 7. **Continuously improve project docs to maximize efficiency.** Always consider what can be created, updated, or deleted in `CLAUDE.md`, `QUICKSTART_STATE.md`, `docs/backlog.md`, `docs/plan.md`, and `docs/architecture.md` to make navigating this project faster. If you learn something that would save time in future sessions, encode it immediately. The goal: any new session should become an expert on this project as quickly as possible by reading these files.
+8. **Keep GitHub clean at all times.** Never commit to main directly. All work on feature branches. After merge: delete branch (local + remote), pull main, update `QUICKSTART_STATE.md`. No stale PRs, no orphan branches. Run `git branch -a` and `gh pr list` at session start to catch drift.
 
 ## Key Technical Gotchas
 

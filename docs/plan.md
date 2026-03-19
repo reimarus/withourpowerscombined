@@ -36,7 +36,7 @@
 - [x] `launcher/prefs.py` — update launch_mode values
 - [x] `launcher/wopc.py` — explicit launch_mode param
 - [x] Verification and testing (196 fast tests pass)
-- **PR #17** — open, all code committed
+- **PR #17** ✅ merged to main
 
 ### Backlog (Phase 6 follow-up)
 

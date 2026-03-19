@@ -19,7 +19,7 @@ withourpowerscombined/
     map_scanner.py              Map directory scanner
     lobby.py                    TCP lobby server/client (multiplayer coordination)
     file_transfer.py            Chunked file streaming (map/mod transfer over TCP)
-    discovery.py                LAN game discovery (UDP beacons) [planned]
+    discovery.py                LAN game discovery (UDP beacons)
     log.py                      Logging configuration
     toolchain.py                Compiler discovery (Clang, GCC, LD)
     manifest.py                 Patch manifest parsing (wopc_patches.toml)
@@ -44,7 +44,7 @@ withourpowerscombined/
   bundled/gamedata/             LOUD content SCDs (not in git — from releases)
   wopc_patches.toml             Patch manifest (exclude list)
   patches/build/                Build output (gitignored)
-  tests/                        pytest suite (195+ tests, ~65% coverage)
+  tests/                        pytest suite (196+ tests, ~65% coverage)
   dist/                         Built executables (gitignored)
     WOPC-Launcher.exe           Single-file GUI launcher (~18 MB, see below)
   .claude/                      Session state + developer tooling
@@ -56,6 +56,7 @@ withourpowerscombined/
     architecture.md             This file
     setup-guide.md              Installation and development setup
     utils-list.md               Utility script catalog
+    backlog.md                  Prioritized feature/fix backlog (living doc)
     plan.md                     Current implementation plan (living doc)
     vision.md                   Long-term project vision
     patching.md                 Binary patching architecture
