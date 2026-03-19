@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from launcher import config, init_generator, mods, prefs
+from launcher import config, init_generator, prefs
 
 
 @pytest.fixture()
@@ -49,9 +49,6 @@ class TestDelegation:
             init_generator.set_pack_state("brewlan.scd", False)
         mock_save.assert_called_once_with(parser)
         assert parser.get("ContentPacks", "brewlan.scd") == "False"
-
-    def test_content_pack_labels_re_exported(self) -> None:
-        assert init_generator.CONTENT_PACK_LABELS is mods.CONTENT_PACK_LABELS
 
 
 class TestGenerateInitLua:

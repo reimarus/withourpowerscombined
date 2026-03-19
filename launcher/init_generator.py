@@ -20,10 +20,6 @@ from launcher import config, mods
 
 logger = logging.getLogger("wopc.init_generator")
 
-# Re-export for backwards compatibility (other modules may import from here).
-CONTENT_PACK_LABELS = mods.CONTENT_PACK_LABELS
-CORE_SCDS = mods.CORE_SCDS
-
 
 def get_toggleable_scds() -> list[str]:
     """Delegate to mods.get_toggleable_scds()."""
@@ -49,7 +45,7 @@ def generate_init_lua() -> Path:
 
     # Determine which SCDs to mount
     enabled_packs = get_enabled_packs()
-    core_on_disk = sorted(s for s in CORE_SCDS if (config.WOPC_GAMEDATA / s).exists())
+    core_on_disk = sorted(s for s in mods.CORE_SCDS if (config.WOPC_GAMEDATA / s).exists())
 
     # Build the gamedata mount lines
     gamedata_mounts = []
