@@ -59,6 +59,11 @@ class LobbyCallbacks:
     on_error: Callable[[str], None] | None = None
     on_chat_received: Callable[[str, str], None] | None = None
     on_kicked: Callable[[str], None] | None = None
+    on_file_request: Callable[[int, str, str], None] | None = None
+    on_file_manifest: Callable[[str, str, list[dict[str, Any]]], None] | None = None
+    on_file_chunk: Callable[[str, str, int, int, str], None] | None = None
+    on_file_complete: Callable[[str, str], None] | None = None
+    on_transfer_progress: Callable[[str, str, float], None] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +485,13 @@ class LobbyServer:
                 }
             )
 
+        elif msg_type == "FileRequest":
+            # Joiner is requesting files (map, mod, etc.)
+            if self._cb.on_file_request:
+                category = msg.get("category", "map")
+                name = msg.get("name", "")
+                self._cb.on_file_request(player.player_id, category, name)
+
         elif msg_type == "Goodbye":
             self._remove_player(player.player_id)
 
@@ -589,6 +601,15 @@ class LobbyClient:
         if self._sock:
             with contextlib.suppress(OSError):
                 _send_msg(self._sock, {"type": "ColorChange", "color": color})
+
+    def request_file(self, category: str, name: str) -> None:
+        """Request a file transfer from the host (e.g., a missing map)."""
+        if self._sock:
+            with contextlib.suppress(OSError):
+                _send_msg(
+                    self._sock,
+                    {"type": "FileRequest", "category": category, "name": name},
+                )
 
     @property
     def is_connected(self) -> bool:
@@ -725,6 +746,31 @@ class LobbyClient:
         elif msg_type == "Chat":
             if self._cb.on_chat_received:
                 self._cb.on_chat_received(msg.get("sender", "?"), msg.get("text", ""))
+
+        elif msg_type == "FileManifest":
+            if self._cb.on_file_manifest:
+                self._cb.on_file_manifest(
+                    msg.get("category", "map"),
+                    msg.get("name", ""),
+                    msg.get("files", []),
+                )
+
+        elif msg_type == "FileChunk":
+            if self._cb.on_file_chunk:
+                self._cb.on_file_chunk(
+                    msg.get("category", "map"),
+                    msg.get("path", ""),
+                    msg.get("index", 0),
+                    msg.get("total", 1),
+                    msg.get("data", ""),
+                )
+
+        elif msg_type == "FileComplete":
+            if self._cb.on_file_complete:
+                self._cb.on_file_complete(
+                    msg.get("category", "map"),
+                    msg.get("name", ""),
+                )
 
         elif msg_type == "Kicked":
             if self._cb.on_kicked:

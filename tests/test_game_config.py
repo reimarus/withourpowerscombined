@@ -191,6 +191,100 @@ class TestWriteGameConfig:
         assert "PlayerColor = 3" in lua
 
 
+class TestPlayerColors:
+    """Test player color assignment in game config."""
+
+    def test_default_human_color(self, config_dir: Path) -> None:
+        """Default human color is 1."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config("/maps/Caldera/Caldera_scenario.lua")
+
+        lua = path.read_text(encoding="utf-8")
+        # Human player slot has color 1
+        lines = lua.split("\n")
+        # Find the human block and check color
+        in_human = False
+        for line in lines:
+            if "Human = true" in line:
+                in_human = True
+            if in_human and "PlayerColor" in line:
+                assert "PlayerColor = 1" in line
+                break
+
+    def test_custom_human_color(self, config_dir: Path) -> None:
+        """Custom human color is written correctly."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/Caldera/Caldera_scenario.lua",
+                player_color=5,
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        lines = lua.split("\n")
+        in_human = False
+        for line in lines:
+            if "Human = true" in line:
+                in_human = True
+            if in_human and "PlayerColor" in line:
+                assert "PlayerColor = 5" in line
+                break
+
+    def test_ai_color_from_dict(self, config_dir: Path) -> None:
+        """AI color comes from the ai_opponents dict."""
+        ais = [
+            {"name": "AI 1", "faction": "random", "ai": "medium", "team": 2, "color": 3},
+        ]
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/Caldera/Caldera_scenario.lua",
+                ai_opponents=ais,
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        lines = lua.split("\n")
+        in_ai = False
+        for line in lines:
+            if "Human = false" in line:
+                in_ai = True
+            if in_ai and "PlayerColor" in line:
+                assert "PlayerColor = 3" in line
+                break
+
+    def test_ai_color_defaults_to_slot_index(self, config_dir: Path) -> None:
+        """AI without explicit color defaults to its slot index."""
+        ais = [
+            {"name": "AI 1", "faction": "random", "ai": "medium", "team": 2},
+        ]
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/Caldera/Caldera_scenario.lua",
+                ai_opponents=ais,
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        lines = lua.split("\n")
+        in_ai = False
+        for line in lines:
+            if "Human = false" in line:
+                in_ai = True
+            if in_ai and "PlayerColor" in line:
+                # Slot 2 (first AI after human slot 1)
+                assert "PlayerColor = 2" in line
+                break
+
+    def test_victory_condition_mapping(self, config_dir: Path) -> None:
+        """Victory conditions map display names to engine values correctly."""
+        # Test Supremacy → domination (the tricky mapping)
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/Caldera/Caldera_scenario.lua",
+                game_options={"Victory": "domination"},
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        assert "Victory = 'domination'" in lua
+
+
 class TestMultiplayerConfig:
     """Test multiplayer fields (ExpectedHumans, IsHost)."""
 

@@ -20,7 +20,7 @@ else:
         ctk = None  # type: ignore[assignment]
         BaseApp = object  # type: ignore[misc, no-redef]
 
-from launcher import config, prefs
+from launcher import config, file_transfer, prefs
 from launcher.gui.worker import SetupWorker
 from launcher.wopc import cmd_launch
 
@@ -87,6 +87,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._lobby_server: LobbyServer | None = None
         self._lobby_client: LobbyClient | None = None
         self._remote_players: dict[int, dict[str, Any]] = {}
+        self._pending_download: dict[str, Any] = {}
 
         self.title("WOPC - Match Lobby")
         self.geometry("1024x768")
@@ -544,6 +545,27 @@ class WopcApp(BaseApp):  # type: ignore
         # Default: one AI opponent
         self._add_ai_slot()
 
+    def _get_color_names(self) -> list[str]:
+        """Return list of color display names."""
+        return [name for _, name in PLAYER_COLORS]
+
+    def _next_free_color(self) -> str:
+        """Return the next color name not already taken by another slot."""
+        used: set[str] = set()
+        for slot in self.player_slots:
+            cvar = slot.get("color_var")
+            if cvar:
+                used.add(cvar.get())
+        for _, name in PLAYER_COLORS:
+            if name not in used:
+                return name
+        # All taken — just return first
+        return PLAYER_COLORS[0][1]
+
+    def _on_color_change(self, _val: str) -> None:
+        """Broadcast state when a color changes."""
+        self._broadcast_game_state()
+
     def _add_human_slot(self) -> None:
         """Add the human player row (always slot 1, cannot be removed)."""
         row = len(self.player_slots)
@@ -590,12 +612,27 @@ class WopcApp(BaseApp):  # type: ignore
         team_menu.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(team_menu)
 
+        # Color selector
+        color_var = ctk.StringVar(value=self._next_free_color())
+        color_menu = ctk.CTkOptionMenu(
+            self.slots_scroll,
+            values=self._get_color_names(),
+            variable=color_var,
+            command=self._on_color_change,
+            width=70,
+            height=24,
+        )
+        color_menu.grid(row=row, column=4, padx=5, pady=2)
+        widgets.append(color_menu)
+
         # No remove button for human
         spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
-        spacer.grid(row=row, column=4, pady=2)
+        spacer.grid(row=row, column=5, pady=2)
         widgets.append(spacer)
 
-        self.player_slots.append({"type": "human", "team_var": team_var, "widgets": widgets})
+        self.player_slots.append(
+            {"type": "human", "team_var": team_var, "color_var": color_var, "widgets": widgets}
+        )
 
     def _add_ai_slot(self) -> None:
         """Add an AI opponent slot row."""
@@ -652,6 +689,19 @@ class WopcApp(BaseApp):  # type: ignore
         team_menu.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(team_menu)
 
+        # Color selector
+        color_var = ctk.StringVar(value=self._next_free_color())
+        color_menu = ctk.CTkOptionMenu(
+            self.slots_scroll,
+            values=self._get_color_names(),
+            variable=color_var,
+            command=self._on_color_change,
+            width=70,
+            height=24,
+        )
+        color_menu.grid(row=row, column=4, padx=5, pady=2)
+        widgets.append(color_menu)
+
         # Remove button
         slot_index = row  # capture for closure
 
@@ -668,7 +718,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             command=remove_this,
         )
-        remove_btn.grid(row=row, column=4, pady=2)
+        remove_btn.grid(row=row, column=5, pady=2)
         widgets.append(remove_btn)
 
         self.player_slots.append(
@@ -677,6 +727,7 @@ class WopcApp(BaseApp):  # type: ignore
                 "ai_var": ai_var,
                 "faction_var": faction_var,
                 "team_var": team_var,
+                "color_var": color_var,
                 "widgets": widgets,
             }
         )
@@ -700,6 +751,20 @@ class WopcApp(BaseApp):  # type: ignore
             s["widgets"][0].configure(text=str(i + 1))
         self._broadcast_game_state()
 
+    @staticmethod
+    def _color_name_to_index(name: str) -> int:
+        """Convert a color display name to the 1-based SCFA engine color index."""
+        for i, (_, cname) in enumerate(PLAYER_COLORS):
+            if cname == name:
+                return i + 1
+        return 1
+
+    def get_human_color_index(self) -> int:
+        """Return the human player's selected color index (1-based)."""
+        if self.player_slots and self.player_slots[0].get("color_var"):
+            return self._color_name_to_index(self.player_slots[0]["color_var"].get())
+        return 1
+
     def get_ai_opponents(self) -> list[dict[str, Any]]:
         """Collect AI opponent config from the slot UI for game_config.py."""
         opponents: list[dict[str, Any]] = []
@@ -710,12 +775,14 @@ class WopcApp(BaseApp):  # type: ignore
             ai_key = ai_display.lower()
             faction = slot["faction_var"].get().lower()
             team = int(slot["team_var"].get())
+            color = self._color_name_to_index(slot["color_var"].get())
             opponents.append(
                 {
                     "name": f"AI {len(opponents) + 1}: {ai_display}",
                     "faction": faction,
                     "ai": ai_key,
                     "team": team,
+                    "color": color,
                 }
             )
         return opponents
@@ -787,7 +854,14 @@ class WopcApp(BaseApp):  # type: ignore
                 val = {"Explored": "explored", "Unexplored": "unexplored", "None": "none"}.get(
                     val, val.lower()
                 )
-            elif key in ("Victory", "GameSpeed"):
+            elif key == "Victory":
+                val = {
+                    "Demoralization": "demoralization",
+                    "Supremacy": "domination",
+                    "Assassination": "eradication",
+                    "Sandbox": "sandbox",
+                }.get(val, val.lower())
+            elif key == "GameSpeed":
                 val = val.lower()
             opts[key] = val
         return opts
@@ -976,8 +1050,21 @@ class WopcApp(BaseApp):  # type: ignore
             ),
             on_kicked=lambda reason: self.after(0, self._on_kicked, reason),
         )
-        if not is_host:
+        if is_host:
+            cbs.on_file_request = lambda pid, cat, name: self.after(
+                0, self._on_file_request, pid, cat, name
+            )
+        else:
             cbs.on_state_updated = lambda state: self.after(0, self._on_game_state_received, state)
+            cbs.on_file_manifest = lambda cat, name, files: self.after(
+                0, self._on_file_manifest, cat, name, files
+            )
+            cbs.on_file_chunk = lambda cat, path, idx, total, data: self.after(
+                0, self._on_file_chunk, cat, path, idx, total, data
+            )
+            cbs.on_file_complete = lambda cat, name: self.after(
+                0, self._on_file_complete, cat, name
+            )
         return cbs
 
     def _on_player_joined(self, player_id: int, name: str, faction: str, slot: int) -> None:
@@ -1032,7 +1119,10 @@ class WopcApp(BaseApp):  # type: ignore
             time.sleep(2)
             ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
             game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
-            ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options)
+            color = self.get_human_color_index()
+            ret = cmd_launch(
+                ai_opponents=ai_opponents, game_options=game_options, player_color=color
+            )
             if ret == 0:
                 self.log("Game process started successfully.")
             else:
@@ -1063,6 +1153,114 @@ class WopcApp(BaseApp):  # type: ignore
         mode = self.mode_var.get()
         if mode == "JOIN":
             self.primary_btn.configure(text="JOIN GAME", fg_color=COLOR_READY, state="normal")
+
+    # ------------------------------------------------------------------
+    # File transfer callbacks
+    # ------------------------------------------------------------------
+
+    def _on_file_request(self, player_id: int, category: str, name: str) -> None:
+        """Host callback: joiner is requesting files."""
+        if category == "map":
+            self.log(f"Player requested map: {name} — sending...")
+            threading.Thread(
+                target=self._stream_map_to_player,
+                args=(player_id, name),
+                daemon=True,
+            ).start()
+
+    def _stream_map_to_player(self, player_id: int, map_folder: str) -> None:
+        """Background thread: stream a map's files to a specific joiner."""
+        if not self._lobby_server:
+            return
+        map_dir = file_transfer.find_map_directory(map_folder)
+        if not map_dir:
+            self.after(0, self.log, f"Cannot find map '{map_folder}' to send!")
+            return
+
+        manifest = file_transfer.build_file_manifest(map_dir)
+        total_size = file_transfer.total_transfer_size(manifest)
+        self.after(
+            0,
+            self.log,
+            f"Sending map '{map_folder}' "
+            f"({file_transfer.format_size(total_size)}, {len(manifest)} files)",
+        )
+
+        # Send manifest
+        self._lobby_server.send_to_player(
+            player_id,
+            {
+                "type": "FileManifest",
+                "category": "map",
+                "name": map_folder,
+                "files": manifest,
+            },
+        )
+
+        # Stream each file in chunks
+        for f_info in manifest:
+            chunks = file_transfer.iter_file_chunks(map_dir, f_info["path"])
+            for chunk in chunks:
+                self._lobby_server.send_to_player(
+                    player_id,
+                    {
+                        "type": "FileChunk",
+                        "category": "map",
+                        **chunk,
+                    },
+                )
+
+        # Send completion
+        self._lobby_server.send_to_player(
+            player_id,
+            {"type": "FileComplete", "category": "map", "name": map_folder},
+        )
+        self.after(0, self.log, f"Map '{map_folder}' sent to player")
+
+    def _on_file_manifest(self, category: str, name: str, files: list[dict[str, Any]]) -> None:
+        """Joiner callback: received file manifest from host."""
+        total = file_transfer.total_transfer_size(files)
+        self.log(f"Downloading {category} '{name}' ({file_transfer.format_size(total)})...")
+        # Store manifest for verification
+        self._pending_download = {
+            "category": category,
+            "name": name,
+            "files": {f["path"]: f for f in files},
+            "received_files": set(),
+        }
+
+    def _on_file_chunk(self, category: str, path: str, index: int, total: int, data: str) -> None:
+        """Joiner callback: received a file chunk — write to disk."""
+        if category == "map":
+            dest_dir = file_transfer.get_map_install_dir() / self._pending_download.get("name", "")
+            file_transfer.write_chunk_to_disk(dest_dir, path, index, total, data)
+            # Log progress for last chunk of each file
+            if index == total - 1:
+                dl = self._pending_download
+                if dl:
+                    dl["received_files"].add(path)
+                    done = len(dl["received_files"])
+                    expected = len(dl.get("files", {}))
+                    self.log(f"  [{done}/{expected}] {path}")
+
+    def _on_file_complete(self, category: str, name: str) -> None:
+        """Joiner callback: file transfer complete — verify and refresh."""
+        if category == "map":
+            dest_dir = file_transfer.get_map_install_dir() / name
+            dl = self._pending_download
+            ok = True
+            if dl and dl.get("files"):
+                for rel_path, info in dl["files"].items():
+                    if not file_transfer.verify_file(dest_dir, rel_path, info["sha256"]):
+                        self.log(f"WARNING: Hash mismatch for {rel_path}!")
+                        ok = False
+            if ok:
+                self.log(f"Map '{name}' downloaded and verified!")
+                # Refresh map list
+                self._all_maps = map_scanner.scan_all_maps()
+            else:
+                self.log(f"WARNING: Map '{name}' download had errors!")
+            self._pending_download = {}
 
     def _send_chat(self) -> None:
         """Send a chat message from the chat input."""
@@ -1117,11 +1315,13 @@ class WopcApp(BaseApp):  # type: ignore
             map_folder = state.get("map_folder", "")
             if hasattr(self, "header_label"):
                 self.header_label.configure(text=f"Map: {map_name}")
-            # Check if joiner has this map
+            # Check if joiner has this map — auto-download if missing
             if map_folder:
                 has_map = any(m.folder_name == map_folder for m in getattr(self, "_all_maps", []))
                 if not has_map:
-                    self.log(f"WARNING: You don't have map '{map_name}' — game may fail!")
+                    self.log(f"Map '{map_name}' not found locally — requesting from host...")
+                    if self._lobby_client:
+                        self._lobby_client.request_file("map", map_folder)
 
         # Update game options display
         if "game_options" in state:
@@ -1132,6 +1332,20 @@ class WopcApp(BaseApp):  # type: ignore
         # Update AI slots display for joiner
         if "ai_slots" in state:
             self._apply_remote_ai_slots(state["ai_slots"])
+
+        # Check content packs — warn about missing ones
+        if "content_packs" in state:
+            host_packs = state["content_packs"]
+            local_packs = mods.get_enabled_packs()
+            missing = [p for p in host_packs if p not in local_packs]
+            extra = [p for p in local_packs if p not in host_packs]
+            if missing:
+                names = [mods.CONTENT_PACK_LABELS.get(p, p) for p in missing]
+                self.log(f"WARNING: Host has content packs you don't: {', '.join(names)}")
+                self.log("Enable them in the Mods panel to avoid desyncs!")
+            if extra:
+                names = [mods.CONTENT_PACK_LABELS.get(p, p) for p in extra]
+                self.log(f"NOTE: You have extra packs not on host: {', '.join(names)}")
 
         # Update player list
         if "players" in state:
@@ -1164,6 +1378,7 @@ class WopcApp(BaseApp):  # type: ignore
             "game_options": self.get_game_options(),
             "ai_slots": self.get_ai_opponents(),
             "players": self._lobby_server.connected_players if self._lobby_server else [],
+            "content_packs": mods.get_enabled_packs(),
         }
 
     def _validate_before_launch(self) -> list[str]:
@@ -1179,6 +1394,15 @@ class WopcApp(BaseApp):  # type: ignore
         ]
         if not_ready:
             errors.append(f"{', '.join(not_ready)} not ready")
+        # Check for duplicate colors
+        used_colors: list[str] = []
+        for slot in self.player_slots:
+            cvar = slot.get("color_var")
+            if cvar:
+                used_colors.append(cvar.get())
+        dupes = {c for c in used_colors if used_colors.count(c) > 1}
+        if dupes:
+            errors.append(f"Duplicate player colors: {', '.join(sorted(dupes))}")
         # Check WOPC deployment is intact
         if not (config.WOPC_BIN / config.GAME_EXE).exists():
             errors.append("WOPC not deployed — run Install first")
@@ -1250,8 +1474,25 @@ class WopcApp(BaseApp):  # type: ignore
             team_lbl.grid(row=row, column=3, padx=5, pady=2)
             widgets.append(team_lbl)
 
+            # Color indicator
+            color_idx = ai.get("color", 0)
+            color_hex = (
+                PLAYER_COLORS[color_idx - 1][0]
+                if 1 <= color_idx <= len(PLAYER_COLORS)
+                else COLOR_TEXT_MUTED
+            )
+            color_lbl = ctk.CTkLabel(
+                self.slots_scroll,
+                text="●",
+                text_color=color_hex,
+                font=ctk.CTkFont(size=14),
+                width=70,
+            )
+            color_lbl.grid(row=row, column=4, padx=5, pady=2)
+            widgets.append(color_lbl)
+
             spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
-            spacer.grid(row=row, column=4, pady=2)
+            spacer.grid(row=row, column=5, pady=2)
             widgets.append(spacer)
 
             self.player_slots.append({"type": "ai_remote", "widgets": widgets})
@@ -1304,6 +1545,17 @@ class WopcApp(BaseApp):  # type: ignore
         ready_lbl.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(ready_lbl)
 
+        # Color indicator (read-only for remote players)
+        color_lbl = ctk.CTkLabel(
+            self.slots_scroll,
+            text="●",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=14),
+            width=70,
+        )
+        color_lbl.grid(row=row, column=4, padx=5, pady=2)
+        widgets.append(color_lbl)
+
         # Kick button (host only) or spacer
         mode = self.mode_var.get()
         if mode == "HOST":
@@ -1322,11 +1574,11 @@ class WopcApp(BaseApp):  # type: ignore
                 text_color=COLOR_TEXT_MUTED,
                 command=kick_this,
             )
-            kick_btn.grid(row=row, column=4, pady=2)
+            kick_btn.grid(row=row, column=5, pady=2)
             widgets.append(kick_btn)
         else:
             spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
-            spacer.grid(row=row, column=4, pady=2)
+            spacer.grid(row=row, column=5, pady=2)
             widgets.append(spacer)
 
         self._remote_players[player_id] = {
@@ -1622,8 +1874,9 @@ class WopcApp(BaseApp):  # type: ignore
         self._persist_widget_values()
         ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
         game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
+        color = self.get_human_color_index()
 
-        ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options)
+        ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options, player_color=color)
         if ret == 0:
             self.log("Game process started successfully.")
         else:
@@ -1634,8 +1887,9 @@ class WopcApp(BaseApp):  # type: ignore
         self._persist_widget_values()
         ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
         game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
+        color = self.get_human_color_index()
 
-        ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options)
+        ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options, player_color=color)
         if ret == 0:
             self.log("Game process started successfully.")
         else:

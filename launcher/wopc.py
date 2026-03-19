@@ -142,6 +142,7 @@ def _resolve_map_vfs_path(active_map: str) -> str | None:
 def cmd_launch(
     ai_opponents: list[dict[str, Any]] | None = None,
     game_options: dict[str, str] | None = None,
+    player_color: int = 1,
 ) -> int:
     """Launch the game from the WOPC directory.
 
@@ -201,6 +202,7 @@ def cmd_launch(
             scenario_file="",  # host provides the map
             player_name=player_name,
             player_faction=player_faction,
+            player_color=player_color,
             ai_opponents=[],
             active_mod_uids=all_mod_uids,
             expected_humans=expected_humans,
@@ -240,6 +242,7 @@ def cmd_launch(
             scenario_file=vfs_path,
             player_name=player_name,
             player_faction=player_faction,
+            player_color=player_color,
             ai_opponents=ai_opponents,
             game_options=merged_options,
             active_mod_uids=all_mod_uids,
@@ -276,6 +279,7 @@ def cmd_launch(
                 scenario_file=vfs_path,
                 player_name=player_name,
                 player_faction=player_faction,
+                player_color=player_color,
                 ai_opponents=ai_opponents,
                 game_options=merged_options_solo,
                 active_mod_uids=all_mod_uids,
