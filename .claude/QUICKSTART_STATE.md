@@ -1,5 +1,5 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-18
+> Last updated: 2026-03-19
 > If session runs out of tokens, a new session can pick up from here.
 
 ## Current State: Phase 6 — Modern Multiplayer UX (in progress)
@@ -53,13 +53,14 @@ The exe bundles Python + assets at build time. Stale exe = old code!
 - Pre-launch validation (all ready, no duplicate colors, map exists)
 - LAN game discovery via UDP beacons (port 15001)
 
-### What's broken / stubbed (Phase 6 follow-up):
+### What's broken / stubbed (Phase 6 follow-up — see `docs/backlog.md` for full list):
 - "Add AI" button in multiplayer lobby — not wired
 - "Change Map" button in multiplayer lobby — not wired
 - Remove players from solo screen — no remove button
 - Victory type tooltips — no descriptions
 - UI is basic — needs polish pass
+- Solo ↔ multiplayer UI inconsistency
 
 ### Test results: 196 tests pass (fast), ~60% coverage floor (lobby.py tests marked slow)
 
-### Branch: `feature/modern-multiplayer-ux` — PR #17 open
+### Branch: `main` — Phase 6 core merged (PR #17 ✅). No active feature branch.
