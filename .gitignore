@@ -52,6 +52,9 @@ htmlcov/
 tools/*.exe
 patches/build/
 
+# Windows path artifacts (game deployment data, not project files)
+C:\\ProgramData/
+
 # Helper scripts (local only)
 tools/fix_python_path.ps1
 
