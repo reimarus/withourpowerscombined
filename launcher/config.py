@@ -149,6 +149,29 @@ CONTENT_PACK_ASSETS: dict[str, dict] = {
     },
 }
 
+# --- Content version and core assets for standalone installer ---
+# When running from the frozen exe without the full repo or LOUD,
+# deploy.py downloads these from GitHub Releases.
+CONTENT_VERSION = "v2"
+
+_RELEASE_BASE = "https://github.com/reimarus/withourpowerscombined/releases/download"
+
+CORE_CONTENT_ASSETS: dict[str, dict[str, str | bool]] = {
+    "faf_ui.scd": {
+        "url": f"{_RELEASE_BASE}/content-v2/faf_ui.scd",
+        "dst": "gamedata",
+    },
+    "wopc-maps.zip": {
+        "url": f"{_RELEASE_BASE}/content-v2/wopc-maps.zip",
+        "dst": "maps",
+        "extract": True,
+    },
+    "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd": {
+        "url": f"{_RELEASE_BASE}/content-v2/BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd",
+        "dst": "bin",
+    },
+}
+
 # --- Game exe name and launch arguments ---
 
 GAME_EXE = "SupremeCommander.exe"

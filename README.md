@@ -15,50 +15,27 @@ Neither project benefits from the other today. WOPC combines them into a single 
 
 ### What you need
 
-1. **Supreme Commander: Forged Alliance** on Steam
-2. **LOUD** installed ([LOUD install guide](https://github.com/LOUD-Project/Git-LOUD))
-3. **Python 3.10+** ([python.org/downloads](https://www.python.org/downloads/))
+1. **Supreme Commander: Forged Alliance** on Steam (must be installed)
+2. **Windows 10/11**
+
+That's it — no Python, no LOUD, no FAF needed.
 
 ### First-time setup
 
-1. **Clone this repo** (or download as ZIP and extract):
-   ```
-   git clone https://github.com/reimarus/withourpowerscombined.git
-   cd withourpowerscombined
-   ```
-
-2. **Run the launcher**:
-   ```
-   python build_exe.py
-   dist\WOPC-Launcher.exe
-   ```
-   Or run directly without building the `.exe`:
-   ```
-   pip install -r requirements.txt
-   python -m launcher.gui
-   ```
-
-3. **Click Install** in the launcher. It will detect your Steam and LOUD installations, copy game files to `C:\ProgramData\WOPC\`, and download content packs. This takes a few minutes the first time.
-
-4. **Click Play** to launch a solo game, or switch to **Multiplayer** to host/join LAN games.
+1. **Download** `WOPC-Launcher.exe` from the [latest release](https://github.com/reimarus/withourpowerscombined/releases/latest)
+2. **Run it** — Windows may show a SmartScreen warning; click "More info" → "Run anyway"
+3. **Click Install** — the launcher downloads all game content (~500 MB) automatically. This takes a few minutes the first time.
+4. **Click Play** to launch a solo game, or switch to **Multiplayer** to host/join LAN games
 
 ### Staying up to date
 
-When we push updates, pull the latest code and rebuild the launcher:
+The launcher checks for updates on startup. If you see **"UPDATE AVAILABLE"** on the Install button, click it to download the latest patches and content.
 
-```
-cd withourpowerscombined
-git pull
-python build_exe.py
-```
-
-Then open `dist\WOPC-Launcher.exe` and click **Install** again if prompted. The launcher will detect what changed and only update what's needed.
-
-> **Tip:** If you see "UPDATE AVAILABLE" on the Install button, click it before playing to make sure you have the latest patches and content.
+For major launcher updates, download the newest `WOPC-Launcher.exe` from [Releases](https://github.com/reimarus/withourpowerscombined/releases/latest).
 
 ### Playing multiplayer
 
-1. Make sure all players are on the **same version** (everyone runs `git pull` + rebuild)
+1. Make sure all players have the **same version** (everyone clicks Install if prompted)
 2. One player clicks **Multiplayer → Create Game** (they become the host)
 3. Other players on the same LAN click **Multiplayer** and the game appears automatically in the browser
 4. Not on the same LAN? Expand **Direct Connect** and enter the host's IP address
@@ -66,11 +43,33 @@ Then open `dist\WOPC-Launcher.exe` and click **Install** again if prompted. The 
 
 ---
 
-## Developer Quick Start
+## Developer Setup
+
+If you want to contribute or build from source:
+
+### Requirements
+
+- Python 3.10+
+- Supreme Commander: Forged Alliance on Steam
+- LOUD installed (optional — content is downloaded from GitHub if missing)
+
+### Building the launcher
 
 ```
-# Requirements: Python 3.10+, Steam copy of Supreme Commander: Forged Alliance, LOUD installed
+git clone https://github.com/reimarus/withourpowerscombined.git
+cd withourpowerscombined
+pip install -r requirements.txt
+python build_exe.py            # Produces dist\WOPC-Launcher.exe
+```
 
+Or run directly without building:
+```
+python -m launcher.gui
+```
+
+### CLI tools
+
+```
 cd launcher
 python wopc.py status     # Detect game installation, print paths
 python wopc.py setup      # Create C:\ProgramData\WOPC\, copy game files
@@ -81,12 +80,12 @@ python wopc.py launch     # Start the game with LOUD gameplay
 
 WOPC creates an isolated game directory at `C:\ProgramData\WOPC\` containing:
 - A copy of the game executable and engine DLLs (from your Steam installation)
-- LOUD's gameplay content (symlinked/copied from your LOUD installation)
+- LOUD gameplay content (downloaded from GitHub Releases, or copied from local LOUD if available)
 - A custom init file (`init_wopc.lua`) that loads content in the correct order
 - A WOPC overlay layer for our own patches
-- Your user mods (like BetterPathing)
+- Content pack mods (BlackOps, TotalMayhem, etc.)
 
-**Your Steam SCFA installation and LOUD installation are never modified.**
+**Your Steam SCFA installation is never modified.**
 
 ## Project Roadmap
 
@@ -108,16 +107,18 @@ See [docs/architecture.md](docs/architecture.md) for the full technical plan.
 ```
 C:\ProgramData\WOPC\                    (isolated game directory)
   bin\
-    SupremeCommander.exe                (copied from Steam, later FAF-patched)
+    SupremeCommander.exe                (copied from Steam)
     init_wopc.lua                       (custom init file)
     CommonDataPath.lua                  (VFS helper functions)
     MohoEngine.dll + other DLLs        (copied from Steam)
   gamedata\
-    lua.scd, units.scd, ...            (symlinked from LOUD)
+    faf_ui.scd                         (downloaded from GitHub or built locally)
+    blackops.scd, TotalMayhem.scd      (downloaded from GitHub or copied from LOUD)
+    content_icons.scd                  (unit icons for content packs)
     wopc_patches.scd                   (WOPC overlay - our enhancements)
-  maps\                                (symlinked from LOUD)
-  sounds\                              (symlinked from LOUD)
-  usermods\                            (copied from LOUD)
+  maps\                                (downloaded or copied from LOUD/Steam)
+  sounds\                              (downloaded or copied from LOUD)
+  usermods\                            (extracted from content pack SCDs)
 ```
 
 ## Content Mount Order

@@ -4,6 +4,7 @@ import logging
 import shutil
 import urllib.request
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 from launcher import config, mods
@@ -63,19 +64,97 @@ def copy_file(src: Path, dst: Path) -> None:
     logger.info("  copied  %s", dst.name)
 
 
-def _download_file(url: str, dst: Path) -> None:
-    """Download a file from *url* to *dst* with progress logging."""
+def _download_file(
+    url: str, dst: Path, *, progress_cb: Callable[[int, int], None] | None = None
+) -> bool:
+    """Download a file from *url* to *dst* with optional progress callback.
+
+    Returns True on success, False on failure.
+    """
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(dst.suffix + ".tmp")
     try:
         logger.info("  downloading %s ...", dst.name)
-        urllib.request.urlretrieve(url, tmp)
+        req = urllib.request.urlopen(url)
+        total = int(req.headers.get("Content-Length", 0))
+        downloaded = 0
+        chunk_size = 256 * 1024  # 256 KB chunks
+        last_pct = -1
+
+        with tmp.open("wb") as f:
+            while True:
+                chunk = req.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total > 0:
+                    pct = int(downloaded * 100 / total)
+                    if pct >= last_pct + 5:  # Report every 5%
+                        last_pct = pct
+                        mb_done = downloaded / 1e6
+                        mb_total = total / 1e6
+                        logger.info("  %s: %d%% (%.1f / %.1f MB)", dst.name, pct, mb_done, mb_total)
+                        if progress_cb:
+                            progress_cb(downloaded, total)
+
         tmp.replace(dst)
-        logger.info("  saved %s (%.1f MB)", dst.name, dst.stat().st_size / 1e6)
+        size_mb = dst.stat().st_size / 1e6
+        logger.info("  saved %s (%.1f MB)", dst.name, size_mb)
+        return True
     except (OSError, urllib.error.URLError) as exc:
         logger.warning("  WARNING: download failed for %s: %s", dst.name, exc)
         if tmp.exists():
             tmp.unlink()
+        return False
+
+
+def _download_and_extract(url: str, dst_dir: Path) -> bool:
+    """Download a zip file and extract it to dst_dir. Returns True on success."""
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    tmp_zip = dst_dir / "_download.zip"
+    if not _download_file(url, tmp_zip):
+        return False
+    try:
+        logger.info("  extracting to %s ...", dst_dir)
+        with zipfile.ZipFile(tmp_zip, "r") as zf:
+            zf.extractall(dst_dir)
+        logger.info("  extracted %d files", len(zipfile.ZipFile(tmp_zip).namelist()))
+        return True
+    except (zipfile.BadZipFile, OSError) as exc:
+        logger.warning("  WARNING: extraction failed: %s", exc)
+        return False
+    finally:
+        if tmp_zip.exists():
+            tmp_zip.unlink()
+
+
+def _acquire_core_content() -> None:
+    """Download core content assets from GitHub Releases when running standalone.
+
+    This is the download-first path for frozen exe / no-repo installs.
+    Iterates CORE_CONTENT_ASSETS and downloads anything missing.
+    """
+    for name, info in config.CORE_CONTENT_ASSETS.items():
+        dst_subdir = info["dst"]
+        dst_dir = config.WOPC_ROOT / dst_subdir
+        dst_dir.mkdir(parents=True, exist_ok=True)
+
+        if info.get("extract"):
+            # For zip archives, check if extraction target has content
+            # (we can't easily check if the specific zip was already extracted,
+            # so we check if the dst_dir has any subdirectories)
+            if any(dst_dir.iterdir()):
+                logger.info("  %s already populated, skipping %s", dst_subdir, name)
+                continue
+            logger.info("  downloading and extracting %s", name)
+            _download_and_extract(info["url"], dst_dir)
+        else:
+            dst_file = dst_dir / name
+            if dst_file.exists():
+                logger.info("  %s already exists, skipping", name)
+                continue
+            _download_file(info["url"], dst_file)
 
 
 def _extract_mods_from_scd(scd_path: Path) -> list[str]:
@@ -256,6 +335,20 @@ def run_setup(repo_init_dir: Path) -> None:
             if f.is_file():
                 copy_file(f, config.WOPC_BIN / f.name)
 
+    # Download strategic icons if not bundled and not already present
+    icons_name = "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd"
+    icons_dst = config.WOPC_BIN / icons_name
+    if not icons_dst.exists():
+        # Try LOUD first
+        loud_icons = config.LOUD_ROOT / "bin" / icons_name
+        if loud_icons.exists():
+            shutil.copy2(loud_icons, icons_dst)
+            logger.info("  copied %s from LOUD", icons_name)
+        else:
+            icons_info = config.CORE_CONTENT_ASSETS.get(icons_name)
+            if icons_info:
+                _download_file(icons_info["url"], icons_dst)
+
     # --- Step 3: Copy init files from repo ---
     logger.info("\n[3/6] Copying init files from repo")
     for fname in ["init_wopc.lua", "CommonDataPath.lua"]:
@@ -360,7 +453,10 @@ def run_setup(repo_init_dir: Path) -> None:
             else:
                 logger.warning("  WARNING: WOPC patches not found at %s", wopc_patches_src)
     else:
-        logger.warning("  WARNING: %s not found. Did you initialize submodules?", faf_ui_src)
+        # Standalone mode: download pre-built faf_ui.scd from GitHub release
+        logger.info("  FAF source not available — downloading pre-built %s", config.FAF_UI_SCD)
+        if not faf_ui_dst.exists():
+            _download_file(config.CORE_CONTENT_ASSETS["faf_ui.scd"]["url"], faf_ui_dst)
 
     # Patch SCDs with WOPC engine-level overrides.
     # The SCFA engine's C++ code loads files like uimain.lua using
@@ -405,8 +501,15 @@ def run_setup(repo_init_dir: Path) -> None:
     _build_content_icons_scd()
 
     # Maps, sounds: copy entire directories
+    config.WOPC_MAPS.mkdir(parents=True, exist_ok=True)
     if config.REPO_BUNDLED_MAPS.exists():
         shutil.copytree(config.REPO_BUNDLED_MAPS, config.WOPC_MAPS, dirs_exist_ok=True)
+    elif not any(config.WOPC_MAPS.iterdir()):
+        # No bundled maps and maps dir is empty — download from release
+        maps_info = config.CORE_CONTENT_ASSETS.get("wopc-maps.zip")
+        if maps_info:
+            logger.info("  downloading curated map pack")
+            _download_and_extract(maps_info["url"], config.WOPC_MAPS)
 
     # Copy SCFA stock maps (from Steam installation)
     scfa_maps = config.SCFA_STEAM / "maps"
