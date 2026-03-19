@@ -109,7 +109,7 @@ C:\Users\roskv\wopc\          (repo)
     manifest.py                Patch manifest parsing (wopc_patches.toml)
     patcher.py                 Build orchestration for patched exe
     gui/                       GUI launcher (customtkinter)
-      app.py                   WopcApp — main window, map selector, mode selector (SOLO/HOST/JOIN)
+      app.py                   WopcApp — main window, map selector, multiplayer lobby, game browser
       worker.py                SetupWorker — async setup in background thread
       wopc.ico                 Application icon
   build_exe.py                 PyInstaller build script → dist/WOPC-Launcher.exe
@@ -189,9 +189,20 @@ quickstart.lua
 - **Phase 1** ✅ Game launches from WOPC directory
 - **Phase 2** ✅ FAF binary patches integration
 - **Phase 3** ✅ WOPC Lua overlay (quickstart system + content packs)
-- **Phase 4** 🔧 Multiplayer support (Phase 1 done: SOLO/HOST/JOIN launch modes)
-- **Phase 5** → Player slot management + game options
-- **Phase 6** → C++ pathfinding patch
+- **Phase 4** ✅ Multiplayer support — TCP lobby, game state sync, file transfer, chat, kick, ready
+- **Phase 5** ✅ Player slot management + game options (colors, teams, victory, unit cap, share)
+- **Phase 6** 🔧 Modern multiplayer UX — game browser, LAN discovery, unified lobby room
+- **Phase 7** → C++ pathfinding patch
+
+## Rules (MUST follow)
+
+1. **Plan files live in HOME, not project.** `ExitPlanMode` reads from `C:\Users\roskv\.claude\plans\`, NOT `C:\Users\roskv\wopc\.claude\plans\`. Always write/update plans at the HOME path. Stale content at the wrong path caused 4 consecutive plan rejections.
+2. **Stale docs poison context.** When architecture changes (e.g., dropping FAF lobby), update ALL docs that reference the old approach: `QUICKSTART_STATE.md`, `CLAUDE.md`, `docs/plan.md`, `docs/architecture.md`, and any `.claude/plans/*.md` files. If Claude keeps producing wrong plans, the root cause is almost always stale documentation.
+3. **When you hit a recurring problem, add a rule here.** If you spend more than 2 rounds fixing the same class of issue, add a numbered entry to this section so future sessions avoid the trap. This is mandatory — don't just fix the problem, encode the fix as a rule.
+4. **Before submitting any plan via ExitPlanMode, verify the plan file content at the HOME path.** Read `C:\Users\roskv\.claude\plans\<filename>.md` back AFTER writing it to confirm the content matches intent. Never assume a write succeeded — stale content at that path has caused repeated plan rejections.
+5. **Solo and multiplayer UI must be visually consistent.** Shared concepts (map selector, player slots, game options, victory conditions) must use the same widgets, styling, and layout patterns in both solo and multiplayer screens. If you change a UI element in one screen, update the other to match. No visual drift between modes.
+6. **Always review and update `docs/backlog.md` at PR time.** Before every PR: (a) mark completed items, (b) add new ideas discovered during the work, (c) identify one improvement to work on next. The backlog is a living document — never let it go stale.
+7. **Continuously improve project docs to maximize efficiency.** Always consider what can be created, updated, or deleted in `CLAUDE.md`, `QUICKSTART_STATE.md`, `docs/backlog.md`, `docs/plan.md`, and `docs/architecture.md` to make navigating this project faster. If you learn something that would save time in future sessions, encode it immediately. The goal: any new session should become an expert on this project as quickly as possible by reading these files.
 
 ## Key Technical Gotchas
 

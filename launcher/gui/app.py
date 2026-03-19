@@ -67,7 +67,9 @@ class WopcApp(BaseApp):  # type: ignore
     status_wopc: Any
     primary_btn: Any
     version_label: Any
-    main_content: Any
+    solo_screen: Any
+    browser_screen: Any
+    lobby_screen: Any
     header_label: Any
     config_panel: Any
     selected_map_label: Any
@@ -88,6 +90,10 @@ class WopcApp(BaseApp):  # type: ignore
         self._lobby_client: LobbyClient | None = None
         self._remote_players: dict[int, dict[str, Any]] = {}
         self._pending_download: dict[str, Any] = {}
+        self._beacon_broadcaster: Any = None
+        self._beacon_listener: Any = None
+        self._is_hosting: bool = False
+        self._current_screen: str = "solo"
 
         self.title("WOPC - Match Lobby")
         self.geometry("1024x768")
@@ -120,7 +126,11 @@ class WopcApp(BaseApp):  # type: ignore
 
         self._build_sidebar()
         self._build_main_lobby()
+        self._build_browser_screen()
+        self._build_lobby_screen()
         self._build_mod_pane()
+        # Show the correct initial screen
+        self._show_screen("solo")
 
         self._check_installation_status()
         self._bind_hotkeys()
@@ -129,6 +139,18 @@ class WopcApp(BaseApp):  # type: ignore
         """Bind global keyboard shortcuts."""
         self.bind("<Return>", lambda e: self._on_primary_click())
         self.bind("<Escape>", lambda e: self.destroy())
+
+    def _show_screen(self, screen: str) -> None:
+        """Switch visible screen in the main content area."""
+        for s in (self.solo_screen, self.browser_screen, self.lobby_screen):
+            s.grid_remove()
+        target = {
+            "solo": self.solo_screen,
+            "browser": self.browser_screen,
+            "lobby": self.lobby_screen,
+        }[screen]
+        target.grid(row=0, column=1, sticky="nsew")
+        self._current_screen = screen
 
     def _build_sidebar(self) -> None:
         """Construct the left sidebar navigation and status area."""
@@ -179,10 +201,12 @@ class WopcApp(BaseApp):  # type: ignore
         self.mode_label.grid(row=5, column=0, padx=20, pady=(20, 5), sticky="w")
 
         saved_mode = prefs.get_launch_mode()
-        self.mode_var = ctk.StringVar(value=saved_mode.upper())
+        # Map old host/join modes to multiplayer
+        display_mode = "MULTIPLAYER" if saved_mode in ("host", "join") else saved_mode.upper()
+        self.mode_var = ctk.StringVar(value=display_mode)
         self.mode_selector = ctk.CTkSegmentedButton(
             self.sidebar,
-            values=["SOLO", "HOST", "JOIN"],
+            values=["SOLO", "MULTIPLAYER"],
             variable=self.mode_var,
             command=self._on_mode_change,
         )
@@ -253,15 +277,15 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _build_main_lobby(self) -> None:
         """Construct the central matching routing/configuration area."""
-        self.main_content = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_content.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
+        self.solo_screen = ctk.CTkFrame(self, fg_color="transparent")
+        self.solo_screen.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
         # Row 0: header, Row 1: config_panel (map), Row 2: players+options, Row 3: log
-        self.main_content.grid_rowconfigure(1, weight=2)
-        self.main_content.grid_rowconfigure(2, weight=1)
-        self.main_content.grid_columnconfigure(0, weight=1)
+        self.solo_screen.grid_rowconfigure(1, weight=2)
+        self.solo_screen.grid_rowconfigure(2, weight=1)
+        self.solo_screen.grid_columnconfigure(0, weight=1)
 
         self.header_label = ctk.CTkLabel(
-            self.main_content,
+            self.solo_screen,
             text="Game Configuration",
             text_color=COLOR_TEXT_PRIMARY,
             font=ctk.CTkFont(size=20, weight="bold"),
@@ -270,7 +294,7 @@ class WopcApp(BaseApp):  # type: ignore
 
         # --- Map Selector Panel ---
         self.config_panel = ctk.CTkFrame(
-            self.main_content, fg_color=COLOR_MOD_PANEL, corner_radius=8
+            self.solo_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8
         )
         self.config_panel.grid(row=1, column=0, sticky="nsew")
         self.config_panel.grid_rowconfigure(2, weight=1)
@@ -337,9 +361,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.map_buttons: list[Any] = []
 
         # --- Player Slots + Game Options Panel ---
-        self.lower_panel = ctk.CTkFrame(
-            self.main_content, fg_color=COLOR_MOD_PANEL, corner_radius=8
-        )
+        self.lower_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
         self.lower_panel.grid(row=2, column=0, sticky="nsew", pady=(10, 0))
         self.lower_panel.grid_columnconfigure(0, weight=1)
         self.lower_panel.grid_columnconfigure(1, weight=1)
@@ -350,7 +372,7 @@ class WopcApp(BaseApp):  # type: ignore
 
         # --- Log / Chat Window ---
         self.log_chat_frame = ctk.CTkFrame(
-            self.main_content, fg_color=COLOR_MOD_PANEL, corner_radius=8
+            self.solo_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8
         )
         self.log_chat_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         self.log_chat_frame.grid_columnconfigure(0, weight=1)
@@ -388,6 +410,305 @@ class WopcApp(BaseApp):  # type: ignore
             command=self._send_chat,
         )
         self.chat_send_btn.grid(row=0, column=1)
+
+    def _build_browser_screen(self) -> None:
+        """Build the multiplayer game browser screen."""
+        self.browser_screen = ctk.CTkFrame(self, fg_color="transparent")
+        # Don't grid it yet — _show_screen handles that
+
+        self.browser_screen.grid_rowconfigure(1, weight=1)
+        self.browser_screen.grid_columnconfigure(0, weight=1)
+
+        # Header
+        header = ctk.CTkLabel(
+            self.browser_screen,
+            text="Find a Game",
+            text_color=COLOR_TEXT_PRIMARY,
+            font=ctk.CTkFont(size=24, weight="bold"),
+        )
+        header.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
+
+        # Game list (scrollable)
+        self.game_list_frame = ctk.CTkScrollableFrame(
+            self.browser_screen,
+            fg_color=COLOR_MOD_PANEL,
+            corner_radius=8,
+        )
+        self.game_list_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="nsew")
+        self.game_list_frame.grid_columnconfigure(0, weight=1)
+
+        # Empty state label
+        self.no_games_label = ctk.CTkLabel(
+            self.game_list_frame,
+            text="Searching for games on your network...",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=14),
+        )
+        self.no_games_label.grid(row=0, column=0, padx=20, pady=40)
+
+        self.game_rows: list[dict[str, Any]] = []
+
+        # Bottom bar
+        bottom = ctk.CTkFrame(self.browser_screen, fg_color="transparent")
+        bottom.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="ew")
+        bottom.grid_columnconfigure(1, weight=1)
+
+        self.create_game_btn = ctk.CTkButton(
+            bottom,
+            text="CREATE GAME",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            height=44,
+            fg_color=COLOR_READY,
+            hover_color="#1F8B4C",
+            command=self._on_create_game,
+        )
+        self.create_game_btn.grid(row=0, column=0, sticky="w")
+
+        # Direct Connect (collapsed)
+        self.direct_connect_toggle = ctk.CTkButton(
+            bottom,
+            text="\u25b8 Direct Connect",
+            fg_color="transparent",
+            hover_color=COLOR_MOD_PANEL,
+            text_color=COLOR_TEXT_MUTED,
+            anchor="e",
+            width=140,
+            command=self._toggle_direct_connect,
+        )
+        self.direct_connect_toggle.grid(row=0, column=2, sticky="e")
+
+        self.direct_connect_frame = ctk.CTkFrame(
+            self.browser_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8
+        )
+        # Not gridded initially (collapsed)
+        self.direct_connect_frame.grid_columnconfigure(1, weight=1)
+
+        dc_addr_label = ctk.CTkLabel(
+            self.direct_connect_frame, text="Host Address:", text_color=COLOR_TEXT_MUTED
+        )
+        dc_addr_label.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="w")
+
+        self.dc_address_entry = ctk.CTkEntry(
+            self.direct_connect_frame, placeholder_text="192.168.1.50:15000"
+        )
+        saved_addr = prefs.get_join_address()
+        if saved_addr:
+            self.dc_address_entry.insert(0, saved_addr)
+        self.dc_address_entry.grid(row=0, column=1, padx=5, pady=10, sticky="ew")
+
+        self.dc_connect_btn = ctk.CTkButton(
+            self.direct_connect_frame,
+            text="Connect",
+            width=80,
+            fg_color=COLOR_ACCENT,
+            command=self._on_direct_connect,
+        )
+        self.dc_connect_btn.grid(row=0, column=2, padx=(5, 10), pady=10)
+
+        self._direct_connect_visible = False
+
+    def _build_lobby_screen(self) -> None:
+        """Build the multiplayer lobby room screen."""
+        self.lobby_screen = ctk.CTkFrame(self, fg_color="transparent")
+        # Don't grid — _show_screen handles it
+
+        self.lobby_screen.grid_rowconfigure(0, weight=2)
+        self.lobby_screen.grid_rowconfigure(1, weight=1)
+        self.lobby_screen.grid_columnconfigure(0, weight=1)
+        self.lobby_screen.grid_columnconfigure(1, weight=1)
+
+        # --- Map Section (top-left) ---
+        map_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
+        map_frame.grid(row=0, column=0, padx=(20, 5), pady=(20, 5), sticky="nsew")
+        map_frame.grid_rowconfigure(2, weight=1)
+        map_frame.grid_columnconfigure(0, weight=1)
+
+        map_header = ctk.CTkLabel(
+            map_frame,
+            text="MAP",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        map_header.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
+
+        self.lobby_map_label = ctk.CTkLabel(
+            map_frame,
+            text="No map selected",
+            text_color=COLOR_TEXT_PRIMARY,
+            font=ctk.CTkFont(size=16, weight="bold"),
+        )
+        self.lobby_map_label.grid(row=1, column=0, padx=10, pady=(5, 0), sticky="w")
+
+        # Map info (type, size, players)
+        self.lobby_map_info = ctk.CTkLabel(
+            map_frame,
+            text="",
+            text_color=COLOR_TEXT_MUTED,
+        )
+        self.lobby_map_info.grid(row=2, column=0, padx=10, pady=5, sticky="nw")
+
+        self.lobby_change_map_btn = ctk.CTkButton(
+            map_frame,
+            text="Change Map",
+            width=100,
+            height=28,
+            fg_color=COLOR_ACCENT,
+            command=self._on_lobby_change_map,
+        )
+        self.lobby_change_map_btn.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="w")
+
+        # --- Players Section (top-right) ---
+        players_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
+        players_frame.grid(row=0, column=1, padx=(5, 20), pady=(20, 5), sticky="nsew")
+        players_frame.grid_rowconfigure(1, weight=1)
+        players_frame.grid_columnconfigure(0, weight=1)
+
+        players_header_frame = ctk.CTkFrame(players_frame, fg_color="transparent")
+        players_header_frame.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="ew")
+        players_header_frame.grid_columnconfigure(0, weight=1)
+
+        players_label = ctk.CTkLabel(
+            players_header_frame,
+            text="PLAYERS",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        players_label.grid(row=0, column=0, sticky="w")
+
+        self.lobby_add_ai_btn = ctk.CTkButton(
+            players_header_frame,
+            text="+ Add AI",
+            width=70,
+            height=24,
+            fg_color=COLOR_ACCENT,
+            font=ctk.CTkFont(size=11),
+            command=self._add_ai_slot,
+        )
+        self.lobby_add_ai_btn.grid(row=0, column=1, sticky="e")
+
+        self.lobby_slots_scroll = ctk.CTkScrollableFrame(
+            players_frame,
+            fg_color="transparent",
+        )
+        self.lobby_slots_scroll.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
+        self.lobby_slots_scroll.grid_columnconfigure(1, weight=1)
+
+        # --- Options Section (bottom-left) ---
+        opts_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
+        opts_frame.grid(row=1, column=0, padx=(20, 5), pady=(5, 5), sticky="nsew")
+        opts_frame.grid_columnconfigure(1, weight=1)
+
+        opts_header = ctk.CTkLabel(
+            opts_frame,
+            text="GAME OPTIONS",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        opts_header.grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 5), sticky="w")
+
+        self.lobby_option_vars: dict[str, Any] = {}
+        self.lobby_option_widgets: list[Any] = []
+        options_config = [
+            ("Victory", ["Demoralization", "Supremacy", "Assassination", "Sandbox"]),
+            ("UnitCap", ["500", "1000", "1500", "2000", "4000"]),
+            ("FogOfWar", ["Explored", "Unexplored", "None"]),
+            ("GameSpeed", ["Normal", "Fast", "Adjustable"]),
+            ("Share", ["FullShare", "ShareUntilDeath"]),
+        ]
+        defaults = {
+            "Victory": "Demoralization",
+            "UnitCap": "1500",
+            "FogOfWar": "Explored",
+            "GameSpeed": "Normal",
+            "Share": "FullShare",
+        }
+
+        for i, (key, values) in enumerate(options_config):
+            lbl = ctk.CTkLabel(opts_frame, text=f"{key}:", text_color=COLOR_TEXT_MUTED)
+            lbl.grid(row=i + 1, column=0, padx=(10, 5), pady=2, sticky="w")
+            var = ctk.StringVar(value=defaults.get(key, values[0]))
+            menu = ctk.CTkOptionMenu(
+                opts_frame,
+                values=values,
+                variable=var,
+                width=130,
+                height=24,
+                command=lambda _val, _key=key: self._on_lobby_option_change(_key),
+            )
+            menu.grid(row=i + 1, column=1, padx=(5, 10), pady=2, sticky="w")
+            self.lobby_option_vars[key] = var
+            self.lobby_option_widgets.extend([lbl, menu])
+
+        # --- Chat Section (bottom-right) ---
+        chat_frame = ctk.CTkFrame(self.lobby_screen, fg_color=COLOR_MOD_PANEL, corner_radius=8)
+        chat_frame.grid(row=1, column=1, padx=(5, 20), pady=(5, 5), sticky="nsew")
+        chat_frame.grid_rowconfigure(1, weight=1)
+        chat_frame.grid_columnconfigure(0, weight=1)
+
+        chat_header = ctk.CTkLabel(
+            chat_frame,
+            text="CHAT",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        chat_header.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="nw")
+
+        self.lobby_chat_textbox = ctk.CTkTextbox(
+            chat_frame,
+            height=100,
+            fg_color=COLOR_BG,
+            text_color=COLOR_TEXT_MUTED,
+            state="disabled",
+        )
+        self.lobby_chat_textbox.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
+
+        chat_input_frame = ctk.CTkFrame(chat_frame, fg_color="transparent")
+        chat_input_frame.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="ew")
+        chat_input_frame.grid_columnconfigure(0, weight=1)
+
+        self.lobby_chat_entry = ctk.CTkEntry(
+            chat_input_frame,
+            placeholder_text="Type a message...",
+        )
+        self.lobby_chat_entry.grid(row=0, column=0, padx=(0, 5), sticky="ew")
+        self.lobby_chat_entry.bind("<Return>", lambda e: self._send_lobby_chat())
+
+        lobby_chat_send = ctk.CTkButton(
+            chat_input_frame,
+            text="Send",
+            width=60,
+            command=self._send_lobby_chat,
+        )
+        lobby_chat_send.grid(row=0, column=1)
+
+        # --- Action Bar (bottom, spanning both columns) ---
+        action_bar = ctk.CTkFrame(self.lobby_screen, fg_color="transparent")
+        action_bar.grid(row=2, column=0, columnspan=2, padx=20, pady=(5, 20), sticky="ew")
+        action_bar.grid_columnconfigure(1, weight=1)
+
+        self.lobby_leave_btn = ctk.CTkButton(
+            action_bar,
+            text="LEAVE",
+            width=100,
+            height=44,
+            fg_color="#ED4245",
+            hover_color="#C53030",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=self._on_leave_lobby,
+        )
+        self.lobby_leave_btn.grid(row=0, column=0, sticky="w")
+
+        self.lobby_launch_btn = ctk.CTkButton(
+            action_bar,
+            text="LAUNCH GAME",
+            width=160,
+            height=44,
+            fg_color=COLOR_READY,
+            hover_color="#1F8B4C",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            command=self._on_lobby_launch_click,
+        )
+        self.lobby_launch_btn.grid(row=0, column=2, sticky="e")
 
     def _build_mod_pane(self) -> None:
         """Construct the right-hand sidebar for Mod management."""
@@ -1021,8 +1342,7 @@ class WopcApp(BaseApp):  # type: ignore
 
     _PLAY_LABELS: ClassVar[dict[str, str]] = {
         "SOLO": "PLAY MATCH",
-        "HOST": "HOST GAME",
-        "JOIN": "JOIN GAME",
+        "MULTIPLAYER": "PLAY MATCH",
     }
 
     def _on_expected_humans_change(self, value: str) -> None:
@@ -1113,7 +1433,10 @@ class WopcApp(BaseApp):  # type: ignore
             self._lobby_client.disconnect()
             self._lobby_client = None
         # Launch with a small delay to let the host bind the game port first
-        self.primary_btn.configure(text="LAUNCHING...", state="disabled")
+        if self._current_screen == "lobby":
+            self.lobby_launch_btn.configure(text="LAUNCHING...", state="disabled")
+        else:
+            self.primary_btn.configure(text="LAUNCHING...", state="disabled")
 
         def _delayed_launch() -> None:
             time.sleep(2)
@@ -1134,25 +1457,28 @@ class WopcApp(BaseApp):  # type: ignore
     def _on_lobby_connected(self) -> None:
         """TCP callback (joiner): connected to host."""
         self.log("Connected to host lobby!")
-        self.primary_btn.configure(text="READY", fg_color=COLOR_ACCENT)
+        if self._current_screen == "lobby":
+            self.lobby_launch_btn.configure(text="READY", fg_color=COLOR_ACCENT, state="normal")
+        else:
+            self.primary_btn.configure(text="READY", fg_color=COLOR_ACCENT)
 
     def _on_lobby_disconnected(self, reason: str) -> None:
         """TCP callback: connection lost."""
         self.log(f"Disconnected: {reason}")
         self._lobby_client = None
         self._clear_remote_players()
-        mode = self.mode_var.get()
-        if mode == "JOIN":
-            self.primary_btn.configure(text="JOIN GAME", fg_color=COLOR_READY, state="normal")
+        if self._current_screen == "lobby":
+            self._show_screen("browser")
+            self._start_beacon_listener()
 
     def _on_lobby_error(self, error: str) -> None:
         """TCP callback: connection error."""
         self.log(f"Lobby error: {error}")
         self._lobby_client = None
         self._clear_remote_players()
-        mode = self.mode_var.get()
-        if mode == "JOIN":
-            self.primary_btn.configure(text="JOIN GAME", fg_color=COLOR_READY, state="normal")
+        if self._current_screen == "lobby":
+            self._show_screen("browser")
+            self._start_beacon_listener()
 
     # ------------------------------------------------------------------
     # File transfer callbacks
@@ -1263,19 +1589,17 @@ class WopcApp(BaseApp):  # type: ignore
             self._pending_download = {}
 
     def _send_chat(self) -> None:
-        """Send a chat message from the chat input."""
+        """Send a chat message from the solo screen chat input."""
         text = self.chat_entry.get().strip()
         if not text:
             return
         self.chat_entry.delete(0, "end")
         name = self.name_entry.get() or "Player"
-        mode = self.mode_var.get()
-        if mode == "HOST" and self._lobby_server:
+        if self._is_hosting and self._lobby_server:
             self._lobby_server.broadcast_chat(name, text)
             self._append_chat(name, text)
-        elif mode == "JOIN" and self._lobby_client:
+        elif self._lobby_client and self._lobby_client.is_connected:
             self._lobby_client.send_chat(text)
-            # Server will relay back to us via Chat message
         else:
             # Solo mode — just show locally
             self._append_chat(name, text)
@@ -1286,14 +1610,19 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _on_chat_received(self, sender: str, text: str) -> None:
         """TCP callback: chat message received."""
-        self._append_chat(sender, text)
+        if self._current_screen == "lobby":
+            self._append_lobby_chat(sender, text)
+        else:
+            self._append_chat(sender, text)
 
     def _on_kicked(self, reason: str) -> None:
         """TCP callback (joiner): kicked from lobby."""
         self.log(f"Kicked from lobby: {reason}")
         self._lobby_client = None
         self._clear_remote_players()
-        self.primary_btn.configure(text="JOIN GAME", fg_color=COLOR_READY, state="normal")
+        if self._current_screen == "lobby":
+            self._show_screen("browser")
+            self._start_beacon_listener()
 
     def _kick_player(self, player_id: int) -> None:
         """Host kicks a player from the lobby."""
@@ -1315,6 +1644,8 @@ class WopcApp(BaseApp):  # type: ignore
             map_folder = state.get("map_folder", "")
             if hasattr(self, "header_label"):
                 self.header_label.configure(text=f"Map: {map_name}")
+            if hasattr(self, "lobby_map_label"):
+                self.lobby_map_label.configure(text=map_name)
             # Check if joiner has this map — auto-download if missing
             if map_folder:
                 has_map = any(m.folder_name == map_folder for m in getattr(self, "_all_maps", []))
@@ -1557,8 +1888,7 @@ class WopcApp(BaseApp):  # type: ignore
         widgets.append(color_lbl)
 
         # Kick button (host only) or spacer
-        mode = self.mode_var.get()
-        if mode == "HOST":
+        if self._is_hosting:
             pid_capture = player_id
 
             def kick_this(pid=pid_capture) -> None:
@@ -1600,17 +1930,17 @@ class WopcApp(BaseApp):  # type: ignore
         self._remote_players.clear()
 
     def _update_host_button_text(self) -> None:
-        """Update HOST button to show connected player count."""
-        mode = self.mode_var.get()
-        if mode != "HOST" or not self._lobby_server:
+        """Update lobby launch button to show connected player count."""
+        if not self._is_hosting or not self._lobby_server:
             return
         n_remote = len(self._remote_players)
         expected = int(self.expected_var.get())
         total = 1 + n_remote  # host + connected peers
-        if n_remote == 0:
-            self.primary_btn.configure(text="HOST GAME (Waiting...)")
-        else:
-            self.primary_btn.configure(text=f"LAUNCH ({total}/{expected} players)")
+        if self._current_screen == "lobby":
+            if n_remote == 0:
+                self.lobby_launch_btn.configure(text="LAUNCH GAME (Waiting...)")
+            else:
+                self.lobby_launch_btn.configure(text=f"LAUNCH ({total}/{expected} players)")
 
     # ------------------------------------------------------------------
     # Lobby lifecycle management
@@ -1674,66 +2004,33 @@ class WopcApp(BaseApp):  # type: ignore
             self._clear_remote_players()
 
     def _on_mode_change(self, mode: str) -> None:
-        """Respond to the SOLO / HOST / JOIN segmented button."""
-        old_mode = prefs.get_launch_mode().upper()
+        """Respond to the SOLO / MULTIPLAYER segmented button."""
         prefs.set_launch_mode(mode.lower())
-        self._update_mode_widgets()
 
-        # Stop previous lobby connections on mode switch
-        if old_mode == "HOST" and mode != "HOST":
+        if mode == "SOLO":
+            # Stop any active multiplayer
             self._stop_lobby_server()
-        if old_mode == "JOIN" and mode != "JOIN":
             self._disconnect_lobby_client()
-
-        # Start lobby server when switching to HOST
-        if mode == "HOST":
-            self._start_lobby_server()
-
-        # Update the play button text (only when installation is ready)
-        btn_text = self.primary_btn.cget("text")
-        play_labels = set(self._PLAY_LABELS.values())
-        transitional = {"CONNECTING...", "READY", "LAUNCHING...", "HOST GAME (Waiting...)"}
-        if btn_text in play_labels or btn_text in transitional or "LAUNCH (" in btn_text:
-            self.primary_btn.configure(
-                text=self._PLAY_LABELS.get(mode, "PLAY MATCH"),
-                fg_color=COLOR_READY,
-                state="normal",
-            )
+            self._stop_beacon_listener()
+            self._stop_beacon_broadcaster()
+            self._show_screen("solo")
+            self.primary_btn.configure(text="PLAY MATCH", fg_color=COLOR_READY, state="normal")
+            self.primary_btn.grid()
+        elif mode == "MULTIPLAYER":
+            self._show_screen("browser")
+            self._start_beacon_listener()
+            # Hide the play button in sidebar (actions are in the lobby/browser screens)
+            self.primary_btn.grid_remove()
 
     def _update_mode_widgets(self) -> None:
         """Show/hide conditional inputs for the current launch mode."""
-        mode = self.mode_var.get()  # "SOLO", "HOST", or "JOIN"
-
-        # Clear previous layout
+        # Hide all old mode widgets — browser/lobby screens handle everything
         self.port_label.grid_forget()
         self.port_entry.grid_forget()
         self.address_label.grid_forget()
         self.address_entry.grid_forget()
         self.expected_label.grid_forget()
         self.expected_menu.grid_forget()
-
-        if mode == "HOST":
-            self.port_label.grid(row=0, column=0, sticky="w", pady=(5, 0))
-            self.port_entry.grid(row=1, column=0, sticky="ew", pady=(0, 5))
-            self.expected_label.grid(row=2, column=0, sticky="w", pady=(5, 0))
-            self.expected_menu.grid(row=3, column=0, sticky="w", pady=(0, 5))
-        elif mode == "JOIN":
-            self.address_label.grid(row=0, column=0, sticky="w", pady=(5, 0))
-            self.address_entry.grid(row=1, column=0, sticky="ew", pady=(0, 5))
-
-        # Toggle map selector visibility — host picks the map in JOIN mode
-        map_visible = mode != "JOIN"
-        if hasattr(self, "config_panel"):
-            if map_visible:
-                self.config_panel.grid()
-            else:
-                self.config_panel.grid_remove()
-            # Show a hint in the header when joining
-            if hasattr(self, "header_label"):
-                if mode == "JOIN":
-                    self.header_label.configure(text="Joining — host controls the map")
-                else:
-                    self.header_label.configure(text="Game Configuration")
 
     def _update_play_summary(self) -> None:
         """Update the label on the play tab showing the active config."""
@@ -1793,7 +2090,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._refresh_map_list()
 
     def _on_primary_click(self) -> None:
-        """Handle main button action depending on current state."""
+        """Handle main button action -- SOLO mode only."""
         btn_text = self.primary_btn.cget("text")
 
         if btn_text == "INSTALL / UPDATE":
@@ -1803,50 +2100,7 @@ class WopcApp(BaseApp):  # type: ignore
             worker.start()
             return
 
-        mode = self.mode_var.get()
-
-        # --- HOST mode ---
-        if mode == "HOST":
-            if not self._lobby_server or not self._lobby_server.is_running:
-                self._start_lobby_server()
-                return
-            # Pre-launch validation
-            errors = self._validate_before_launch()
-            if errors:
-                for err in errors:
-                    self.log(f"Cannot launch: {err}")
-                return
-            n_remote = len(self._remote_players)
-            prefs.set_expected_humans(1 + n_remote)
-            host_port = self.port_entry.get() or "15000"
-            self._lobby_server.broadcast_launch(host_port)
-            self.log(f"Broadcasting launch to {n_remote} peer(s)...")
-            self.primary_btn.configure(text="LAUNCHING...", state="disabled")
-            threading.Thread(target=self._launch_game_and_cleanup, daemon=True).start()
-            return
-
-        # --- JOIN mode ---
-        if mode == "JOIN":
-            if not self._lobby_client or not self._lobby_client.is_connected:
-                # Not connected yet — connect
-                self._connect_lobby_client()
-                return
-            # Connected — toggle ready state
-            # Check if we're currently "READY" vs just connected
-            if btn_text == "READY":
-                self._lobby_client.send_ready(True)
-                self.primary_btn.configure(
-                    text="UNREADY", fg_color="#ED4245", hover_color="#C53030"
-                )
-            elif btn_text == "UNREADY":
-                self._lobby_client.send_ready(False)
-                self.primary_btn.configure(
-                    text="READY", fg_color=COLOR_ACCENT, hover_color="#4752C4"
-                )
-            return
-
-        # --- SOLO mode (default) ---
-        if btn_text in self._PLAY_LABELS.values():
+        if btn_text in self._PLAY_LABELS.values() or btn_text == "PLAY MATCH":
             self.log("Launching game (solo mode)...")
             threading.Thread(target=self._launch_game, daemon=True).start()
 
@@ -1900,23 +2154,299 @@ class WopcApp(BaseApp):  # type: ignore
         self.after(0, self._stop_lobby_server)
         self.after(
             0,
-            lambda: self.primary_btn.configure(
-                text="HOST GAME", fg_color=COLOR_READY, state="normal"
+            lambda: self.lobby_launch_btn.configure(
+                text="LAUNCH GAME", fg_color=COLOR_READY, state="normal"
             ),
         )
 
     def _persist_widget_values(self) -> None:
         """Save any unsaved widget values to prefs before launching."""
-        mode = self.mode_var.get()
-        if mode == "HOST":
+        if hasattr(self, "port_entry") and self.port_entry.get():
             prefs.set_host_port(self.port_entry.get())
-        elif mode == "JOIN":
-            prefs.set_join_address(self.address_entry.get())
         if hasattr(self, "name_entry"):
             prefs.set_player_name(self.name_entry.get())
 
+    # ------------------------------------------------------------------
+    # Multiplayer flow methods
+    # ------------------------------------------------------------------
+
+    def _on_create_game(self) -> None:
+        """Handle CREATE GAME click on browser screen."""
+        self._is_hosting = True
+        port = int(prefs.get_host_port() or "15000")
+        callbacks = self._make_lobby_callbacks(is_host=True)
+        self._lobby_server = LobbyServer(
+            port, callbacks, game_state_provider=self._build_game_state
+        )
+        try:
+            self._lobby_server.start()
+            self.log(f"Lobby server started on port {port}")
+        except OSError as exc:
+            self.log(f"Failed to start lobby server: {exc}")
+            self._lobby_server = None
+            return
+        self._start_beacon_broadcaster()
+        self._stop_beacon_listener()
+        self._show_screen("lobby")
+        self._update_lobby_for_host()
+
+    def _on_direct_connect(self) -> None:
+        """Handle Direct Connect button click."""
+        raw_addr = self.dc_address_entry.get().strip()
+        if not raw_addr:
+            self.log("ERROR: Enter a host address.")
+            return
+        # Parse host:port
+        if ":" in raw_addr:
+            host, port_str = raw_addr.rsplit(":", 1)
+            port = int(port_str)
+        else:
+            host = raw_addr
+            port = 15000
+        prefs.set_join_address(raw_addr)
+        self._join_game(host, port)
+
+    def _join_game(self, host: str, port: int) -> None:
+        """Connect to a host's lobby and switch to lobby screen."""
+        self._is_hosting = False
+        name = self.name_entry.get() or "Player"
+        faction = self.faction_var.get().lower()
+        callbacks = self._make_lobby_callbacks()
+        self._lobby_client = LobbyClient(host, port, name, faction, callbacks)
+        self._lobby_client.connect()
+        self._stop_beacon_listener()
+        self._show_screen("lobby")
+        self._update_lobby_for_joiner()
+        self.lobby_launch_btn.configure(text="CONNECTING...", state="disabled")
+        self.log(f"Connecting to {host}:{port}...")
+
+    def _join_discovered_game(self, game: Any) -> None:
+        """Join a game discovered via LAN beacon."""
+        self._join_game(game.host_ip, game.lobby_port)
+
+    def _on_leave_lobby(self) -> None:
+        """Leave the current multiplayer lobby."""
+        if self._is_hosting:
+            self._stop_beacon_broadcaster()
+            if self._lobby_server:
+                self._lobby_server.stop()
+                self._lobby_server = None
+        else:
+            if self._lobby_client:
+                self._lobby_client.disconnect()
+                self._lobby_client = None
+        self._clear_remote_players()
+        self._show_screen("browser")
+        self._start_beacon_listener()
+        self.log("Left the lobby.")
+
+    def _on_lobby_launch_click(self) -> None:
+        """Handle the LAUNCH/READY button in the lobby screen."""
+        if self._is_hosting:
+            # Host launches
+            errors = self._validate_before_launch()
+            if errors:
+                for err in errors:
+                    self.log(f"Cannot launch: {err}")
+                return
+            n_remote = len(self._remote_players)
+            prefs.set_expected_humans(1 + n_remote)
+            host_port = prefs.get_host_port()
+            self._lobby_server.broadcast_launch(host_port)
+            self.log(f"Broadcasting launch to {n_remote} peer(s)...")
+            self.lobby_launch_btn.configure(text="LAUNCHING...", state="disabled")
+            threading.Thread(target=self._launch_game_and_cleanup, daemon=True).start()
+        else:
+            # Joiner toggles ready
+            btn_text = self.lobby_launch_btn.cget("text")
+            if btn_text == "READY":
+                self._lobby_client.send_ready(True)
+                self.lobby_launch_btn.configure(
+                    text="UNREADY", fg_color="#ED4245", hover_color="#C53030"
+                )
+            elif btn_text == "UNREADY":
+                self._lobby_client.send_ready(False)
+                self.lobby_launch_btn.configure(
+                    text="READY", fg_color=COLOR_ACCENT, hover_color="#4752C4"
+                )
+
+    def _on_lobby_change_map(self) -> None:
+        """Open map picker for the host in lobby mode."""
+        # TODO: Build a proper map picker modal/dropdown
+        pass
+
+    def _on_lobby_option_change(self, key: str) -> None:
+        """Handle game option change in the lobby screen."""
+        if self._is_hosting and self._lobby_server:
+            self._broadcast_game_state()
+
+    def _send_lobby_chat(self) -> None:
+        """Send a chat message from the lobby screen."""
+        text = self.lobby_chat_entry.get().strip()
+        if not text:
+            return
+        self.lobby_chat_entry.delete(0, "end")
+        name = self.name_entry.get() or "Player"
+        if self._is_hosting and self._lobby_server:
+            self._lobby_server.broadcast_chat(name, text)
+            self._append_lobby_chat(name, text)
+        elif self._lobby_client and self._lobby_client.is_connected:
+            self._lobby_client.send_chat(text)
+        else:
+            self._append_lobby_chat(name, text)
+
+    def _append_lobby_chat(self, sender: str, text: str) -> None:
+        """Append a message to the lobby chat textbox."""
+        self.lobby_chat_textbox.configure(state="normal")
+        self.lobby_chat_textbox.insert("end", f"[{sender}] {text}\n")
+        self.lobby_chat_textbox.configure(state="disabled")
+        self.lobby_chat_textbox.see("end")
+
+    def _update_lobby_for_host(self) -> None:
+        """Configure lobby screen widgets for hosting."""
+        self.lobby_change_map_btn.grid()
+        self.lobby_add_ai_btn.grid()
+        self.lobby_launch_btn.configure(text="LAUNCH GAME", fg_color=COLOR_READY, state="normal")
+        # Enable option dropdowns
+        for w in self.lobby_option_widgets:
+            if hasattr(w, "configure") and isinstance(w, ctk.CTkOptionMenu):
+                w.configure(state="normal")
+        # Update map label
+        active_map = prefs.get_active_map()
+        self.lobby_map_label.configure(text=active_map or "No map selected")
+
+    def _update_lobby_for_joiner(self) -> None:
+        """Configure lobby screen widgets for joining."""
+        self.lobby_change_map_btn.grid_remove()
+        self.lobby_add_ai_btn.grid_remove()
+        self.lobby_launch_btn.configure(text="READY", fg_color=COLOR_ACCENT, state="disabled")
+        # Disable option dropdowns (host controls)
+        for w in self.lobby_option_widgets:
+            if hasattr(w, "configure") and isinstance(w, ctk.CTkOptionMenu):
+                w.configure(state="disabled")
+
+    def _toggle_direct_connect(self) -> None:
+        """Show/hide the direct connect panel on the browser screen."""
+        if self._direct_connect_visible:
+            self.direct_connect_frame.grid_remove()
+            self.direct_connect_toggle.configure(text="\u25b8 Direct Connect")
+        else:
+            self.direct_connect_frame.grid(row=3, column=0, padx=20, pady=(0, 10), sticky="ew")
+            self.direct_connect_toggle.configure(text="\u25be Direct Connect")
+        self._direct_connect_visible = not self._direct_connect_visible
+
+    def _refresh_game_browser(self, games: list[Any]) -> None:
+        """Update the game browser with discovered games (GUI thread)."""
+        # Clear old rows
+        for row in self.game_rows:
+            for w in row.get("widgets", []):
+                w.destroy()
+        self.game_rows.clear()
+
+        if not games:
+            self.no_games_label.grid(row=0, column=0, padx=20, pady=40)
+            return
+        self.no_games_label.grid_remove()
+
+        for i, game in enumerate(games):
+            row_frame = ctk.CTkFrame(self.game_list_frame, fg_color=COLOR_BG, corner_radius=6)
+            row_frame.grid(row=i, column=0, padx=5, pady=3, sticky="ew")
+            row_frame.grid_columnconfigure(1, weight=1)
+
+            name_lbl = ctk.CTkLabel(
+                row_frame,
+                text=game.host_name,
+                text_color=COLOR_TEXT_PRIMARY,
+                font=ctk.CTkFont(size=14, weight="bold"),
+            )
+            name_lbl.grid(row=0, column=0, padx=(10, 5), pady=(8, 0), sticky="w")
+
+            map_lbl = ctk.CTkLabel(
+                row_frame,
+                text=game.map_name,
+                text_color=COLOR_TEXT_MUTED,
+            )
+            map_lbl.grid(row=1, column=0, padx=(10, 5), pady=(0, 8), sticky="w")
+
+            count_lbl = ctk.CTkLabel(
+                row_frame,
+                text=f"{game.player_count}/{game.max_players}",
+                text_color=COLOR_TEXT_MUTED,
+                font=ctk.CTkFont(size=12),
+            )
+            count_lbl.grid(row=0, column=1, rowspan=2, padx=5, sticky="e")
+
+            join_btn = ctk.CTkButton(
+                row_frame,
+                text="Join",
+                width=60,
+                height=28,
+                fg_color=COLOR_ACCENT,
+                command=lambda g=game: self._join_discovered_game(g),
+            )
+            join_btn.grid(row=0, column=2, rowspan=2, padx=(5, 10), pady=8)
+
+            self.game_rows.append(
+                {
+                    "widgets": [row_frame, name_lbl, map_lbl, count_lbl, join_btn],
+                }
+            )
+
+    # ------------------------------------------------------------------
+    # Beacon lifecycle methods
+    # ------------------------------------------------------------------
+
+    def _start_beacon_broadcaster(self) -> None:
+        """Start broadcasting game presence on the LAN."""
+        from launcher.discovery import BeaconBroadcaster
+
+        if self._beacon_broadcaster and self._beacon_broadcaster.is_running:
+            return
+        port_str = prefs.get_host_port() or "15000"
+        self._beacon_broadcaster = BeaconBroadcaster(
+            lobby_port=int(port_str),
+            state_provider=self._beacon_state,
+        )
+        self._beacon_broadcaster.start()
+
+    def _stop_beacon_broadcaster(self) -> None:
+        """Stop broadcasting game presence."""
+        if self._beacon_broadcaster:
+            self._beacon_broadcaster.stop()
+            self._beacon_broadcaster = None
+
+    def _start_beacon_listener(self) -> None:
+        """Start listening for LAN game beacons."""
+        from launcher.discovery import BeaconListener
+
+        if self._beacon_listener and self._beacon_listener.is_running:
+            return
+        self._beacon_listener = BeaconListener(on_update=self._on_games_discovered)
+        self._beacon_listener.start()
+
+    def _stop_beacon_listener(self) -> None:
+        """Stop listening for LAN game beacons."""
+        if self._beacon_listener:
+            self._beacon_listener.stop()
+            self._beacon_listener = None
+
+    def _beacon_state(self) -> dict[str, Any]:
+        """Return fresh game info for the beacon broadcaster."""
+        return {
+            "host_name": self.name_entry.get() or "Player",
+            "map_name": prefs.get_active_map() or "No map",
+            "player_count": 1 + len(self._remote_players),
+            "max_players": int(self.expected_var.get()),
+        }
+
+    def _on_games_discovered(self, games: list[Any]) -> None:
+        """Callback from BeaconListener (background thread)."""
+        self.after(0, self._refresh_game_browser, games)
+
     def destroy(self) -> None:
         """Clean up lobby connections before closing the window."""
+        self._stop_beacon_broadcaster()
+        self._stop_beacon_listener()
         self._stop_lobby_server()
         self._disconnect_lobby_client()
         super().destroy()

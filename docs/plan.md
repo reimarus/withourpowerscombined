@@ -10,23 +10,46 @@
 
 ---
 
-## Active Plan: Fix FAF GUI — missing panels and broken layout
+## Active Plan: Unified Multiplayer UX — Game Browser + Lobby Room
 
 **Source:** `.claude/plans/calm-doodling-honey.md`
-**Branch:** TBD
-**Goal:** Package FAF textures into faf_ui.scd so UI panels render correctly.
+**Branch:** TBD (next feature branch off main)
+**Goal:** Replace archaic SOLO/HOST/JOIN + IP entry with modern SOLO/MULTIPLAYER flow: LAN game browser + cohesive lobby room.
 
-### Root Cause
+### Architecture Note
 
-`deploy.py` builds `faf_ui.scd` from 10 directories but omits `textures/` (3,801 files — DDS textures, PNG assets, skinnable layout Lua files). FAF's UI code references paths like `/textures/ui/common/game/resource-bars/...` that don't exist in the VFS. Vanilla `textures.scd` provides partial fallback but lacks FAF's custom borders, panels, faction skins, and icons. Result: blank panels, invisible controls, wrong layout.
+**Our launcher IS the lobby.** All launch modes use `/wopcquickstart`. The FAF in-game lobby UI is NEVER shown. All multiplayer coordination (player list, game options, map selection, chat, ready state, file transfer) happens in the Python launcher over TCP. Players go directly from our launcher into the match.
 
-### Steps
+### Key Changes
 
-- [ ] Add `"textures"` to `target_dir` list in `launcher/deploy.py` (~line 156)
-- [ ] Add fake textures dir + missing config keys to test fixture (`tests/conftest.py`)
-- [ ] Add test verifying textures included in faf_ui.scd (`tests/test_deploy.py`)
-- [ ] Run tests + lint
-- [ ] Delete `C:\ProgramData\WOPC\gamedata\`, run `wopc setup`
-- [ ] Verify faf_ui.scd contains texture entries (~900 MB, was 609 MB)
-- [ ] Rebuild launcher exe: `python build_exe.py`
-- [ ] Launch match — UI panels visible with proper FAF styling
+1. LAN discovery via UDP beacons (`launcher/discovery.py`)
+2. Game browser screen — see and join LAN games with one click
+3. Lobby room screen — map, players, options, chat in one unified view
+4. Simplified mode selector: SOLO / MULTIPLAYER (replaces SOLO/HOST/JOIN)
+5. No IP/port entry visible by default (Direct Connect collapsed as advanced fallback)
+
+### Status
+
+- [x] `launcher/discovery.py` — BeaconBroadcaster + BeaconListener
+- [x] `tests/test_discovery.py` — socket tests
+- [x] `launcher/gui/app.py` — screen switching, browser screen, lobby room screen
+- [x] `launcher/prefs.py` — update launch_mode values
+- [x] `launcher/wopc.py` — explicit launch_mode param
+- [x] Verification and testing (196 fast tests pass)
+- **PR #17** — open, all code committed
+
+### Backlog (Phase 6 follow-up)
+
+**Broken / stubbed:**
+- [ ] "Add AI" button in multiplayer lobby — not wired up
+- [ ] "Change Map" button in multiplayer lobby — not wired up
+- [ ] Remove players from solo screen — no remove/delete button
+
+**Missing features:**
+- [ ] Victory type tooltips — explain what each victory condition means
+- [ ] Team auto-assignment — automatically balance teams when players join
+- [ ] Player ratings / balancing — track skill for fairer matchmaking
+
+**UI polish:**
+- [ ] Fancy up the UI — modern styling, better spacing, visual hierarchy
+- [ ] Solo ↔ multiplayer UI consistency — same visual patterns for shared concepts (see CLAUDE.md rule)

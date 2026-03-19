@@ -143,13 +143,14 @@ def cmd_launch(
     ai_opponents: list[dict[str, Any]] | None = None,
     game_options: dict[str, str] | None = None,
     player_color: int = 1,
+    launch_mode: str | None = None,
 ) -> int:
     """Launch the game from the WOPC directory.
 
-    Supports three launch modes (configured in prefs):
+    Supports three launch modes:
     - **solo**: Quickstart bypass — 1 human + AI, no lobby UI.
-    - **host**: Opens FAF's interactive lobby where friends can join.
-    - **join**: Connects to a friend's hosted lobby.
+    - **host**: Host a multiplayer game via quickstart + UDP P2P.
+    - **join**: Join a hosted multiplayer game via quickstart + UDP P2P.
 
     Parameters
     ----------
@@ -158,6 +159,9 @@ def cmd_launch(
         If None, a single medium AI is used (game_config default).
     game_options:
         Optional dict of game option overrides for solo mode.
+    launch_mode:
+        Explicit launch mode ('solo', 'host', or 'join').  If None,
+        falls back to the pref value (for backwards compatibility).
     """
     exe_path = WOPC_BIN / GAME_EXE
 
@@ -172,7 +176,8 @@ def cmd_launch(
     init_path = generate_init_lua()
     logger.info("Regenerated %s", init_path)
 
-    launch_mode = prefs.get_launch_mode()
+    if launch_mode is None:
+        launch_mode = prefs.get_launch_mode()
     player_name = prefs.get_player_name()
 
     cmd = [

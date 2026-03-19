@@ -63,10 +63,19 @@ class TestLaunchModePrefs:
     def test_launch_mode_roundtrip(self, tmp_path):
         """Setting and reading launch mode works for all valid values."""
         prefs_file = tmp_path / "wopc_prefs.ini"
-        for mode in ("solo", "host", "join"):
+        for mode in ("solo", "multiplayer"):
             with patch.object(prefs, "PREFS_FILE", prefs_file):
                 prefs.set_launch_mode(mode)
                 assert prefs.get_launch_mode() == mode
+
+    def test_legacy_host_join_falls_back_to_solo(self, tmp_path):
+        """Legacy 'host'/'join' values fall back to 'solo'."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            prefs.set_launch_mode("host")
+            assert prefs.get_launch_mode() == "solo"
+            prefs.set_launch_mode("join")
+            assert prefs.get_launch_mode() == "solo"
 
     def test_invalid_launch_mode_falls_back_to_solo(self, tmp_path):
         """Invalid launch mode falls back to 'solo'."""

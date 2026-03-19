@@ -15,14 +15,17 @@ withourpowerscombined/
     deploy.py                   Creates C:\ProgramData\WOPC\ game directory
     game_config.py              Generates wopc_game_config.lua (quickstart config)
     init_generator.py           Dynamic init_wopc.lua generation (delegates to mods.py)
-    prefs.py                    User preferences (INI infrastructure, map, player)
+    prefs.py                    User preferences (INI infrastructure, map, player, launch mode)
     map_scanner.py              Map directory scanner
+    lobby.py                    TCP lobby server/client (multiplayer coordination)
+    file_transfer.py            Chunked file streaming (map/mod transfer over TCP)
+    discovery.py                LAN game discovery (UDP beacons) [planned]
     log.py                      Logging configuration
     toolchain.py                Compiler discovery (Clang, GCC, LD)
     manifest.py                 Patch manifest parsing (wopc_patches.toml)
     patcher.py                  Build orchestration for patched exe
     gui/                        GUI launcher (customtkinter)
-      app.py                    WopcApp — main window, map selector, PLAY MATCH
+      app.py                    WopcApp — main window, multiplayer lobby, game browser
       worker.py                 SetupWorker — async setup in background thread
       wopc.ico                  Application icon
   build_exe.py                  PyInstaller build → dist/WOPC-Launcher.exe (~18 MB)
@@ -41,7 +44,7 @@ withourpowerscombined/
   bundled/gamedata/             LOUD content SCDs (not in git — from releases)
   wopc_patches.toml             Patch manifest (exclude list)
   patches/build/                Build output (gitignored)
-  tests/                        pytest suite (105+ tests, ~78% coverage)
+  tests/                        pytest suite (195+ tests, ~65% coverage)
   dist/                         Built executables (gitignored)
     WOPC-Launcher.exe           Single-file GUI launcher (~18 MB, see below)
   .claude/                      Session state + developer tooling
