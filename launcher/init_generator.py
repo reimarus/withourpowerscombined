@@ -1,6 +1,6 @@
 """Dynamic init_wopc.lua generator.
 
-Writes a fresh ``init_wopc.lua`` into ``C:\\ProgramData\\WOPC\\bin\\``
+Writes a fresh ``init_wopc.lua`` into ``SCFA\\WOPC\\bin\\``
 every time the user clicks **PLAY MATCH**.  This allows content packs
 (gamedata SCDs) to be toggled on/off from the launcher UI — disabled
 packs are simply omitted from the mount list.
@@ -86,8 +86,8 @@ dofile(InitFileDir.."\\\\CommonDataPath.lua");
 -- Resolve WOPC root: bin's parent directory
 local WOPCRoot = InitFileDir .. '\\\\..'
 
--- Load SCFA path from generated config (written by setup.py)
--- This file sets: SCFARoot = "C:\\\\Program Files (x86)\\\\Steam\\\\..."
+-- Load SCFA path from generated config (written by setup)
+-- This file sets: SCFARoot = WOPCRoot .. "\\\\.."
 dofile(InitFileDir.."\\\\wopc_paths.lua");
 
 -- =========================================================================

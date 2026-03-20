@@ -61,6 +61,7 @@ def main() -> int:
         exe_path = repo_root / "WOPC-Launcher.exe"
         print(f"\nBuild successful: {exe_path}")
         print(f"  Size: {exe_path.stat().st_size / 1_048_576:.1f} MB")
+        print("  Copy to your Supreme Commander Forged Alliance install folder to use.")
         # Clean up leftover dist/ directory if present
         dist_dir = repo_root / "dist"
         if dist_dir.exists():

@@ -26,7 +26,6 @@ DEFAULT_PREFS = {
         "host_port": "15000",
         "join_address": "",  # e.g. "192.168.1.50:15000"
         "expected_humans": "2",  # number of human players for host mode
-        "scfa_path": "",  # auto-discovered or user-selected SCFA install path
     },
     "Mods": {
         # Mods are stored as keys with boolean values (Enabled/Disabled)
@@ -188,24 +187,4 @@ def set_expected_humans(count: int) -> None:
     count = max(2, min(8, count))
     parser = load_prefs()
     parser.set("Game", "expected_humans", str(count))
-    save_prefs(parser)
-
-
-# ---------------------------------------------------------------------------
-# SCFA install path
-# ---------------------------------------------------------------------------
-
-
-def get_scfa_path() -> str:
-    """Return the saved SCFA install path, or empty string."""
-    parser = load_prefs()
-    return parser.get("Game", "scfa_path", fallback="")
-
-
-def set_scfa_path(path: str) -> None:
-    """Save the SCFA install path."""
-    parser = load_prefs()
-    if not parser.has_section("Game"):
-        parser.add_section("Game")
-    parser.set("Game", "scfa_path", path.strip())
     save_prefs(parser)

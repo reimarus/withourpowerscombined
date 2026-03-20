@@ -72,7 +72,7 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
     for subdir in ["maps", "sounds", "usermods"]:
         (bundled / subdir).mkdir()
 
-    wopc = tmp_path / "WOPC_DEPLOY"
+    wopc = scfa / "WOPC"
     wopc.mkdir(exist_ok=True)
 
     patch_build = tmp_path / "patch_build"

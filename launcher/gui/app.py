@@ -2,7 +2,6 @@ import logging
 import sys
 import threading
 import time
-import tkinter.filedialog
 from typing import TYPE_CHECKING, Any, ClassVar
 
 try:
@@ -2552,6 +2551,10 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_LAUNCH if wopc_ok else COLOR_WARN,
         )
 
+        self.status_scfa.grid(row=3, column=0, padx=20, pady=(4, 2), sticky="w")
+        self.status_bundled.grid(row=4, column=0, padx=20, pady=2, sticky="w")
+        self.status_wopc.grid(row=5, column=0, padx=20, pady=(2, 8), sticky="w")
+
         if not scfa_ok:
             self.primary_btn.configure(
                 text="MISSING GAME FILES",
@@ -2559,31 +2562,10 @@ class WopcApp(BaseApp):  # type: ignore
                 fg_color=COLOR_TEXT_MUTED,
                 text_color=COLOR_BG,
             )
-            self.log("ERROR: SCFA installation not found. Click 'Browse...' to locate it.")
-            # Show browse button if not already shown
-            if not hasattr(self, "_scfa_browse_btn"):
-                self._scfa_browse_btn = ctk.CTkButton(
-                    self.sidebar,
-                    text="📂  Browse for SCFA...",
-                    font=ctk.CTkFont(size=12),
-                    height=30,
-                    fg_color=COLOR_ACCENT,
-                    hover_color=COLOR_ACCENT_HOVER,
-                    text_color=COLOR_BG,
-                    corner_radius=4,
-                    command=self._browse_for_scfa,
-                )
-            self._scfa_browse_btn.grid(row=3, column=0, padx=20, pady=(2, 2), sticky="ew")
-            self.status_scfa.grid(row=4, column=0, padx=20, pady=(2, 2), sticky="w")
-            self.status_bundled.grid(row=5, column=0, padx=20, pady=2, sticky="w")
-            self.status_wopc.grid(row=6, column=0, padx=20, pady=(2, 8), sticky="w")
-        else:
-            # Hide browse button if SCFA is found
-            if hasattr(self, "_scfa_browse_btn"):
-                self._scfa_browse_btn.grid_forget()
-            self.status_scfa.grid(row=3, column=0, padx=20, pady=(4, 2), sticky="w")
-            self.status_bundled.grid(row=4, column=0, padx=20, pady=2, sticky="w")
-            self.status_wopc.grid(row=5, column=0, padx=20, pady=(2, 8), sticky="w")
+            self.log(
+                "ERROR: SCFA not found. Place WOPC-Launcher.exe in the "
+                "Supreme Commander Forged Alliance install folder."
+            )
 
         if scfa_ok and not wopc_ok:
             self.primary_btn.configure(
@@ -2608,29 +2590,6 @@ class WopcApp(BaseApp):  # type: ignore
         # Always populate maps and mods regardless of setup status
         self._refresh_mods_list()
         self._refresh_map_list()
-
-    def _browse_for_scfa(self) -> None:
-        """Open a folder picker to locate the SCFA installation."""
-        from launcher.scfa_finder import save_scfa_path, validate_scfa_path
-
-        folder = tkinter.filedialog.askdirectory(
-            title="Select Supreme Commander: Forged Alliance install folder",
-            mustexist=True,
-        )
-        if not folder:
-            return
-        path = __import__("pathlib").Path(folder)
-        if validate_scfa_path(path):
-            config.SCFA_STEAM = path
-            config.SCFA_BIN = path / "bin"
-            save_scfa_path(config.WOPC_ROOT / "wopc_prefs.ini", path)
-            self.log(f"SCFA found at: {path}")
-            self._check_installation_status()
-        else:
-            self.log(
-                "ERROR: Selected folder does not look like an SCFA installation. "
-                "Expected bin/SupremeCommander.exe and gamedata/ directory."
-            )
 
     def _on_primary_click(self) -> None:
         """Handle main button action -- SOLO mode only."""

@@ -5,7 +5,7 @@ Items to tackle over time, roughly grouped by priority.
 ## Critical Bugs — First-Time Setup Broken
 
 1. ~~**Asset download stuck / no progress shown**~~ ✅ — progress bar + step labels in GUI (PR #26)
-2. ~~**Auto-discover SCFA install path**~~ ✅ — Steam VDF, registry, common paths, folder picker fallback (PR #26)
+2. ~~**Auto-discover SCFA install path**~~ ✅ — superseded: exe now lives in SCFA folder, no discovery needed (PR #30)
 3. ~~**WOPC asset download failing**~~ ✅ — 30s timeout, 3 retries with backoff, clear error messages (PR #26)
 4. **Publish launcher exe to GitHub Release** — the exe must be the most prominent download on the repo. Upload `WOPC-Launcher.exe` to a pinned release so players can find it immediately.
 5. ~~**Map preview not working (solo)**~~ ✅ — Pillow bundled in exe (PR #26)
