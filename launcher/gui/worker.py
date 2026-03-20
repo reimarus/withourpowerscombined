@@ -1,5 +1,6 @@
 import sys
 import threading
+import traceback
 from collections.abc import Callable
 from pathlib import Path
 
@@ -38,5 +39,7 @@ class SetupWorker(threading.Thread):
             self.on_log("Deployment completed successfully!")
             self.on_complete(success)
         except Exception as e:
+            tb = traceback.format_exc()
             self.on_log(f"Critical error during setup: {e}")
+            self.on_log(tb)
             self.on_complete(False)
