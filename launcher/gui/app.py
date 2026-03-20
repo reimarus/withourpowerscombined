@@ -193,7 +193,8 @@ class WopcApp(BaseApp):  # type: ignore
         """Return a thin 1-pixel accent line for use as a section separator."""
         return ctk.CTkFrame(parent, fg_color=color, height=1, corner_radius=0)
 
-    _PREVIEW_SIZE: ClassVar[int] = 220
+    _PREVIEW_SIZE: ClassVar[int] = 320
+    _LOBBY_PREVIEW_SIZE: ClassVar[int] = 280
 
     def _update_map_preview(self, info: "map_scanner.MapInfo | None") -> None:
         """Load and display the map preview image and metadata."""
@@ -204,6 +205,8 @@ class WopcApp(BaseApp):  # type: ignore
             self.map_preview_desc.configure(text="")
             if hasattr(self, "lobby_map_preview_label"):
                 self.lobby_map_preview_label.configure(image=None, text="No Preview")
+                self.lobby_map_label.configure(text="No map selected")
+                self.lobby_map_info.configure(text="")
             return
 
         # Metadata labels
@@ -214,23 +217,31 @@ class WopcApp(BaseApp):  # type: ignore
             parts.append(info.size_label)
         if info.is_campaign:
             parts.append("Campaign")
+        detail_text = "  ·  ".join(parts) if parts else ""
         self.map_preview_name.configure(text=info.display_name)
-        self.map_preview_detail.configure(text="  ·  ".join(parts) if parts else "")
+        self.map_preview_detail.configure(text=detail_text)
         self.map_preview_desc.configure(text=info.description or "")
 
-        # Preview image
+        # Preview image — solo screen (large)
         ctk_img = None
+        lobby_ctk_img = None
         if _PIL_AVAILABLE and info.preview_path and info.preview_path.exists():
             try:
-                img = PilImage.open(info.preview_path).convert("RGB")
-                img = img.resize((self._PREVIEW_SIZE, self._PREVIEW_SIZE), PilImage.LANCZOS)
+                raw = PilImage.open(info.preview_path).convert("RGB")
+                # Solo preview (larger)
+                solo = raw.resize((self._PREVIEW_SIZE, self._PREVIEW_SIZE), PilImage.LANCZOS)
                 ctk_img = ctk.CTkImage(
-                    light_image=img,
-                    dark_image=img,
+                    light_image=solo,
+                    dark_image=solo,
                     size=(self._PREVIEW_SIZE, self._PREVIEW_SIZE),
                 )
                 self.map_preview_label.configure(image=ctk_img, text="")
                 self._preview_ctk_image = ctk_img
+                # Lobby preview (slightly smaller)
+                lsz = self._LOBBY_PREVIEW_SIZE
+                lobby = raw.resize((lsz, lsz), PilImage.LANCZOS)
+                lobby_ctk_img = ctk.CTkImage(light_image=lobby, dark_image=lobby, size=(lsz, lsz))
+                self._lobby_preview_ctk_image = lobby_ctk_img
             except Exception as exc:
                 logger.warning("Failed to load map preview %s: %s", info.preview_path, exc)
 
@@ -240,10 +251,14 @@ class WopcApp(BaseApp):  # type: ignore
 
         # Also update lobby preview widget
         if hasattr(self, "lobby_map_preview_label"):
-            if ctk_img is not None:
+            if lobby_ctk_img is not None:
+                self.lobby_map_preview_label.configure(image=lobby_ctk_img, text="")
+            elif ctk_img is not None:
                 self.lobby_map_preview_label.configure(image=ctk_img, text="")
             else:
                 self.lobby_map_preview_label.configure(image=None, text="No Preview")
+            self.lobby_map_label.configure(text=info.display_name)
+            self.lobby_map_info.configure(text=detail_text)
 
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
@@ -495,21 +510,81 @@ class WopcApp(BaseApp):  # type: ignore
         # --- Map Selector Panel ---
         self.config_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         self.config_panel.grid(row=1, column=0, sticky="nsew")
-        self.config_panel.grid_rowconfigure(2, weight=1)
-        self.config_panel.grid_columnconfigure(0, weight=2)  # list column
-        self.config_panel.grid_columnconfigure(1, weight=1)  # preview column
+        self.config_panel.grid_rowconfigure(1, weight=1)
+        self.config_panel.grid_columnconfigure(0, weight=2)  # preview column (left)
+        self.config_panel.grid_columnconfigure(1, weight=1)  # map list column (right)
+
+        # --- Map Preview Panel (LEFT column — prominent, FAF-style) ---
+        preview_panel = ctk.CTkFrame(self.config_panel, fg_color=COLOR_PANEL, corner_radius=4)
+        preview_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=10, pady=10)
+        preview_panel.grid_columnconfigure(0, weight=1)
 
         self.selected_map_label = ctk.CTkLabel(
-            self.config_panel,
+            preview_panel,
             text="Selected Map: None",
             text_color=COLOR_ACCENT,
             font=ctk.CTkFont(size=14, weight="bold"),
         )
-        self.selected_map_label.grid(row=0, column=0, pady=(10, 5), padx=20, sticky="w")
+        self.selected_map_label.grid(row=0, column=0, pady=(10, 5), padx=12, sticky="w")
+
+        # Large preview image
+        _ps = self._PREVIEW_SIZE
+        self.map_preview_label = ctk.CTkLabel(
+            preview_panel,
+            text="No Preview",
+            text_color=COLOR_TEXT_MUTED,
+            fg_color=COLOR_BG,
+            width=_ps,
+            height=_ps,
+            corner_radius=3,
+        )
+        self.map_preview_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="n")
+
+        self.map_preview_name = ctk.CTkLabel(
+            preview_panel,
+            text="",
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            wraplength=_ps,
+            justify="left",
+        )
+        self.map_preview_name.grid(row=2, column=0, padx=12, pady=(0, 2), sticky="nw")
+
+        self.map_preview_detail = ctk.CTkLabel(
+            preview_panel,
+            text="",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=12),
+        )
+        self.map_preview_detail.grid(row=3, column=0, padx=12, pady=(0, 4), sticky="nw")
+
+        self.map_preview_desc = ctk.CTkLabel(
+            preview_panel,
+            text="",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11, slant="italic"),
+            wraplength=_ps,
+            justify="left",
+        )
+        self.map_preview_desc.grid(row=4, column=0, padx=12, pady=(0, 10), sticky="nw")
+
+        # --- Map List (RIGHT column — compact, scrollable) ---
+        list_panel = ctk.CTkFrame(self.config_panel, fg_color="transparent")
+        list_panel.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(0, 10), pady=10)
+        list_panel.grid_rowconfigure(2, weight=1)
+        list_panel.grid_columnconfigure(0, weight=1)
+
+        list_header = ctk.CTkLabel(
+            list_panel,
+            text="MAP LIST",
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        list_header.grid(row=0, column=0, sticky="w", pady=(0, 5))
 
         # Map Filters
-        self.filter_frame = ctk.CTkFrame(self.config_panel, fg_color="transparent")
-        self.filter_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 5))
+        self.filter_frame = ctk.CTkFrame(list_panel, fg_color="transparent")
+        self.filter_frame.grid(row=1, column=0, sticky="ew", pady=(0, 5))
         self.filter_frame.grid_columnconfigure(0, weight=1)
 
         self.search_var = ctk.StringVar()
@@ -520,7 +595,7 @@ class WopcApp(BaseApp):  # type: ignore
             placeholder_text="Search maps...",
             height=28,
         )
-        self.search_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self.search_entry.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 4))
 
         self.type_var = ctk.StringVar(value="All")
         self.type_menu = ctk.CTkOptionMenu(
@@ -528,10 +603,10 @@ class WopcApp(BaseApp):  # type: ignore
             values=["All", "Skirmish", "Campaign"],
             variable=self.type_var,
             command=self._apply_map_filters,
-            width=100,
-            height=28,
+            width=90,
+            height=26,
         )
-        self.type_menu.grid(row=0, column=1, padx=(0, 10))
+        self.type_menu.grid(row=1, column=0, padx=(0, 4), sticky="ew")
 
         self.players_var = ctk.StringVar(value="Any")
         self.players_menu = ctk.CTkOptionMenu(
@@ -539,10 +614,10 @@ class WopcApp(BaseApp):  # type: ignore
             values=["Any", "2", "4", "6", "8", "10", "12", "14", "16"],
             variable=self.players_var,
             command=self._apply_map_filters,
-            width=70,
-            height=28,
+            width=60,
+            height=26,
         )
-        self.players_menu.grid(row=0, column=2, padx=(0, 10))
+        self.players_menu.grid(row=1, column=1, padx=(0, 4), sticky="ew")
 
         self.size_var = ctk.StringVar(value="Any")
         self.size_menu = ctk.CTkOptionMenu(
@@ -550,61 +625,14 @@ class WopcApp(BaseApp):  # type: ignore
             values=["Any", "5km", "10km", "20km", "40km", "81km"],
             variable=self.size_var,
             command=self._apply_map_filters,
-            width=80,
-            height=28,
+            width=70,
+            height=26,
         )
-        self.size_menu.grid(row=0, column=3)
+        self.size_menu.grid(row=1, column=2, sticky="ew")
 
-        self.map_scroll = ctk.CTkScrollableFrame(self.config_panel, fg_color="transparent")
-        self.map_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.map_scroll = ctk.CTkScrollableFrame(list_panel, fg_color="transparent")
+        self.map_scroll.grid(row=2, column=0, sticky="nsew", pady=(4, 0))
         self.map_buttons: list[Any] = []
-
-        # --- Map Preview Panel (right column of config_panel) ---
-        preview_panel = ctk.CTkFrame(self.config_panel, fg_color=COLOR_PANEL, corner_radius=4)
-        preview_panel.grid(row=0, column=1, rowspan=3, sticky="nsew", padx=(0, 10), pady=10)
-        preview_panel.grid_rowconfigure(1, weight=1)
-        preview_panel.grid_columnconfigure(0, weight=1)
-
-        # Preview image placeholder (shown when no image available)
-        _preview_size = 220
-        self.map_preview_label = ctk.CTkLabel(
-            preview_panel,
-            text="No Preview",
-            text_color=COLOR_TEXT_MUTED,
-            fg_color=COLOR_BG,
-            width=_preview_size,
-            height=_preview_size,
-            corner_radius=3,
-        )
-        self.map_preview_label.grid(row=0, column=0, padx=10, pady=(10, 6), sticky="n")
-
-        self.map_preview_name = ctk.CTkLabel(
-            preview_panel,
-            text="",
-            text_color=COLOR_TEXT_GOLD,
-            font=ctk.CTkFont(size=13, weight="bold"),
-            wraplength=_preview_size,
-            justify="left",
-        )
-        self.map_preview_name.grid(row=1, column=0, padx=10, pady=(0, 2), sticky="nw")
-
-        self.map_preview_detail = ctk.CTkLabel(
-            preview_panel,
-            text="",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=11),
-        )
-        self.map_preview_detail.grid(row=2, column=0, padx=10, pady=(0, 4), sticky="nw")
-
-        self.map_preview_desc = ctk.CTkLabel(
-            preview_panel,
-            text="",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=11, slant="italic"),
-            wraplength=_preview_size,
-            justify="left",
-        )
-        self.map_preview_desc.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="nw")
 
         # --- Player Slots + Game Options Panel ---
         self.lower_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
@@ -783,11 +811,12 @@ class WopcApp(BaseApp):  # type: ignore
         map_header.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
 
         # Lobby map preview image
+        _lps = self._LOBBY_PREVIEW_SIZE
         self.lobby_map_preview_label = ctk.CTkLabel(
             map_frame,
             text="No Preview",
-            width=180,
-            height=180,
+            width=_lps,
+            height=_lps,
             fg_color=COLOR_PANEL,
             corner_radius=4,
             text_color=COLOR_TEXT_MUTED,

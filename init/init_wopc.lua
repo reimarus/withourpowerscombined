@@ -21,7 +21,7 @@ do
 dofile(InitFileDir.."\\CommonDataPath.lua");
 
 -- Resolve WOPC root: bin's parent directory
-local WOPCRoot = InitFileDir .. '\\..'
+WOPCRoot = InitFileDir .. '\\..'
 
 -- Load SCFA path from generated config (written by setup.py)
 -- This file sets: SCFARoot = "C:\\Program Files (x86)\\Steam\\..."
