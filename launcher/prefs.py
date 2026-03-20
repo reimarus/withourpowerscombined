@@ -33,6 +33,7 @@ DEFAULT_PREFS = {
         # e.g., "brewlan": "True"
     },
     "Display": {"x": "1920", "y": "1080", "windowed": "False"},
+    "Window": {"width": "1024", "height": "768"},
 }
 
 

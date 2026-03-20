@@ -116,7 +116,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._current_screen: str = "solo"
 
         self.title("WOPC - Match Lobby")
-        self.geometry("1024x768")
+        self._restore_window_size()
         self.minsize(800, 600)
         self.configure(fg_color=COLOR_BG)
         self._set_window_icon()
@@ -137,6 +137,36 @@ class WopcApp(BaseApp):  # type: ignore
                 self.iconbitmap(str(icon_path))
             except Exception as exc:
                 logger.warning("Failed to set window icon: %s", exc)
+
+    def _restore_window_size(self) -> None:
+        """Restore the last saved window dimensions from user prefs."""
+        try:
+            parser = prefs.load_prefs()
+            w = parser.getint("Window", "width", fallback=1024)
+            h = parser.getint("Window", "height", fallback=768)
+            # Clamp to reasonable minimums
+            w = max(w, 800)
+            h = max(h, 600)
+            self.geometry(f"{w}x{h}")
+        except Exception:
+            self.geometry("1024x768")
+
+    def _save_window_size(self) -> None:
+        """Persist current window dimensions to user prefs."""
+        try:
+            # winfo_width/height return actual rendered size
+            w = self.winfo_width()
+            h = self.winfo_height()
+            if w < 100 or h < 100:
+                return  # Window not yet rendered or minimized
+            parser = prefs.load_prefs()
+            if not parser.has_section("Window"):
+                parser.add_section("Window")
+            parser.set("Window", "width", str(w))
+            parser.set("Window", "height", str(h))
+            prefs.save_prefs(parser)
+        except Exception:
+            pass  # Don't break shutdown over prefs
 
         # Configure 3x3 grid layout (Sidebar | Lobby | Mod Pane)
         self.grid_rowconfigure(0, weight=1)
@@ -3135,7 +3165,8 @@ class WopcApp(BaseApp):  # type: ignore
         self.after(0, self._refresh_game_browser, games)
 
     def destroy(self) -> None:
-        """Clean up lobby connections before closing the window."""
+        """Save window size and clean up lobby connections before closing."""
+        self._save_window_size()
         self._stop_beacon_broadcaster()
         self._stop_beacon_listener()
         self._stop_lobby_server()

@@ -154,3 +154,37 @@ class TestExpectedHumansPrefs:
         with patch.object(prefs, "PREFS_FILE", prefs_file):
             prefs.set_expected_humans(99)
             assert prefs.get_expected_humans() == 8
+
+
+class TestWindowSizePrefs:
+    """Test window size persistence in prefs."""
+
+    def test_default_window_size(self, tmp_path):
+        """Default window size is 1024x768."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            parser = prefs.load_prefs()
+            assert parser.get("Window", "width") == "1024"
+            assert parser.get("Window", "height") == "768"
+
+    def test_window_section_created_on_load(self, tmp_path):
+        """Window section is created with defaults if missing."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        prefs_file.write_text("[Game]\nactive_map = test\n")
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            parser = prefs.load_prefs()
+            assert parser.has_section("Window")
+            assert parser.get("Window", "width") == "1024"
+
+    def test_window_size_roundtrip(self, tmp_path):
+        """Saving and loading custom window size works."""
+        prefs_file = tmp_path / "wopc_prefs.ini"
+        with patch.object(prefs, "PREFS_FILE", prefs_file):
+            parser = prefs.load_prefs()
+            parser.set("Window", "width", "1280")
+            parser.set("Window", "height", "900")
+            prefs.save_prefs(parser)
+
+            parser2 = prefs.load_prefs()
+            assert parser2.get("Window", "width") == "1280"
+            assert parser2.get("Window", "height") == "900"
