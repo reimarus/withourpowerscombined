@@ -55,8 +55,9 @@ end
 
 --- Build the flat gameInfo table that LobbyComm:LaunchGame() expects.
 ---@param cfg table  The config table loaded from wopc_game_config.lua
+---@param hostPeerID string  The host's peer ID from comm:GetLocalPlayerID()
 ---@return table gameInfo
-local function BuildGameInfo(cfg)
+local function BuildGameInfo(cfg, hostPeerID)
     -- Game options — sensible skirmish defaults, overridden by config
     local options = {
         Score = 'no',
@@ -87,6 +88,10 @@ local function BuildGameInfo(cfg)
     -- Types must match what the C++ engine expects in moho.lobby_methods.LaunchGame.
     -- Key insight: OwnerID is a string (peer ID), not a number.
     -- Fields like Team, Faction, StartSpot, PlayerColor are numbers.
+    -- CRITICAL: ALL players (human AND AI) must have OwnerID = hostPeerID.
+    -- The engine waits for all unique OwnerIDs to connect before starting
+    -- the sim.  AI slots owned by a different ID cause "waiting for players"
+    -- to hang forever.  FAF's lobby.lua uses hostID for AI slots (line 538).
     local playerOptions = {}
     for i, p in cfg.Players do
         local isHuman = p.Human != false
@@ -102,8 +107,7 @@ local function BuildGameInfo(cfg)
             AIPersonality = p.AIPersonality or '',
             Human = isHuman,
             Civilian = false,
-            -- OwnerID must be a string (peer ID). Use "0" for host, tostring(i) for others.
-            OwnerID = isHuman and tostring(i - 1) or tostring(i - 1),
+            OwnerID = hostPeerID,
         }
     end
 
@@ -193,6 +197,11 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
     -- Tell the engine we're hosting a game (friendsOnly = false)
     comm:HostGame(false)
 
+    -- Get the host's peer ID — ALL player slots (human + AI) must use this
+    -- as their OwnerID, otherwise the engine waits for non-existent peers.
+    local hostPeerID = tostring(comm:GetLocalPlayerID())
+    LOG("WOPC QuickStart: Host peer ID = " .. hostPeerID)
+
     -- Apply WOPC player settings to engine profile prefs.
     -- These must be set before LaunchGame() transitions to game state,
     -- because FAF UI modules read profile prefs at import time.
@@ -216,7 +225,7 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
     end
 
     -- Build the flat gameInfo and launch directly into the simulation
-    local gameInfo = BuildGameInfo(cfg)
+    local gameInfo = BuildGameInfo(cfg, hostPeerID)
 
     LOG("WOPC QuickStart: Launching game with " .. table.getn(cfg.Players) .. " players...")
     local launchOk, launchErr = pcall(function()
