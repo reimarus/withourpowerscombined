@@ -29,7 +29,7 @@ else:
         ctk = None  # type: ignore[assignment]
         BaseApp = object  # type: ignore[misc, no-redef]
 
-from launcher import config, file_transfer, prefs
+from launcher import config, file_transfer, prefs, updater
 from launcher.gui.worker import SetupWorker
 from launcher.wopc import cmd_launch
 
@@ -154,6 +154,11 @@ class WopcApp(BaseApp):  # type: ignore
 
         self._check_installation_status()
         self._bind_hotkeys()
+
+        # Clean up old exe from previous update and check for new version
+        updater.cleanup_old_exe()
+        self._pending_update: updater.UpdateInfo | None = None
+        threading.Thread(target=self._check_for_update, daemon=True).start()
 
     def _make_divider(self, parent: Any, color: str = COLOR_ACCENT_DIM) -> Any:
         """Return a thin 1-pixel accent line for use as a section separator."""
@@ -2661,6 +2666,66 @@ class WopcApp(BaseApp):  # type: ignore
                 )
 
         self.after(0, _update)
+
+    # ------------------------------------------------------------------
+    # Self-update
+    # ------------------------------------------------------------------
+
+    def _check_for_update(self) -> None:
+        """Background thread: check GitHub for a new launcher version."""
+        info = updater.check_for_update()
+        if info is not None:
+            self._pending_update = info
+            self.after(0, self._show_update_available)
+
+    def _show_update_available(self) -> None:
+        """Show an update badge on the version label."""
+        info = self._pending_update
+        if info is None:
+            return
+        size_mb = info.size_bytes / 1e6
+        self.version_label.configure(
+            text=f"v{config.VERSION}  ⬆ Update v{info.version} ({size_mb:.0f} MB)",
+            text_color=COLOR_ACCENT,
+            cursor="hand2",
+        )
+        self.version_label.bind("<Button-1>", lambda e: self._start_update())
+
+    def _start_update(self) -> None:
+        """Download and apply the update."""
+        info = self._pending_update
+        if info is None:
+            return
+        self.version_label.configure(text="Downloading update...", cursor="")
+        self.version_label.unbind("<Button-1>")
+        self.log(f"Downloading launcher v{info.version} ...")
+
+        def _do_update():
+            def _on_progress(downloaded: int, total: int) -> None:
+                if total > 0:
+                    pct = int(downloaded * 100 / total)
+                    self.after(
+                        0,
+                        lambda p=pct: self.version_label.configure(
+                            text=f"Downloading update... {p}%"
+                        ),
+                    )
+
+            tmp = updater.download_update(info, progress_cb=_on_progress)
+            if tmp is not None:
+                self.after(0, lambda: self.log("Update downloaded. Restarting..."))
+                self.after(500, lambda: updater.apply_update(tmp))
+            else:
+                self.after(
+                    0,
+                    lambda: self.version_label.configure(
+                        text=f"v{config.VERSION} (update failed)",
+                        text_color=COLOR_DANGER,
+                    ),
+                )
+                self.after(0, lambda: self.log("Update download failed."))
+
+        threading.Thread(target=_do_update, daemon=True).start()
 
     def _launch_game(self) -> None:
         """Run the game in a background thread (solo mode)."""
