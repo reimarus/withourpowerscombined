@@ -84,7 +84,7 @@ do
 dofile(InitFileDir.."\\\\CommonDataPath.lua");
 
 -- Resolve WOPC root: bin's parent directory
-local WOPCRoot = InitFileDir .. '\\\\..'
+WOPCRoot = InitFileDir .. '\\\\..'
 
 -- Load SCFA path from generated config (written by setup)
 -- This file sets: SCFARoot = WOPCRoot .. "\\\\.."
