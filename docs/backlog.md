@@ -14,9 +14,9 @@ Items to tackle over time, roughly grouped by priority.
 
 ## High Priority — Player Experience
 
-5. **Launcher self-update** — when a new launcher version is available on GitHub Releases, download and replace the exe from within the launcher itself. Players should never need to visit GitHub manually. Check on startup, show update button, download in background, restart.
+5. ~~**Launcher self-update**~~ ✅ — check GitHub Releases on startup, download and replace exe, restart (PR #28)
 6. **SupCom-authentic UI assets** — the launcher currently uses generic CustomTkinter buttons and backgrounds. Extract and implement actual Supreme Commander design assets (metallic button frames, brushed-metal backgrounds, faction-themed borders, glowing hover states) so the launcher feels like a modern SupCom experience, not a generic app with a color theme.
-7. **Remember launcher window size** — persist the user's last window dimensions and restore on next launch.
+7. ~~**Remember launcher window size**~~ ✅ — persist width/height in wopc_prefs.ini Window section, restore on launch (PR #29)
 8. **LOUD color picker** — use LOUD's color palette/picker for faction and player colors instead of the generic one.
 9. **Content-v2 release build** — run `scripts/build_content_release.py` and upload faf_ui.scd, wopc-maps.zip, strategic icons to `content-v2` GitHub Release so the standalone installer can download them
 10. **Player ratings / balancing** — track skill ratings for fairer matchmaking (ELO or similar)
