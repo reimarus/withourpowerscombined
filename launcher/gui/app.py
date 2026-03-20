@@ -120,6 +120,20 @@ class WopcApp(BaseApp):  # type: ignore
         self.configure(fg_color=COLOR_BG)
         self._set_window_icon()
 
+        # Configure 3x3 grid layout (Sidebar | Lobby | Mod Pane)
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=0, minsize=240)  # Left Sidebar
+        self.grid_columnconfigure(1, weight=3)  # Main Lobby Area
+        self.grid_columnconfigure(2, weight=1, minsize=260)  # Right Mod Pane
+
+        self._build_sidebar()
+        self._build_main_lobby()
+        self._build_browser_screen()
+        self._build_lobby_screen()
+        self._build_mod_pane()
+        # Show the correct initial screen
+        self._show_screen("solo")
+
     def _set_window_icon(self) -> None:
         """Set the application window icon if it exists."""
         from pathlib import Path
@@ -166,20 +180,6 @@ class WopcApp(BaseApp):  # type: ignore
             prefs.save_prefs(parser)
         except Exception:
             pass  # Don't break shutdown over prefs
-
-        # Configure 3x3 grid layout (Sidebar | Lobby | Mod Pane)
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=0, minsize=240)  # Left Sidebar
-        self.grid_columnconfigure(1, weight=3)  # Main Lobby Area
-        self.grid_columnconfigure(2, weight=1, minsize=260)  # Right Mod Pane
-
-        self._build_sidebar()
-        self._build_main_lobby()
-        self._build_browser_screen()
-        self._build_lobby_screen()
-        self._build_mod_pane()
-        # Show the correct initial screen
-        self._show_screen("solo")
 
         self._check_installation_status()
         self._bind_hotkeys()
