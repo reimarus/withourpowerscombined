@@ -1,6 +1,7 @@
 """WOPC configuration - path constants and version info."""
 
 import os
+import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -10,27 +11,34 @@ except PackageNotFoundError:
     VERSION = "0.1.0-dev"
 
 # --- Game installation paths ---
-
-# WOPC deployed directory (defined early so scfa_finder can use prefs path)
-WOPC_ROOT = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "WOPC"
-
-# Steam SCFA root — auto-discovered via fallback chain:
-#   1. SCFA_STEAM env var  2. saved prefs  3. Steam VDF  4. registry  5. common paths
-_SCFA_DEFAULT = Path(
-    r"C:\Program Files (x86)\Steam\steamapps\common\Supreme Commander Forged Alliance"
-)
+#
+# The launcher exe lives directly in the SCFA install folder.  When frozen
+# (PyInstaller exe), the parent directory of the exe *is* the SCFA root.
+# WOPC content is deployed to SCFA/WOPC/ (alongside LOUD's SCFA/LOUD/).
 
 
-def _resolve_scfa_path() -> Path:
-    """Resolve the SCFA install path using auto-discovery."""
-    from launcher.scfa_finder import find_scfa_path
+def _resolve_paths() -> tuple[Path, Path]:
+    """Derive SCFA root and WOPC root from the exe location.
 
-    prefs_file = WOPC_ROOT / "wopc_prefs.ini"
-    result = find_scfa_path(prefs_file)
-    return result if result is not None else _SCFA_DEFAULT
+    Frozen (PyInstaller exe): exe sits in SCFA root → parent = SCFA.
+    Dev mode:                 SCFA_STEAM env var, or fallback default.
+    """
+    if getattr(sys, "frozen", False):
+        scfa = Path(sys.executable).parent.resolve()
+    else:
+        env = os.environ.get("SCFA_STEAM")
+        scfa = (
+            Path(env)
+            if env
+            else Path(
+                r"C:\Program Files (x86)\Steam\steamapps\common"
+                r"\Supreme Commander Forged Alliance"
+            )
+        )
+    return scfa, scfa / "WOPC"
 
 
-SCFA_STEAM = _resolve_scfa_path()
+SCFA_STEAM, WOPC_ROOT = _resolve_paths()
 
 # --- WOPC deployed subdirectories ---
 

@@ -96,9 +96,7 @@ def cmd_status() -> int:
     )
 
     if not scfa_ok:
-        logger.error(
-            "\nERROR: SCFA not found. Set SCFA_STEAM environment variable to your install path."
-        )
+        logger.error("\nERROR: SCFA not found. Place WOPC-Launcher.exe in the SCFA install folder.")
         return 1
     if not bundled_ok:
         logger.warning("\nWARNING: Bundled assets not found in repo.")
@@ -109,7 +107,10 @@ def cmd_setup() -> int:
     """Create the WOPC game directory."""
     # Check prerequisites
     if not SCFA_STEAM.exists():
-        logger.error("ERROR: SCFA not found at %s", SCFA_STEAM)
+        logger.error(
+            "ERROR: SCFA not found at %s. Place WOPC-Launcher.exe in the SCFA install folder.",
+            SCFA_STEAM,
+        )
         return 1
     if not REPO_BUNDLED_GAMEDATA.exists():
         logger.warning("WARNING: Bundled assets not found in repo.")
