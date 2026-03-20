@@ -8,7 +8,7 @@ from pathlib import Path
 try:
     VERSION = version("wopc")
 except PackageNotFoundError:
-    VERSION = "0.1.0-dev"
+    VERSION = "0.00.0000-dev"
 
 # --- Game installation paths ---
 #
