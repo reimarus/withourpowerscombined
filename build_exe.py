@@ -22,6 +22,24 @@ def main() -> int:
 
     print("Building WOPC Launcher (single-file) ...")
 
+    # UAC manifest — the exe lives in "Program Files" and needs write access
+    manifest = repo_root / "launcher" / "gui" / "uac.manifest"
+    if not manifest.exists():
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">\n'
+            '  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">\n'
+            "    <security>\n"
+            "      <requestedPrivileges>\n"
+            '        <requestedExecutionLevel level="requireAdministrator"'
+            ' uiAccess="false"/>\n'
+            "      </requestedPrivileges>\n"
+            "    </security>\n"
+            "  </trustInfo>\n"
+            "</assembly>\n"
+        )
+
     cmd = [
         sys.executable,
         "-m",
@@ -34,6 +52,9 @@ def main() -> int:
         "WOPC-Launcher",
         "--icon",
         str(repo_root / "launcher" / "gui" / "wopc.ico"),
+        # Embed UAC manifest so Windows prompts for admin on launch
+        "--manifest",
+        str(manifest),
         # Bundle CustomTkinter theme assets (required for the GUI)
         "--collect-all",
         "customtkinter",

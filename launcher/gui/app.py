@@ -134,6 +134,14 @@ class WopcApp(BaseApp):  # type: ignore
         # Show the correct initial screen
         self._show_screen("solo")
 
+        self._check_installation_status()
+        self._bind_hotkeys()
+
+        # Clean up old exe from previous update and check for new version
+        updater.cleanup_old_exe()
+        self._pending_update: updater.UpdateInfo | None = None
+        threading.Thread(target=self._check_for_update, daemon=True).start()
+
     def _set_window_icon(self) -> None:
         """Set the application window icon if it exists."""
         from pathlib import Path
@@ -180,14 +188,6 @@ class WopcApp(BaseApp):  # type: ignore
             prefs.save_prefs(parser)
         except Exception:
             pass  # Don't break shutdown over prefs
-
-        self._check_installation_status()
-        self._bind_hotkeys()
-
-        # Clean up old exe from previous update and check for new version
-        updater.cleanup_old_exe()
-        self._pending_update: updater.UpdateInfo | None = None
-        threading.Thread(target=self._check_for_update, daemon=True).start()
 
     def _make_divider(self, parent: Any, color: str = COLOR_ACCENT_DIM) -> Any:
         """Return a thin 1-pixel accent line for use as a section separator."""
@@ -290,14 +290,26 @@ class WopcApp(BaseApp):  # type: ignore
         logo_div = self._make_divider(self.sidebar)
         logo_div.grid(row=2, column=0, padx=16, pady=(0, 12), sticky="ew")
 
-        # --- Status indicators ---
+        # --- Status indicators (label + thin progress bar each) ---
         self.status_scfa = ctk.CTkLabel(
             self.sidebar,
             text="◌  SCFA: Checking...",
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.status_scfa.grid(row=3, column=0, padx=20, pady=(4, 2), sticky="w")
+        self.status_scfa.grid(row=3, column=0, padx=20, pady=(4, 0), sticky="w")
+
+        self.progress_scfa = ctk.CTkProgressBar(
+            self.sidebar,
+            height=3,
+            width=160,
+            progress_color=COLOR_ACCENT,
+            fg_color=COLOR_SURFACE,
+            corner_radius=2,
+        )
+        self.progress_scfa.configure(mode="indeterminate")
+        self.progress_scfa.grid(row=4, column=0, padx=24, pady=(0, 2), sticky="w")
+        self.progress_scfa.start()
 
         self.status_bundled = ctk.CTkLabel(
             self.sidebar,
@@ -305,7 +317,19 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.status_bundled.grid(row=4, column=0, padx=20, pady=2, sticky="w")
+        self.status_bundled.grid(row=5, column=0, padx=20, pady=(2, 0), sticky="w")
+
+        self.progress_bundled = ctk.CTkProgressBar(
+            self.sidebar,
+            height=3,
+            width=160,
+            progress_color=COLOR_ACCENT,
+            fg_color=COLOR_SURFACE,
+            corner_radius=2,
+        )
+        self.progress_bundled.configure(mode="indeterminate")
+        self.progress_bundled.grid(row=6, column=0, padx=24, pady=(0, 2), sticky="w")
+        self.progress_bundled.start()
 
         self.status_wopc = ctk.CTkLabel(
             self.sidebar,
@@ -313,11 +337,23 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=12),
         )
-        self.status_wopc.grid(row=5, column=0, padx=20, pady=(2, 8), sticky="w")
+        self.status_wopc.grid(row=7, column=0, padx=20, pady=(2, 0), sticky="w")
+
+        self.progress_wopc = ctk.CTkProgressBar(
+            self.sidebar,
+            height=3,
+            width=160,
+            progress_color=COLOR_ACCENT,
+            fg_color=COLOR_SURFACE,
+            corner_radius=2,
+        )
+        self.progress_wopc.configure(mode="indeterminate")
+        self.progress_wopc.grid(row=8, column=0, padx=24, pady=(0, 8), sticky="w")
+        self.progress_wopc.start()
 
         # Divider before launch mode
         mode_div = self._make_divider(self.sidebar)
-        mode_div.grid(row=6, column=0, padx=16, pady=(0, 10), sticky="ew")
+        mode_div.grid(row=9, column=0, padx=16, pady=(0, 10), sticky="ew")
 
         # --- Launch Mode Selector ---
         self.mode_label = ctk.CTkLabel(
@@ -326,7 +362,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=11, weight="bold"),
         )
-        self.mode_label.grid(row=7, column=0, padx=20, pady=(0, 6), sticky="w")
+        self.mode_label.grid(row=10, column=0, padx=20, pady=(0, 6), sticky="w")
 
         saved_mode = prefs.get_launch_mode()
         # Map old host/join modes to multiplayer
@@ -344,11 +380,11 @@ class WopcApp(BaseApp):  # type: ignore
             fg_color=COLOR_BORDER,
             text_color=COLOR_TEXT_PRIMARY,
         )
-        self.mode_selector.grid(row=8, column=0, padx=20, pady=(0, 5), sticky="ew")
+        self.mode_selector.grid(row=11, column=0, padx=20, pady=(0, 5), sticky="ew")
 
         # Conditional widgets for multiplayer mode
         self.mode_widgets_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        self.mode_widgets_frame.grid(row=9, column=0, padx=20, sticky="ew")
+        self.mode_widgets_frame.grid(row=12, column=0, padx=20, sticky="ew")
 
         self.port_label = ctk.CTkLabel(
             self.mode_widgets_frame,
@@ -408,7 +444,7 @@ class WopcApp(BaseApp):  # type: ignore
             corner_radius=4,
             command=self._on_primary_click,
         )
-        self.primary_btn.grid(row=10, column=0, padx=20, pady=(10, 6), sticky="ew")
+        self.primary_btn.grid(row=13, column=0, padx=20, pady=(10, 6), sticky="ew")
 
         # Progress bar (hidden until setup runs)
         self.setup_progress = ctk.CTkProgressBar(
@@ -434,7 +470,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_ACCENT_DIM,
             font=ctk.CTkFont(size=11),
         )
-        self.version_label.grid(row=11, column=0, padx=20, pady=(0, 20), sticky="w")
+        self.version_label.grid(row=14, column=0, padx=20, pady=(0, 20), sticky="w")
 
     def _build_main_lobby(self) -> None:
         """Construct the central matching routing/configuration area."""
@@ -2532,29 +2568,105 @@ class WopcApp(BaseApp):  # type: ignore
 
         self.after(0, _update)
 
+    def _reset_status_progress_bars(self) -> None:
+        """Show indeterminate progress bars for all status checks."""
+        checks = [
+            (self.status_scfa, self.progress_scfa, 3, 4, "SCFA"),
+            (self.status_bundled, self.progress_bundled, 5, 6, "Assets"),
+            (self.status_wopc, self.progress_wopc, 7, 8, "WOPC"),
+        ]
+        for label, progress, row_l, row_p, name in checks:
+            label.configure(
+                text=f"◌  {name}: Checking...",
+                text_color=COLOR_TEXT_MUTED,
+            )
+            top_pad = 4 if row_l == 3 else 2
+            label.grid(row=row_l, column=0, padx=20, pady=(top_pad, 0), sticky="w")
+            progress.configure(mode="indeterminate")
+            bot_pad = 8 if row_p == 8 else 2
+            progress.grid(row=row_p, column=0, padx=24, pady=(0, bot_pad), sticky="w")
+            progress.start()
+
     def _check_installation_status(self) -> None:
-        """Check directories and update UI states appropriately."""
-        scfa_ok = config.SCFA_STEAM.exists() and (config.SCFA_BIN / config.GAME_EXE).exists()
+        """Run status checks with staggered UI updates via after() timers."""
+        self._reset_status_progress_bars()
+        self.after(300, self._do_check_scfa)
+
+    def _do_check_scfa(self) -> None:
+        """Check SCFA installation and schedule next check."""
+        try:
+            self._scfa_ok = (
+                config.SCFA_STEAM.exists() and (config.SCFA_BIN / config.GAME_EXE).exists()
+            )
+            self.log(f"SCFA path: {config.SCFA_STEAM}")
+            self._resolve_status_check(
+                self.status_scfa,
+                self.progress_scfa,
+                ok=self._scfa_ok,
+                label_ok="✓  SCFA: Found",
+                label_fail="✗  SCFA: Missing",
+                color_ok=COLOR_LAUNCH,
+                color_fail=COLOR_DANGER,
+            )
+            self.after(300, self._do_check_assets)
+        except Exception:
+            import traceback
+
+            err = traceback.format_exc()
+            _crash_log = config.WOPC_ROOT / "crash.log"
+            _crash_log.parent.mkdir(parents=True, exist_ok=True)
+            _crash_log.write_text(err)
+            self.log(f"ERROR: {err}")
+
+    def _do_check_assets(self) -> None:
+        """Check bundled assets and schedule next check."""
+        self._assets_ok = (config.WOPC_ROOT / "gamedata").exists()
+        self._resolve_status_check(
+            self.status_bundled,
+            self.progress_bundled,
+            ok=self._assets_ok,
+            label_ok="✓  Assets: Ready",
+            label_fail="✗  Assets: Not Deployed",
+            color_ok=COLOR_LAUNCH,
+            color_fail=COLOR_TEXT_MUTED,
+        )
+        self.after(300, self._do_check_wopc)
+
+    def _do_check_wopc(self) -> None:
+        """Check WOPC deployment and finalize."""
         wopc_ok = config.WOPC_BIN.exists() and (config.WOPC_BIN / config.GAME_EXE).exists()
-
-        assets_ok = (config.WOPC_ROOT / "gamedata").exists()
-        self.status_scfa.configure(
-            text=f"{'✓' if scfa_ok else '✗'}  SCFA: {'Found' if scfa_ok else 'Missing'}",
-            text_color=COLOR_LAUNCH if scfa_ok else COLOR_DANGER,
+        self._resolve_status_check(
+            self.status_wopc,
+            self.progress_wopc,
+            ok=wopc_ok,
+            label_ok="✓  WOPC: Ready",
+            label_fail="✗  WOPC: Not Setup",
+            color_ok=COLOR_LAUNCH,
+            color_fail=COLOR_WARN,
         )
-        self.status_bundled.configure(
-            text=f"{'✓' if assets_ok else '✗'}  Assets: {'Ready' if assets_ok else 'Not Deployed'}",
-            text_color=COLOR_LAUNCH if assets_ok else COLOR_TEXT_MUTED,
-        )
-        self.status_wopc.configure(
-            text=f"{'✓' if wopc_ok else '✗'}  WOPC: {'Ready' if wopc_ok else 'Not Setup'}",
-            text_color=COLOR_LAUNCH if wopc_ok else COLOR_WARN,
+        self._finalize_status(self._scfa_ok, self._assets_ok, wopc_ok)
+
+    def _resolve_status_check(
+        self,
+        label: Any,
+        progress: Any,
+        *,
+        ok: bool,
+        label_ok: str,
+        label_fail: str,
+        color_ok: str,
+        color_fail: str,
+    ) -> None:
+        """Update a single status label and hide its progress bar."""
+        progress.stop()
+        progress.grid_forget()
+        label.configure(
+            text=label_ok if ok else label_fail,
+            text_color=color_ok if ok else color_fail,
         )
 
-        self.status_scfa.grid(row=3, column=0, padx=20, pady=(4, 2), sticky="w")
-        self.status_bundled.grid(row=4, column=0, padx=20, pady=2, sticky="w")
-        self.status_wopc.grid(row=5, column=0, padx=20, pady=(2, 8), sticky="w")
-
+    def _finalize_status(self, scfa_ok: bool, assets_ok: bool, wopc_ok: bool) -> None:
+        """Update primary button and populate lists after all checks complete."""
         if not scfa_ok:
             self.primary_btn.configure(
                 text="MISSING GAME FILES",
@@ -2568,13 +2680,8 @@ class WopcApp(BaseApp):  # type: ignore
             )
 
         if scfa_ok and not wopc_ok:
-            self.primary_btn.configure(
-                text="⬇  INSTALL / UPDATE",
-                fg_color=COLOR_WARN,
-                hover_color="#CC8F00",
-                text_color=COLOR_BG,
-            )
-            self.log("WOPC is not deployed. Click Install to begin.")
+            self.log("WOPC not deployed — starting automatic installation...")
+            self._start_install()
         elif scfa_ok and wopc_ok:
             mode = self.mode_var.get()
             label = self._PLAY_LABELS.get(mode, "PLAY MATCH")
@@ -2596,21 +2703,7 @@ class WopcApp(BaseApp):  # type: ignore
         btn_text = self.primary_btn.cget("text")
 
         if "INSTALL" in btn_text or "UPDATE" in btn_text:
-            self.log("Starting asynchronous installation...")
-            self.primary_btn.configure(state="disabled", text="⬇  INSTALLING...")
-            # Show progress bar
-            self.setup_progress.set(0)
-            self.setup_progress.grid(row=11, column=0, padx=20, pady=(2, 0), sticky="ew")
-            self.setup_progress_label.configure(text="Preparing...")
-            self.setup_progress_label.grid(row=12, column=0, padx=20, pady=(2, 0), sticky="w")
-            # Move version label down
-            self.version_label.grid(row=13, column=0, padx=20, pady=(0, 20), sticky="w")
-            worker = SetupWorker(
-                on_complete=self._on_setup_complete,
-                on_log=self.log,
-                on_progress=self._on_setup_progress,
-            )
-            worker.start()
+            self._start_install()
             return
 
         play_values = (
@@ -2621,6 +2714,30 @@ class WopcApp(BaseApp):  # type: ignore
         if btn_text in play_values or btn_text.startswith("▶"):
             self.log("Launching game (solo mode)...")
             threading.Thread(target=self._launch_game, daemon=True).start()
+
+    def _start_install(self) -> None:
+        """Kick off the WOPC deployment worker."""
+        self.log("Starting installation...")
+        self.primary_btn.configure(state="disabled", text="⬇  INSTALLING...")
+        # Show progress bar
+        self.setup_progress.set(0)
+        self.setup_progress.grid(row=15, column=0, padx=20, pady=(2, 0), sticky="ew")
+        self.setup_progress_label.configure(text="Preparing...")
+        self.setup_progress_label.grid(
+            row=16,
+            column=0,
+            padx=20,
+            pady=(2, 0),
+            sticky="w",
+        )
+        # Move version label down
+        self.version_label.grid(row=17, column=0, padx=20, pady=(0, 20), sticky="w")
+        worker = SetupWorker(
+            on_complete=self._on_setup_complete,
+            on_log=self.log,
+            on_progress=self._on_setup_progress,
+        )
+        worker.start()
 
     def _on_setup_progress(self, message: str, step: int, total: int) -> None:
         """Callback from SetupWorker — update progress bar from worker thread."""
@@ -2639,7 +2756,7 @@ class WopcApp(BaseApp):  # type: ignore
             # Hide progress bar
             self.setup_progress.grid_forget()
             self.setup_progress_label.grid_forget()
-            self.version_label.grid(row=11, column=0, padx=20, pady=(0, 20), sticky="w")
+            self.version_label.grid(row=14, column=0, padx=20, pady=(0, 20), sticky="w")
 
             self.primary_btn.configure(state="normal")
             if success:
