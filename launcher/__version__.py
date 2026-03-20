@@ -7,4 +7,4 @@ version in N.NN.NNNN format so the GUI shows it correctly.
 Updated automatically by ``scripts/release.py``.
 """
 
-VERSION = "2.01.0001"
+VERSION = "2.01.0002"
