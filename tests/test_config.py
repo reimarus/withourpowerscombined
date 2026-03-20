@@ -2,6 +2,7 @@
 
 import importlib
 import os
+import re
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -90,3 +91,31 @@ class TestFileLists:
     def test_init_files_has_common_data_path(self):
         """CommonDataPath.lua is in INIT_FILES."""
         assert "CommonDataPath.lua" in INIT_FILES
+
+
+class TestVersion:
+    """Test VERSION constant and import chain."""
+
+    def test_version_imports_from_dunder_version(self):
+        """launcher.config.VERSION comes from launcher.__version__."""
+        import launcher.__version__
+        import launcher.config
+
+        assert launcher.config.VERSION == launcher.__version__.VERSION
+
+    def test_version_matches_nnn_format(self):
+        """VERSION uses N.NN.NNNN format (preserving leading zeros)."""
+        from launcher.__version__ import VERSION
+
+        assert re.match(r"^\d+\.\d{2}\.\d{4}$", VERSION), (
+            f"VERSION {VERSION!r} does not match N.NN.NNNN format"
+        )
+
+    def test_version_not_pep440_normalized(self):
+        """VERSION preserves leading zeros (not stripped by PEP 440)."""
+        from launcher.__version__ import VERSION
+
+        # "2.01.0001" should NOT become "2.1.1"
+        assert ".0" in VERSION, (
+            f"VERSION {VERSION!r} looks PEP-440 normalized (leading zeros stripped)"
+        )

@@ -140,37 +140,37 @@ class TestRunSetup:
         run_setup(repo_init_dir)
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
-        # The fake bundled dir has lua.scd and units.scd, plus our consolidated faf_ui.scd
+        # The fake bundled dir has lua.scd and units.scd, plus our consolidated wopc_core.scd
         scds = list(wopc_gd.glob("*.scd"))
         assert len(scds) >= 3
-        assert (wopc_gd / "faf_ui.scd").exists()
+        assert (wopc_gd / "wopc_core.scd").exists()
 
-    def test_faf_ui_scd_includes_wopc_patches(self, patched_config, repo_init_dir):
-        """faf_ui.scd must contain WOPC patch files (consolidated build)."""
+    def test_wopc_core_scd_includes_wopc_patches(self, patched_config, repo_init_dir):
+        """wopc_core.scd must contain WOPC patch files (consolidated build)."""
         import zipfile
 
         from launcher.deploy import run_setup
 
         run_setup(repo_init_dir)
 
-        faf_ui_scd = patched_config["WOPC_GAMEDATA"] / "faf_ui.scd"
-        with zipfile.ZipFile(faf_ui_scd, "r") as zf:
+        wopc_core_scd = patched_config["WOPC_GAMEDATA"] / "wopc_core.scd"
+        with zipfile.ZipFile(wopc_core_scd, "r") as zf:
             names = zf.namelist()
             # The fake wopc_patches dir has patch_file.lua
-            assert "patch_file.lua" in names, "faf_ui.scd should contain WOPC patch files"
+            assert "patch_file.lua" in names, "wopc_core.scd should contain WOPC patch files"
 
-    def test_faf_ui_scd_includes_textures(self, patched_config, repo_init_dir):
-        """faf_ui.scd must contain FAF texture files."""
+    def test_wopc_core_scd_includes_textures(self, patched_config, repo_init_dir):
+        """wopc_core.scd must contain texture files."""
         import zipfile
 
         from launcher.deploy import run_setup
 
         run_setup(repo_init_dir)
 
-        faf_ui_scd = patched_config["WOPC_GAMEDATA"] / "faf_ui.scd"
-        with zipfile.ZipFile(faf_ui_scd, "r") as zf:
+        wopc_core_scd = patched_config["WOPC_GAMEDATA"] / "wopc_core.scd"
+        with zipfile.ZipFile(wopc_core_scd, "r") as zf:
             texture_entries = [n for n in zf.namelist() if n.startswith("textures/")]
-            assert len(texture_entries) >= 1, "faf_ui.scd should contain texture files"
+            assert len(texture_entries) >= 1, "wopc_core.scd should contain texture files"
             # Arcnames must be lowercase (FAF import() requirement)
             for name in texture_entries:
                 assert name == name.lower(), f"Non-lowercase arcname: {name}"
@@ -529,3 +529,73 @@ class TestContentIconExtraction:
         icons_scd = wopc_gd / "content_icons.scd"
         with zipfile.ZipFile(icons_scd, "r") as zf:
             assert len(zf.namelist()) == 1  # Rebuilt, not stale
+
+
+class TestWopcCoreMigration:
+    """Test faf_ui.scd → wopc_core.scd migration in standalone mode."""
+
+    def _standalone_config(self, scfa, tmp_path):
+        """Build config patches for standalone mode (no REPO_WOPC_CORE_SRC)."""
+        wopc = scfa / "WOPC"
+        wopc.mkdir(exist_ok=True)
+        bundled = tmp_path / "bundled"
+        (bundled / "gamedata").mkdir(parents=True)
+        (bundled / "bin").mkdir()
+        (bundled / "bin" / "CommonDataPath.lua").write_text("-- fake")
+        for subdir in ["maps", "sounds", "usermods"]:
+            (bundled / subdir).mkdir()
+        return {
+            "SCFA_STEAM": scfa,
+            "SCFA_BIN": scfa / "bin",
+            "REPO_BUNDLED": bundled,
+            "REPO_BUNDLED_BIN": bundled / "bin",
+            "REPO_BUNDLED_GAMEDATA": bundled / "gamedata",
+            "REPO_BUNDLED_MAPS": bundled / "maps",
+            "REPO_BUNDLED_SOUNDS": bundled / "sounds",
+            "REPO_BUNDLED_USERMODS": bundled / "usermods",
+            "WOPC_ROOT": wopc,
+            "WOPC_BIN": wopc / "bin",
+            "WOPC_GAMEDATA": wopc / "gamedata",
+            "WOPC_MAPS": wopc / "maps",
+            "WOPC_SOUNDS": wopc / "sounds",
+            "WOPC_MODS": wopc / "mods",
+            "WOPC_USERMODS": wopc / "usermods",
+            "WOPC_USERMAPS": wopc / "usermaps",
+            "PATCH_BUILD_DIR": tmp_path / "patch_build",
+            "FA_PATCHES_DIR": tmp_path / "vendor" / "FA-Binary-Patches",
+            "FA_PATCHER_DIR": tmp_path / "vendor" / "fa-python-binary-patcher",
+            "PATCH_MANIFEST": tmp_path / "wopc_patches.toml",
+            "REPO_WOPC_CORE_SRC": tmp_path / "no_vendor",  # doesn't exist → standalone
+            "WOPC_CORE_SCD": "wopc_core.scd",
+            "REPO_WOPC_PATCHES": tmp_path / "fake_patches",
+            "LOUD_ROOT": scfa / "LOUD",
+            "LOUD_GAMEDATA": scfa / "LOUD" / "gamedata",
+            "LOUD_SOUNDS": scfa / "LOUD" / "sounds",
+            "LOUD_TEXTURES_SCD": scfa / "LOUD" / "gamedata" / "textures.scd",
+            "CONTENT_ICONS_SCD": "content_icons.scd",
+            "CONTENT_ICONS_URL": "https://example.com/content_icons.scd",
+        }
+
+    def test_standalone_skips_when_wopc_core_exists(self, fake_scfa_tree, tmp_path, repo_init_dir):
+        """In standalone mode, if wopc_core.scd already exists, skip migration/download."""
+        from launcher.deploy import run_setup
+
+        config_patches = self._standalone_config(fake_scfa_tree, tmp_path)
+        wopc_gd = config_patches["WOPC_GAMEDATA"]
+        wopc_gd.mkdir(parents=True, exist_ok=True)
+        (wopc_gd / "wopc_core.scd").write_bytes(b"\x00" * 64)
+
+        with patch.multiple("launcher.config", **config_patches):
+            mock_dl = MagicMock()
+            mock_copy = MagicMock()
+            with (
+                patch("launcher.deploy._download_file", mock_dl),
+                patch("launcher.deploy.shutil.copy2", mock_copy),
+            ):
+                run_setup(repo_init_dir)
+
+            # wopc_core.scd download should NOT have been triggered
+            wopc_core_calls = [c for c in mock_dl.call_args_list if "wopc_core" in str(c)]
+            assert wopc_core_calls == [], "wopc_core.scd should not be downloaded when it exists"
+            # wopc_core.scd should not have been overwritten
+            assert (wopc_gd / "wopc_core.scd").read_bytes() == b"\x00" * 64

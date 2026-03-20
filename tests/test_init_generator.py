@@ -22,7 +22,7 @@ def gamedata_dir(tmp_path: Path) -> Path:
     (gd / "lua.scd").write_bytes(b"x" * 100)
     (gd / "loc_US.scd").write_bytes(b"x" * 50)
     # Fixed-position SCD (mounted explicitly, not toggleable)
-    (gd / "faf_ui.scd").write_bytes(b"x" * 40)
+    (gd / "wopc_core.scd").write_bytes(b"x" * 40)
     # Toggleable content packs
     (gd / "brewlan.scd").write_bytes(b"x" * 2000)
     (gd / "blackops.scd").write_bytes(b"x" * 1500)
@@ -36,7 +36,7 @@ class TestDelegation:
     def test_get_toggleable_scds_delegates(self, gamedata_dir: Path) -> None:
         with patch.object(config, "WOPC_GAMEDATA", gamedata_dir):
             result = init_generator.get_toggleable_scds()
-        assert "faf_ui.scd" not in result
+        assert "wopc_core.scd" not in result
         assert "lua.scd" in result
         assert "brewlan.scd" in result
 
@@ -80,8 +80,8 @@ class TestGenerateInitLua:
         assert "mount_dir(SCFARoot .. '\\\\gamedata\\\\loc_us.scd', '/')" in content
         assert "mount_dir(SCFARoot .. '\\\\gamedata\\\\objects.scd', '/')" in content
         assert "mount_dir(SCFARoot .. '\\\\gamedata\\\\mods.scd', '/')" in content
-        # faf_ui still present via fixed mount (wopc_patches consolidated into it)
-        assert "mount_dir(faf_ui, '/')" in content
+        # wopc_core still present via fixed mount (patches consolidated into it)
+        assert "mount_dir(wopc_core, '/')" in content
 
     def test_generates_with_enabled_packs(self, gamedata_dir: Path, tmp_path: Path) -> None:
         """With ContentPacks section, enabled SCDs are mounted."""
@@ -121,8 +121,8 @@ class TestGenerateInitLua:
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\brewlan.scd', '/')" not in content
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\blackops.scd', '/')" in content
 
-    def test_faf_ui_mounts_before_vanilla_scfa(self, gamedata_dir: Path, tmp_path: Path) -> None:
-        """faf_ui.scd must mount BEFORE vanilla (first-added = highest VFS priority)."""
+    def test_wopc_core_mounts_before_vanilla_scfa(self, gamedata_dir: Path, tmp_path: Path) -> None:
+        """wopc_core.scd must mount BEFORE vanilla (first-added = highest VFS priority)."""
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
@@ -135,16 +135,16 @@ class TestGenerateInitLua:
             result = init_generator.generate_init_lua()
 
         content = result.read_text()
-        # faf_ui should NOT be in the early gamedata block
-        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\faf_ui.scd', '/')" not in content
-        # faf_ui (consolidated with WOPC patches) must appear BEFORE vanilla SCFA mounts
+        # wopc_core should NOT be in the early gamedata block
+        assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\wopc_core.scd', '/')" not in content
+        # wopc_core must appear BEFORE vanilla SCFA mounts
         # (first-added = highest priority in SCFA's VFS)
         vanilla_pos = content.index("mount_dir(SCFARoot")
-        faf_ui_mount_pos = content.index("mount_dir(faf_ui, '/')")
-        assert faf_ui_mount_pos < vanilla_pos
+        wopc_core_mount_pos = content.index("mount_dir(wopc_core, '/')")
+        assert wopc_core_mount_pos < vanilla_pos
 
     def test_wopc_patches_not_separately_mounted(self, gamedata_dir: Path, tmp_path: Path) -> None:
-        """wopc_patches.scd is consolidated into faf_ui.scd — no separate mount."""
+        """wopc_patches.scd is consolidated into wopc_core.scd — no separate mount."""
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
@@ -157,7 +157,7 @@ class TestGenerateInitLua:
             result = init_generator.generate_init_lua()
 
         content = result.read_text()
-        # wopc_patches should not appear anywhere — consolidated into faf_ui.scd
+        # wopc_patches should not appear anywhere — consolidated into wopc_core.scd
         assert "wopc_patches" not in content
 
     def test_uses_mount_mods_for_usermods(self, gamedata_dir: Path, tmp_path: Path) -> None:

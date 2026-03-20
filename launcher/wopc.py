@@ -179,6 +179,10 @@ def cmd_launch(
 
     if launch_mode is None:
         launch_mode = prefs.get_launch_mode()
+    # Normalize legacy pref values — "multiplayer" was an old pref value
+    # that doesn't map to a valid launch mode.
+    if launch_mode not in ("solo", "host", "join"):
+        launch_mode = "solo"
     player_name = prefs.get_player_name()
 
     cmd = [

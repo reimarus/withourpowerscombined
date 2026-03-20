@@ -36,7 +36,7 @@ withourpowerscombined/
     faf-ui/                     FAF Lua codebase (1157 files — UI, sim, AI, etc.)
     FA-Binary-Patches/          FAF C++ patches (66 hooks + 53 sections)
     fa-python-binary-patcher/   Python patcher tool (compiles + injects)
-  gamedata/wopc_patches/        WOPC Lua overlay (packed to wopc_patches.scd)
+  gamedata/wopc_patches/        WOPC Lua patches (baked into wopc_core.scd at build)
     lua/ui/uimain.lua           Full FAF uimain.lua + WOPC quickstart hook
     lua/wopc/quickstart.lua     LobbyComm-based game launcher (bypasses lobby UI)
     lua/ai/gridreclaim.lua      Stub — FAF AI import (not in vanilla or FAF source)
@@ -77,8 +77,7 @@ C:\ProgramData\WOPC\
     BrewLAN-*.scd               Strategic icons
     WOPC.log                    Game log output
   gamedata\
-    faf_ui.scd                  FAF Lua code (vendor/faf-ui/ merged with vanilla lua.scd)
-    wopc_patches.scd            Our Lua overlay (built from gamedata/wopc_patches/)
+    wopc_core.scd               WOPC game logic (vendor/faf-ui/ + vanilla lua.scd + our patches)
     lua.scd                     LOUD Lua override (only mounted when LOUD packs enabled)
     loc_US.scd                  LOUD localization (only mounted when LOUD packs enabled)
     units.scd                   LOUD units (content pack, toggleable)
@@ -102,12 +101,11 @@ The init file (`init_wopc.lua`) is regenerated before each launch by `init_gener
 | 2 | WOPC/gamedata/ | Content packs (none by default) |
 | 3 | WOPC/ | Bundled maps and sounds |
 | 4 | Steam SCFA | Vanilla: fonts, textures, effects, env, projectiles, props, meshes, units, loc, mods, objects, movies, sounds |
-| 5 | WOPC/gamedata/faf_ui.scd | **FAF Lua engine** — provides simInit, globalInit, BuffDefinitions, AI, UI, etc. |
-| 6 | WOPC/gamedata/wopc_patches.scd | **WOPC overlay** — uimain.lua quickstart hook, fixes |
-| 7 | WOPC/usermaps/ | User maps |
-| 8 | WOPC/usermods/ | User mods (highest priority) |
+| 5 | WOPC/gamedata/wopc_core.scd | **WOPC game logic** — simInit, globalInit, AI, UI, quickstart hook, all patches |
+| 6 | WOPC/usermaps/ | User maps |
+| 7 | WOPC/usermods/ | User mods (highest priority) |
 
-**Key VFS rule:** For Lua `import()`, later mounts shadow earlier ones (last-added wins). For engine C++ `doscript`, first-added wins. Since we don't mount LOUD's `lua.scd` in FAF-only mode, `faf_ui.scd` is the sole source for system Lua files.
+**Key VFS rule:** For Lua `import()`, later mounts shadow earlier ones (last-added wins). For engine C++ `doscript`, first-added wins. Since we don't mount LOUD's `lua.scd` in FAF-only mode, `wopc_core.scd` is the sole source for system Lua files.
 
 ## Quick-Start System
 
@@ -120,7 +118,7 @@ GUI "PLAY MATCH" click
   → Python: launches ForgedAlliance.exe with:
       /init init_wopc.lua /hostgame udp 15000 Player WOPC <map>
       /wopcquickstart /wopcconfig <config_path>
-  → Engine: loads uimain.lua from wopc_patches.scd (via lua.scd patch)
+  → Engine: loads uimain.lua from wopc_core.scd (patched to first entry)
   → uimain.lua: detects /wopcquickstart flag
   → quickstart.lua: reads config, creates LobbyComm, calls LaunchGame()
   → Engine: enters simulation

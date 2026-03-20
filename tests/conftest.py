@@ -78,13 +78,13 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
     patch_build = tmp_path / "patch_build"
     vendor = tmp_path / "vendor"
 
-    # Fake Submodules
-    faf_ui = vendor / "faf_ui"
-    (faf_ui / "lua").mkdir(parents=True)
-    (faf_ui / "lua" / "ui").mkdir()
-    (faf_ui / "lua" / "ui" / "file.lua").write_bytes(b"\x00")
-    (faf_ui / "textures" / "ui" / "common").mkdir(parents=True)
-    (faf_ui / "textures" / "ui" / "common" / "test.dds").write_bytes(b"\x00" * 128)
+    # Fake game logic source (vendor/faf-ui equivalent)
+    wopc_core_src = vendor / "faf-ui"
+    (wopc_core_src / "lua").mkdir(parents=True)
+    (wopc_core_src / "lua" / "ui").mkdir()
+    (wopc_core_src / "lua" / "ui" / "file.lua").write_bytes(b"\x00")
+    (wopc_core_src / "textures" / "ui" / "common").mkdir(parents=True)
+    (wopc_core_src / "textures" / "ui" / "common" / "test.dds").write_bytes(b"\x00" * 128)
 
     wopc_patches = scfa / "repo_patches"
     wopc_patches.mkdir()
@@ -116,8 +116,8 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "FA_PATCHES_DIR": vendor / "FA-Binary-Patches",
         "FA_PATCHER_DIR": vendor / "fa-python-binary-patcher",
         "PATCH_MANIFEST": tmp_path / "wopc_patches.toml",
-        "REPO_FAF_UI": vendor / "faf_ui",
-        "FAF_UI_SCD": "faf_ui.scd",
+        "REPO_WOPC_CORE_SRC": vendor / "faf-ui",
+        "WOPC_CORE_SCD": "wopc_core.scd",
         "REPO_WOPC_PATCHES": wopc_patches,
         "LOUD_ROOT": loud_root,
         "LOUD_GAMEDATA": loud_gamedata,

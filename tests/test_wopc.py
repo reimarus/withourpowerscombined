@@ -1,5 +1,6 @@
 """Tests for the WOPC CLI entry point."""
 
+import contextlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -412,6 +413,143 @@ class TestCmdLaunchModes:
             assert "minimap_enabled" in merged
             assert merged["Victory"] == "supremacy"
             assert merged["UnitCap"] == "2000"
+
+
+class TestLaunchModeNormalization:
+    """Test that invalid/legacy launch_mode values are normalized to 'solo'."""
+
+    def _setup_wopc_tree(self, tmp_path):
+        """Create a minimal WOPC tree with exe, init, and a map."""
+        wopc_bin = tmp_path / "bin"
+        wopc_bin.mkdir()
+        (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
+        (wopc_bin / "init_wopc.lua").write_text("-- init")
+        wopc_maps = tmp_path / "maps"
+        (wopc_maps / "TestMap").mkdir(parents=True)
+        (wopc_maps / "TestMap" / "TestMap_scenario.lua").write_text("-- scen")
+        return wopc_bin, wopc_maps
+
+    @patch("subprocess.Popen")
+    def test_invalid_mode_defaults_to_solo(self, mock_popen, tmp_path):
+        """Stale pref value like 'multiplayer' normalizes to 'solo'."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ),
+        ):
+            # "multiplayer" is the stale pref value that caused the bug
+            assert cmd_launch(launch_mode="multiplayer") == 0
+            args = mock_popen.call_args[0][0]
+            # Should have normalized to solo — solo has /hostgame
+            assert "/wopcquickstart" in args
+
+    @patch("subprocess.Popen")
+    def test_none_mode_falls_back_to_pref(self, mock_popen, tmp_path):
+        """launch_mode=None reads from prefs, then normalizes."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="garbage"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ),
+        ):
+            # launch_mode=None → reads pref "garbage" → normalized to "solo"
+            assert cmd_launch(launch_mode=None) == 0
+            args = mock_popen.call_args[0][0]
+            assert "/wopcquickstart" in args
+
+    @patch("subprocess.Popen")
+    def test_empty_string_mode_defaults_to_solo(self, mock_popen, tmp_path):
+        """Empty string launch_mode normalizes to solo."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ),
+        ):
+            assert cmd_launch(launch_mode="") == 0
+            args = mock_popen.call_args[0][0]
+            assert "/wopcquickstart" in args
+
+    @pytest.mark.parametrize("mode", ["solo", "host", "join"])
+    @patch("subprocess.Popen")
+    def test_valid_modes_pass_through(self, mock_popen, mode, tmp_path):
+        """Valid launch modes are not altered by normalization."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        mock_popen.return_value = MagicMock()
+
+        patches = [
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ),
+        ]
+        if mode == "host":
+            patches.append(patch("launcher.wopc.prefs.get_host_port", return_value="16000"))
+            patches.append(patch("launcher.wopc.prefs.get_expected_humans", return_value=2))
+        elif mode == "join":
+            patches.append(
+                patch("launcher.wopc.prefs.get_join_address", return_value="192.168.1.1:15000")
+            )
+            patches.append(patch("launcher.wopc.prefs.get_expected_humans", return_value=2))
+
+        with contextlib.ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            result = cmd_launch(launch_mode=mode)
+
+        assert result == 0
+        args = mock_popen.call_args[0][0]
+        if mode in ("solo", "host"):
+            assert "/hostgame" in args
+        elif mode == "join":
+            assert "/joingame" in args
 
 
 class TestCmdSetup:

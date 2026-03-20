@@ -45,8 +45,8 @@ wopc setup
 
 This creates `C:\ProgramData\WOPC\` and:
 - Copies the game executable and DLLs from your Steam installation
-- Builds `faf_ui.scd` from FAF source (merged with vanilla lua.scd)
-- Builds `wopc_patches.scd` from the WOPC Lua overlay
+- Builds `wopc_core.scd` from game logic source (merged with vanilla lua.scd)
+- WOPC patches are baked into `wopc_core.scd` at build time
 - Symlinks (or copies) maps, sounds, and usermods
 - Copies init files and VFS helpers
 
@@ -97,7 +97,7 @@ Check the log file at `C:\ProgramData\WOPC\bin\WOPC.log` for error messages.
 Common issues:
 - Missing DLL: re-run `wopc setup` to copy all required DLLs
 - Init file error: check that `init_wopc.lua` paths match your installation
-- AI import errors: re-run `wopc setup` to rebuild `faf_ui.scd` with vanilla files merged
+- AI import errors: re-run `wopc setup` to rebuild `wopc_core.scd` with vanilla files merged
 
 ## C++ Toolchain Setup (Binary Patching)
 

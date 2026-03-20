@@ -107,7 +107,8 @@ EXCLUDED_SCD_MODS: frozenset[str] = frozenset({"BlackopsACUs"})
 CORE_SCDS: frozenset[str] = frozenset({config.CONTENT_ICONS_SCD})
 
 # SCDs with fixed mount positions — excluded from toggleable list.
-FIXED_POSITION_SCDS = frozenset({"faf_ui.scd"})
+# Legacy name included so a leftover faf_ui.scd never gets mounted as a content pack.
+FIXED_POSITION_SCDS = frozenset({"wopc_core.scd", "faf_ui.scd"})
 
 # Human-friendly names for content packs shown in the launcher UI.
 CONTENT_PACK_LABELS: dict[str, str] = {
@@ -130,7 +131,7 @@ CONTENT_PACK_LABELS: dict[str, str] = {
 def get_toggleable_scds() -> list[str]:
     """Return sorted list of gamedata SCD names the user can toggle.
 
-    Fixed-position SCDs (faf_ui.scd) are excluded.
+    Fixed-position SCDs (wopc_core.scd) are excluded.
     """
     if not config.WOPC_GAMEDATA.exists():
         return []

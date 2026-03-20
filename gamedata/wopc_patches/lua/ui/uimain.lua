@@ -1,5 +1,5 @@
 -- =============================================================================
--- uimain.lua — WOPC override (patched into lua.scd by wopc setup)
+-- uimain.lua — WOPC override (patched into wopc_core.scd by deploy.py)
 --
 -- Based on FAF's lua/ui/uimain.lua with one WOPC-specific change:
 --   * StartHostLobbyUI checks for /wopcquickstart command-line flag.
@@ -9,7 +9,7 @@
 -- All other functions are identical to the FAF original.
 -- =============================================================================
 
-LOG("WOPC: uimain.lua loaded from wopc_patches.scd")
+LOG("WOPC: uimain.lua loaded from wopc_core.scd")
 
 local UIUtil = import("/lua/ui/uiutil.lua")
 local UIFile = UIUtil.UIFile

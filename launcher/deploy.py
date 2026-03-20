@@ -429,17 +429,16 @@ def run_setup(
     else:
         logger.warning("  WARNING: Bundled gamedata not found at %s", config.REPO_BUNDLED_GAMEDATA)
 
-    # Build faf_ui.scd
-    # This merges FAF source files with vanilla lua.scd files that FAF
-    # doesn't replace.  The real FAF distribution (.nx2 files) does the
-    # same thing — our faf_ui.scd is the equivalent single-file package.
-    faf_ui_src = config.REPO_FAF_UI
-    faf_ui_dst = config.WOPC_GAMEDATA / config.FAF_UI_SCD
-    if faf_ui_src.exists():
-        logger.info("  building %s", config.FAF_UI_SCD)
-        with zipfile.ZipFile(faf_ui_dst, "w", zipfile.ZIP_STORED) as zf:
+    # Build wopc_core.scd
+    # Merges game logic source, vanilla lua.scd gap-fills, and WOPC patches
+    # into a single SCD that the engine mounts before vanilla content.
+    wopc_core_src = config.REPO_WOPC_CORE_SRC
+    wopc_core_dst = config.WOPC_GAMEDATA / config.WOPC_CORE_SCD
+    if wopc_core_src.exists():
+        logger.info("  building %s", config.WOPC_CORE_SCD)
+        with zipfile.ZipFile(wopc_core_dst, "w", zipfile.ZIP_STORED) as zf:
             # 1. Add FAF source files (these take priority over vanilla).
-            # Normalize arcnames to lowercase — FAF's import() lowercases all
+            # Normalize arcnames to lowercase — the engine's import() lowercases all
             # paths before lookup (import.lua line 116), but ZIP lookups are
             # case-sensitive.  Without this, 833/1264 files are unreachable.
             for target_dir in [
@@ -456,18 +455,18 @@ def run_setup(
                 "schook",
                 "textures",
             ]:
-                dir_path = faf_ui_src / target_dir
+                dir_path = wopc_core_src / target_dir
                 if dir_path.exists():
                     for file_path in dir_path.rglob("*"):
                         if file_path.is_file():
-                            rel = file_path.relative_to(faf_ui_src)
+                            rel = file_path.relative_to(wopc_core_src)
                             arcname = str(rel).replace("\\", "/").lower()
                             zf.write(file_path, arcname)
 
-            # 2. Merge vanilla lua.scd files that FAF doesn't replace.
-            # FAF's simInit.lua imports AI files (lua/AI/*) that exist in
-            # vanilla lua.scd but not in FAF's source repo.  Without these,
-            # the sim crashes on import errors.
+            # 2. Merge vanilla lua.scd gap-fills.
+            # simInit.lua imports AI files (lua/AI/*) that exist in vanilla
+            # lua.scd but not in our source repo.  Without these, the sim
+            # crashes on import errors.
             # Arcnames are lowercased to match step 1 normalization.
             vanilla_lua_scd = config.SCFA_STEAM / "gamedata" / "lua.scd"
             if vanilla_lua_scd.exists():
@@ -481,7 +480,9 @@ def run_setup(
                         if normalized not in existing:
                             zf.writestr(normalized, vanilla_zf.read(info))
                             merged += 1
-                logger.info("  merged %d vanilla lua.scd files into %s", merged, config.FAF_UI_SCD)
+                logger.info(
+                    "  merged %d vanilla lua.scd files into %s", merged, config.WOPC_CORE_SCD
+                )
             else:
                 logger.warning("  WARNING: vanilla lua.scd not found at %s", vanilla_lua_scd)
 
@@ -498,48 +499,63 @@ def run_setup(
                         arcname = str(rel).replace("\\", "/").lower()
                         zf.write(file_path, arcname)
                         patched += 1
-                logger.info("  added %d WOPC patch files into %s", patched, config.FAF_UI_SCD)
+                logger.info("  added %d WOPC patch files into %s", patched, config.WOPC_CORE_SCD)
             else:
                 logger.warning("  WARNING: WOPC patches not found at %s", wopc_patches_src)
     else:
-        # Standalone mode: download pre-built faf_ui.scd from GitHub release
-        logger.info("  FAF source not available — downloading pre-built %s", config.FAF_UI_SCD)
-        if not faf_ui_dst.exists():
-            _download_file(config.CORE_CONTENT_ASSETS["faf_ui.scd"]["url"], faf_ui_dst)
+        # Standalone mode: no source tree available — migrate or download
+        if not wopc_core_dst.exists():
+            # Try migrating from the old ProgramData location first
+            old_gamedata = Path(r"C:\ProgramData\WOPC\gamedata")
+            old_scd = old_gamedata / "faf_ui.scd"  # pre-rename name
+            if not old_scd.exists():
+                old_scd = old_gamedata / config.WOPC_CORE_SCD
+            if old_scd.exists():
+                logger.info("  migrating %s from old install", config.WOPC_CORE_SCD)
+                shutil.copy2(old_scd, wopc_core_dst)
+            else:
+                # Download pre-built wopc_core.scd.zip from GitHub release
+                logger.info("  downloading %s", config.WOPC_CORE_SCD)
+                asset_info = config.CORE_CONTENT_ASSETS["wopc_core.scd.zip"]
+                zip_dst = config.WOPC_GAMEDATA / "wopc_core.scd.zip"
+                _download_file(asset_info["url"], zip_dst)
+                with zipfile.ZipFile(zip_dst, "r") as zf:
+                    zf.extractall(config.WOPC_GAMEDATA)
+                zip_dst.unlink()
+                logger.info("  extracted %s", config.WOPC_CORE_SCD)
 
     # Patch SCDs with WOPC engine-level overrides.
     # The SCFA engine's C++ code loads files like uimain.lua using
     # first-added search order (earliest mount = highest priority),
     # which is the OPPOSITE of Lua's import() function.
-    # Even though the files are now inside faf_ui.scd (step 3 above),
+    # Even though the files are now inside wopc_core.scd (step above),
     # ZIP archives list entries in write order — the engine finds the
-    # FIRST matching entry, which is FAF's original from step 1.
+    # FIRST matching entry, which is the original from step 1.
     # _patch_scd() replaces that first entry with our patched version.
     wopc_patches_src = config.REPO_WOPC_PATCHES
     if wopc_patches_src.exists():
         uimain_src = wopc_patches_src / "lua" / "ui" / "uimain.lua"
         if uimain_src.exists():
-            # Patch faf_ui.scd — in FAF-only mode this is the first (and only)
-            # SCD providing uimain.lua, so the engine C++ doscript finds it.
-            if faf_ui_dst.exists():
-                _patch_scd(faf_ui_dst, "lua/ui/uimain.lua", uimain_src)
-                logger.info("  patched faf_ui.scd with WOPC uimain.lua")
+            # Patch wopc_core.scd with our uimain.lua
+            if wopc_core_dst.exists():
+                _patch_scd(wopc_core_dst, "lua/ui/uimain.lua", uimain_src)
+                logger.info("  patched wopc_core.scd with WOPC uimain.lua")
 
             # Also patch LOUD's lua.scd if present — when LOUD content packs
-            # are enabled, lua.scd is mounted before faf_ui.scd, so the engine
-            # would find LOUD's uimain.lua first without this patch.
+            # are enabled, lua.scd is mounted before wopc_core.scd, so the
+            # engine would find LOUD's uimain.lua first without this patch.
             lua_scd_path = config.WOPC_GAMEDATA / "lua.scd"
             if lua_scd_path.exists():
                 _patch_scd(lua_scd_path, "lua/ui/uimain.lua", uimain_src)
                 logger.info("  patched lua.scd with WOPC uimain.lua")
 
         # Patch any other files that the engine C++ loads via doscript
-        # (first-added priority). These have bugs in FAF source that we fix.
+        # (first-added priority). These have bugs we fix.
         # Arcname must be lowercase to match our normalized SCD contents.
         structure_src = wopc_patches_src / "lua" / "sim" / "units" / "StructureUnit.lua"
-        if structure_src.exists() and faf_ui_dst.exists():
-            _patch_scd(faf_ui_dst, "lua/sim/units/structureunit.lua", structure_src)
-            logger.info("  patched faf_ui.scd with fixed StructureUnit.lua")
+        if structure_src.exists() and wopc_core_dst.exists():
+            _patch_scd(wopc_core_dst, "lua/sim/units/structureunit.lua", structure_src)
+            logger.info("  patched wopc_core.scd with fixed StructureUnit.lua")
 
     # --- Step 4b: Acquire content packs (LOUD mods) ---
     _report("[4/6] Downloading content packs", 4)

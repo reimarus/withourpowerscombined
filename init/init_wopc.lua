@@ -10,11 +10,10 @@
 -- for the engine's VFS file lookup — earlier mounts shadow later ones):
 --   1. Bundled strategic icons  (from WOPC/bin/)
 --   2. Bundled maps and sounds
---   3. WOPC patches overlay     (our Lua fixes — highest priority for '/')
---   4. FAF UI + Lua engine      (FAF game logic — shadows vanilla)
---   5. Vanilla SCFA content     (fonts, textures, effects, units, loc, etc.)
---   6. User maps
---   7. User mods                (separate namespace via mount_mods)
+--   3. WOPC core SCD            (game logic + patches + vanilla gap-fills)
+--   4. Vanilla SCFA content     (fonts, textures, effects, units, loc, etc.)
+--   5. User maps
+--   6. User mods                (separate namespace via mount_mods)
 -- =============================================================================
 
 do
@@ -24,7 +23,7 @@ dofile(InitFileDir.."\\CommonDataPath.lua");
 WOPCRoot = InitFileDir .. '\\..'
 
 -- Load SCFA path from generated config (written by setup.py)
--- This file sets: SCFARoot = "C:\\Program Files (x86)\\Steam\\..."
+-- This file sets: SCFARoot = WOPCRoot .. "\\.."
 dofile(InitFileDir.."\\wopc_paths.lua");
 
 -- =========================================================================
@@ -39,25 +38,19 @@ mount_dir(WOPCRoot .. '\\maps', '/maps')
 mount_dir(WOPCRoot .. '\\sounds', '/sounds')
 
 -- =========================================================================
--- 3. WOPC patches overlay (first-added = highest VFS priority)
--- =========================================================================
-local wopc_patches = WOPCRoot .. '\\gamedata\\wopc_patches.scd'
-mount_dir(wopc_patches, '/')
-
--- =========================================================================
--- 4. FAF Lua engine + UI (shadows vanilla for all game logic + unit scripts)
--- Must be mounted BEFORE vanilla SCDs so the engine's VFS finds FAF's
+-- 3. WOPC core SCD (game logic + patches + vanilla gap-fills)
+-- Must be mounted BEFORE vanilla SCDs so the engine's VFS finds our
 -- files first (first-added = highest priority in SCFA's VFS).
 -- =========================================================================
-local faf_ui = WOPCRoot .. '\\gamedata\\faf_ui.scd'
-mount_dir(faf_ui, '/')
+local wopc_core = WOPCRoot .. '\\gamedata\\wopc_core.scd'
+mount_dir(wopc_core, '/')
 
 -- =========================================================================
 -- 5. Vanilla SCFA content (assets + gameplay data from Steam install)
--- Mounted AFTER FAF so FAF's files take priority.  Vanilla provides
--- assets that FAF doesn't replace (unmodified units, textures, etc.).
--- FAF replaces lua.scd, mohodata.scd, moholua.scd, and schook.scd
--- with its own code in faf_ui.scd — those are NOT mounted here.
+-- Mounted AFTER wopc_core so our files take priority.  Vanilla provides
+-- assets we don't replace (unmodified units, textures, etc.).
+-- wopc_core.scd replaces lua.scd, mohodata.scd, moholua.scd, and
+-- schook.scd — those are NOT mounted here.
 -- =========================================================================
 mount_dir(SCFARoot .. '\\fonts', '/fonts')
 mount_dir(SCFARoot .. '\\gamedata\\textures.scd', '/')

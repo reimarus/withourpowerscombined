@@ -73,7 +73,7 @@ def generate_init_lua() -> Path:
 --   1. Bundled strategic icons  (from WOPC/bin/)
 --   2. Content pack SCDs        (LOUD mods — toggleable, disabled by default)
 --   3. Bundled maps and sounds
---   4. FAF UI + WOPC patches    (single SCD: FAF logic + our fixes)
+--   4. WOPC core SCD            (game logic + our fixes)
 --   5. Vanilla SCFA content     (fonts, textures, effects, units, loc, etc.)
 --   6. User maps
 --   7. Server mods              (content pack mods — shared by all players)
@@ -107,20 +107,19 @@ mount_dir(WOPCRoot .. '\\\\maps', '/maps')
 mount_dir(WOPCRoot .. '\\\\sounds', '/sounds')
 
 -- =========================================================================
--- 4. FAF UI + WOPC patches (single consolidated SCD)
--- Contains FAF game logic, our WOPC fixes, and vanilla gap-fills.
+-- 4. WOPC core SCD (game logic + patches + vanilla gap-fills)
 -- Must be mounted BEFORE vanilla SCDs so the engine's VFS finds our
 -- files first (first-added = highest priority in SCFA's VFS).
 -- =========================================================================
-local faf_ui = WOPCRoot .. '\\\\gamedata\\\\faf_ui.scd'
-mount_dir(faf_ui, '/')
+local wopc_core = WOPCRoot .. '\\\\gamedata\\\\wopc_core.scd'
+mount_dir(wopc_core, '/')
 
 -- =========================================================================
 -- 5. Vanilla SCFA content (assets + gameplay data from Steam install)
--- Mounted AFTER FAF so FAF's files take priority.  Vanilla provides
--- assets that FAF doesn't replace (unmodified units, textures, etc.).
--- FAF replaces lua.scd, mohodata.scd, moholua.scd, and schook.scd
--- with its own code in faf_ui.scd — those are NOT mounted here.
+-- Mounted AFTER wopc_core so our files take priority.  Vanilla provides
+-- assets we don't replace (unmodified units, textures, etc.).
+-- wopc_core.scd replaces lua.scd, mohodata.scd, moholua.scd, and
+-- schook.scd — those are NOT mounted here.
 -- =========================================================================
 mount_dir(SCFARoot .. '\\\\fonts', '/fonts')
 mount_dir(SCFARoot .. '\\\\gamedata\\\\textures.scd', '/')

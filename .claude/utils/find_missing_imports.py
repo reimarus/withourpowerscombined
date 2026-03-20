@@ -1,30 +1,28 @@
 #!/usr/bin/env python3
-"""Find FAF imports that aren't satisfied by any SCD or wopc_patches."""
+"""Find imports in wopc_core.scd that aren't satisfied by any file in the SCD."""
 
 import re
 import zipfile
 from pathlib import Path
 
-FAF_UI = Path(r"C:\ProgramData\WOPC\gamedata\faf_ui.scd")
-WOPC_PATCHES = Path(r"C:\ProgramData\WOPC\gamedata\wopc_patches.scd")
+WOPC_CORE = Path(r"C:\ProgramData\WOPC\gamedata\wopc_core.scd")
 
 import_re = re.compile(r"""import\(["'](/[^"']+)["']\)""")
 
 
 def main() -> None:
-    # Collect all files across both SCDs
+    # Collect all files in wopc_core.scd
     all_files: set[str] = set()
 
-    for scd_path in [FAF_UI, WOPC_PATCHES]:
-        if scd_path.exists():
-            with zipfile.ZipFile(scd_path, "r") as zf:
-                for name in zf.namelist():
-                    all_files.add(name.lower().replace("\\", "/"))
+    if WOPC_CORE.exists():
+        with zipfile.ZipFile(WOPC_CORE, "r") as zf:
+            for name in zf.namelist():
+                all_files.add(name.lower().replace("\\", "/"))
 
-    # Scan all Lua files in faf_ui.scd for import() calls
+    # Scan all Lua files for import() calls
     missing: dict[str, list[str]] = {}
 
-    with zipfile.ZipFile(FAF_UI, "r") as zf:
+    with zipfile.ZipFile(WOPC_CORE, "r") as zf:
         for name in zf.namelist():
             if not name.endswith(".lua"):
                 continue

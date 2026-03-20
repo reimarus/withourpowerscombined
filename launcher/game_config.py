@@ -18,7 +18,7 @@ logger = logging.getLogger("wopc.game_config")
 # Faction constants — match SCFA's lua/factions.lua indexing
 FACTIONS = {"uef": 1, "aeon": 2, "cybran": 3, "seraphim": 4, "random": 5}
 
-# Default AI personality keys (from faf_ui aitypes.lua)
+# Default AI personality keys (from wopc_core aitypes.lua)
 AI_TYPES = ("easy", "medium", "adaptive", "rush", "turtle", "tech", "random")
 
 

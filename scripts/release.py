@@ -7,9 +7,9 @@ Version format: major.minor.build  (e.g. 2.01.0001)
 
 Bumps the build number automatically, or specify minor/major:
 
-    py scripts/release.py           # 2.01.0001 → 2.01.0002
-    py scripts/release.py minor     # 2.01.0042 → 2.02.0001
-    py scripts/release.py major     # 2.01.0042 → 3.00.0001
+    py scripts/release.py           # 2.01.0001 -> 2.01.0002
+    py scripts/release.py minor     # 2.01.0042 -> 2.02.0001
+    py scripts/release.py major     # 2.01.0042 -> 3.00.0001
 
 Then: runs tests, builds exe, commits, creates GitHub release, pushes.
 """
@@ -41,7 +41,8 @@ def _read_version() -> str:
 
 
 def _write_version(new_ver: str) -> None:
-    """Write a new version into pyproject.toml."""
+    """Write a new version into pyproject.toml and launcher/__version__.py."""
+    # Update pyproject.toml
     text = PYPROJECT.read_text(encoding="utf-8")
     updated = re.sub(
         r'^(version\s*=\s*)"[^"]+"',
@@ -51,6 +52,18 @@ def _write_version(new_ver: str) -> None:
         flags=re.MULTILINE,
     )
     PYPROJECT.write_text(updated, encoding="utf-8")
+
+    # Update launcher/__version__.py (preserves leading zeros for GUI display)
+    ver_file = REPO_ROOT / "launcher" / "__version__.py"
+    ver_text = ver_file.read_text(encoding="utf-8")
+    ver_updated = re.sub(
+        r'^(VERSION\s*=\s*)"[^"]+"',
+        rf'\1"{new_ver}"',
+        ver_text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    ver_file.write_text(ver_updated, encoding="utf-8")
 
 
 def _parse(ver: str) -> tuple[int, int, int]:
@@ -114,23 +127,23 @@ def main() -> None:
     new_ver = bump(old_ver, part)
     tag = f"launcher-v{new_ver}"
 
-    print(f"  Version: {old_ver} → {new_ver}")
+    print(f"  Version: {old_ver} -> {new_ver}")
     print(f"  Tag:     {tag}")
     print()
 
     # 1. Bump version in pyproject.toml
     _write_version(new_ver)
-    print(f"  ✓ Updated pyproject.toml to {new_ver}")
+    print(f"  OK: Updated pyproject.toml to {new_ver}")
 
     # 2. Reinstall package so importlib.metadata picks up the new version
     run("py -m pip install -e . -q")
 
     # 3. Run tests
-    print("\n— Running tests —")
+    print("\n-- Running tests --")
     run("py -m pytest tests/ -x -q --no-header")
 
     # 4. Build exe
-    print("\n— Building exe —")
+    print("\n-- Building exe --")
     run("py build_exe.py")
 
     exe_path = REPO_ROOT / EXE_NAME
@@ -138,21 +151,21 @@ def main() -> None:
         raise SystemExit(f"Build failed: {exe_path} not found")
 
     size_mb = exe_path.stat().st_size / 1_000_000
-    print(f"  ✓ Built {EXE_NAME} ({size_mb:.1f} MB)")
+    print(f"  OK: Built {EXE_NAME} ({size_mb:.1f} MB)")
 
     # 5. Commit the version bump
     run(f"git add {PYPROJECT.name}")
     run(f'git commit -m "release: v{new_ver}" --no-verify')
 
     # 6. Create GitHub release and upload exe
-    print("\n— Creating GitHub release —")
+    print("\n-- Creating GitHub release --")
     title = f"WOPC Launcher v{new_ver}"
     run(f'gh release create {tag} "{exe_path}" --title "{title}" --generate-notes --latest')
 
     # 7. Push the commit
     run("git push")
 
-    print(f"\n  ✅ Released {tag}")
+    print(f"\n  DONE: Released {tag}")
     print(f"     https://github.com/reimarus/withourpowerscombined/releases/tag/{tag}")
 
 

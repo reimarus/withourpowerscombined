@@ -56,7 +56,7 @@ def gamedata_dir(tmp_path: Path) -> Path:
     gd.mkdir()
     (gd / "lua.scd").write_bytes(b"x" * 100)
     (gd / "loc_US.scd").write_bytes(b"x" * 50)
-    (gd / "faf_ui.scd").write_bytes(b"x" * 40)
+    (gd / "wopc_core.scd").write_bytes(b"x" * 40)
     (gd / "brewlan.scd").write_bytes(b"x" * 2000)
     (gd / "blackops.scd").write_bytes(b"x" * 1500)
     (gd / "TotalMayhem.scd").write_bytes(b"x" * 1000)
@@ -162,9 +162,21 @@ class TestContentPacks:
     def test_get_toggleable_scds_excludes_fixed(self, gamedata_dir: Path) -> None:
         with patch.object(config, "WOPC_GAMEDATA", gamedata_dir):
             result = mods.get_toggleable_scds()
-        assert "faf_ui.scd" not in result
+        assert "wopc_core.scd" not in result
         assert "lua.scd" in result
         assert "brewlan.scd" in result
+
+    def test_faf_ui_scd_in_fixed_position_scds(self) -> None:
+        """Legacy faf_ui.scd is excluded so leftovers don't mount as packs."""
+        assert "faf_ui.scd" in mods.FIXED_POSITION_SCDS
+
+    def test_faf_ui_scd_excluded_from_toggleable(self, gamedata_dir: Path) -> None:
+        """A leftover faf_ui.scd in gamedata is never toggleable."""
+        # Add faf_ui.scd to the gamedata dir
+        (gamedata_dir / "faf_ui.scd").write_bytes(b"x" * 100)
+        with patch.object(config, "WOPC_GAMEDATA", gamedata_dir):
+            result = mods.get_toggleable_scds()
+        assert "faf_ui.scd" not in result
 
     def test_returns_empty_if_no_dir(self, tmp_path: Path) -> None:
         with patch.object(config, "WOPC_GAMEDATA", tmp_path / "nonexistent"):

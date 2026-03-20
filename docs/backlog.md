@@ -18,7 +18,7 @@ Items to tackle over time, roughly grouped by priority.
 6. **SupCom-authentic UI assets** — the launcher currently uses generic CustomTkinter buttons and backgrounds. Extract and implement actual Supreme Commander design assets (metallic button frames, brushed-metal backgrounds, faction-themed borders, glowing hover states) so the launcher feels like a modern SupCom experience, not a generic app with a color theme.
 7. ~~**Remember launcher window size**~~ ✅ — persist width/height in wopc_prefs.ini Window section, restore on launch (PR #29)
 8. **LOUD color picker** — use LOUD's color palette/picker for faction and player colors instead of the generic one.
-9. **Content-v2 release build** — run `scripts/build_content_release.py` and upload faf_ui.scd, wopc-maps.zip, strategic icons to `content-v2` GitHub Release so the standalone installer can download them
+9. **Content-v2 release build** — run `scripts/build_content_release.py` and upload wopc_core.scd, wopc-maps.zip, strategic icons to `content-v2` GitHub Release so the standalone installer can download them
 10. **Player ratings / balancing** — track skill ratings for fairer matchmaking (ELO or similar)
 
 ## Multiplayer UX (Phase 6 — complete)
@@ -58,6 +58,6 @@ Items to tackle over time, roughly grouped by priority.
 ## Architecture Refactors
 
 26. **Content pack pipeline** — deploy.py `_acquire_content_packs()` should be a proper pipeline: download manager, SCD registry, mod extractor as separate concerns. Will matter when adding BrewLAN, TotalMayhem, etc.
-27. **faf_ui.scd build deduplication** — setup produces "Duplicate name" warnings because WOPC patches overlap with FAF files. Need a merge strategy (last-write-wins with explicit override manifest).
+27. **wopc_core.scd build deduplication** — setup produces "Duplicate name" warnings because WOPC patches overlap with game logic files. Need a merge strategy (last-write-wins with explicit override manifest).
 28. **Game.prefs management** — SCFA's preference system is not managed by WOPC. We write active_mods at launch but don't own the file. Need a clean strategy.
 29. **Asset integrity validation** — content pack SCDs are downloaded once and never verified. Need hash checking on download and periodic validation.

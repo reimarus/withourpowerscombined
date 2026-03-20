@@ -2,13 +2,9 @@
 
 import os
 import sys
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-try:
-    VERSION = version("wopc")
-except PackageNotFoundError:
-    VERSION = "0.00.0000-dev"
+from launcher.__version__ import VERSION  # noqa: F401 — re-exported
 
 # --- Game installation paths ---
 #
@@ -117,12 +113,12 @@ REPO_BUNDLED_MAPS = REPO_BUNDLED / "maps"
 REPO_BUNDLED_SOUNDS = REPO_BUNDLED / "sounds"
 REPO_BUNDLED_USERMODS = REPO_BUNDLED / "usermods"
 
-# WOPC Overlay Content (consolidated into faf_ui.scd during build)
+# WOPC Overlay Content (consolidated into wopc_core.scd during build)
 REPO_WOPC_PATCHES = _REPO_ROOT / "gamedata" / "wopc_patches"
 
-# FAF UI Intergration (Phase 6)
-REPO_FAF_UI = VENDOR_DIR / "faf-ui"
-FAF_UI_SCD = "faf_ui.scd"
+# WOPC core SCD — merged FAF game logic + our patches + vanilla gap-fills
+REPO_WOPC_CORE_SRC = VENDOR_DIR / "faf-ui"
+WOPC_CORE_SCD = "wopc_core.scd"
 
 # FAF distributes a specific base exe that the binary patches are built against.
 # The Steam SupremeCommander.exe has different code addresses, so hooks would
@@ -177,9 +173,10 @@ CONTENT_VERSION = "v2"
 _RELEASE_BASE = "https://github.com/reimarus/withourpowerscombined/releases/download"
 
 CORE_CONTENT_ASSETS: dict[str, dict[str, str | bool]] = {
-    "faf_ui.scd": {
-        "url": f"{_RELEASE_BASE}/content-v2/faf_ui.scd",
+    "wopc_core.scd.zip": {
+        "url": f"{_RELEASE_BASE}/content-v2/wopc_core.scd.zip",
         "dst": "gamedata",
+        "extract": True,
     },
     "wopc-maps.zip": {
         "url": f"{_RELEASE_BASE}/content-v2/wopc-maps.zip",

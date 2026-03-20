@@ -487,7 +487,7 @@ local count = table.getn(myArray)
 | Lua `import()` | **Last-added = highest** | All Lua `import()` calls |
 
 This means:
-- VFS overlays (like `wopc_patches.scd` mounted AFTER `faf_ui.scd`) work for Lua `import()`
+- VFS overlays (later mounts) work for Lua `import()`
 - But they do NOT work for engine-loaded files like `uimain.lua`
 - To override engine-loaded files, patch the original `.scd` directly (deploy.py's `_patch_scd()`)
 
@@ -496,8 +496,8 @@ This means:
 2. Content packs (LOUD, etc.)
 3. Maps, sounds
 4. Vanilla SCFA assets (fonts, textures, effects)
-5. `faf_ui.scd` (FAF UI code)
-6. `wopc_patches.scd` (WOPC overlay - shadows FAF for Lua import)
+5. `wopc_core.scd` (WOPC game logic)
+6. Vanilla SCFA assets
 7. User maps
 8. User mods (via `mount_mods`)
 

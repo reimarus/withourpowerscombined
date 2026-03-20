@@ -1973,7 +1973,10 @@ class WopcApp(BaseApp):  # type: ignore
             game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
             color = self.get_human_color_index()
             ret = cmd_launch(
-                ai_opponents=ai_opponents, game_options=game_options, player_color=color
+                ai_opponents=ai_opponents,
+                game_options=game_options,
+                player_color=color,
+                launch_mode="join",
             )
             if ret == 0:
                 self.log("Game process started successfully.")
@@ -2869,7 +2872,12 @@ class WopcApp(BaseApp):  # type: ignore
         game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
         color = self.get_human_color_index()
 
-        ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options, player_color=color)
+        ret = cmd_launch(
+            ai_opponents=ai_opponents,
+            game_options=game_options,
+            player_color=color,
+            launch_mode="solo",
+        )
         if ret == 0:
             self.log("Game process started successfully.")
         else:
@@ -2882,7 +2890,12 @@ class WopcApp(BaseApp):  # type: ignore
         game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
         color = self.get_human_color_index()
 
-        ret = cmd_launch(ai_opponents=ai_opponents, game_options=game_options, player_color=color)
+        ret = cmd_launch(
+            ai_opponents=ai_opponents,
+            game_options=game_options,
+            player_color=color,
+            launch_mode="host",
+        )
         if ret == 0:
             self.log("Game process started successfully.")
         else:

@@ -6,7 +6,7 @@ to upload them.
 
 Requirements:
     - LOUD installed (for strategic icons SCD)
-    - Full repo with vendor submodules (for faf_ui.scd build)
+    - Full repo with vendor submodules (for wopc_core.scd build)
     - Steam SCFA installed (for vanilla lua.scd merge)
 
 Usage:
@@ -41,23 +41,23 @@ CURATED_MAPS = [
 ]
 
 
-def build_faf_ui_scd() -> Path:
-    """Build faf_ui.scd by merging FAF source + vanilla lua.scd + WOPC patches.
+def build_wopc_core_scd() -> Path:
+    """Build wopc_core.scd by merging game logic source + vanilla lua.scd + WOPC patches.
 
     This is the same logic as deploy.py's Step 4, extracted for release building.
     """
-    dst = STAGING / config.FAF_UI_SCD
-    faf_ui_src = config.REPO_FAF_UI
+    dst = STAGING / config.WOPC_CORE_SCD
+    core_src = config.REPO_WOPC_CORE_SRC
 
-    if not faf_ui_src.exists():
-        print(f"ERROR: FAF UI source not found at {faf_ui_src}")
+    if not core_src.exists():
+        print(f"ERROR: Game logic source not found at {core_src}")
         print("       Run: git submodule update --init --recursive")
         sys.exit(1)
 
-    print(f"Building {config.FAF_UI_SCD}...")
+    print(f"Building {config.WOPC_CORE_SCD}...")
     with zipfile.ZipFile(dst, "w", zipfile.ZIP_STORED) as zf:
-        # 1. Add FAF source files (lowercase normalized)
-        faf_count = 0
+        # 1. Add game logic source files (lowercase normalized)
+        core_count = 0
         for target_dir in [
             "etc",
             "lua",
@@ -72,15 +72,15 @@ def build_faf_ui_scd() -> Path:
             "schook",
             "textures",
         ]:
-            dir_path = faf_ui_src / target_dir
+            dir_path = core_src / target_dir
             if dir_path.exists():
                 for file_path in dir_path.rglob("*"):
                     if file_path.is_file():
-                        rel = file_path.relative_to(faf_ui_src)
+                        rel = file_path.relative_to(core_src)
                         arcname = str(rel).replace("\\", "/").lower()
                         zf.write(file_path, arcname)
-                        faf_count += 1
-        print(f"  Added {faf_count} FAF source files")
+                        core_count += 1
+        print(f"  Added {core_count} game logic source files")
 
         # 2. Merge vanilla lua.scd files that FAF doesn't replace
         vanilla_lua_scd = config.SCFA_STEAM / "gamedata" / "lua.scd"
@@ -117,14 +117,14 @@ def build_faf_ui_scd() -> Path:
         from launcher.deploy import _patch_scd
 
         _patch_scd(dst, "lua/ui/uimain.lua", uimain_src)
-        print("  Patched faf_ui.scd with WOPC uimain.lua")
+        print("  Patched wopc_core.scd with WOPC uimain.lua")
 
     structure_src = wopc_patches / "lua" / "sim" / "units" / "StructureUnit.lua"
     if structure_src.exists():
         from launcher.deploy import _patch_scd
 
         _patch_scd(dst, "lua/sim/units/structureunit.lua", structure_src)
-        print("  Patched faf_ui.scd with fixed StructureUnit.lua")
+        print("  Patched wopc_core.scd with fixed StructureUnit.lua")
 
     size_mb = dst.stat().st_size / 1e6
     print(f"  Output: {dst} ({size_mb:.1f} MB)")
@@ -198,7 +198,7 @@ def main() -> None:
     STAGING.mkdir(parents=True)
 
     # Build assets
-    build_faf_ui_scd()
+    build_wopc_core_scd()
     build_maps_zip()
     copy_icons_scd()
 
