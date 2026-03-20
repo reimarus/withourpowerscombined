@@ -1766,6 +1766,11 @@ class WopcApp(BaseApp):  # type: ignore
         if not self._all_maps:
             self._all_maps = map_scanner.scan_all_maps()
 
+        # Auto-select the first map if none is set in prefs.
+        # This ensures a fresh install always has a playable default.
+        if self._all_maps and not prefs.get_active_map():
+            prefs.set_active_map(self._all_maps[0].folder_name)
+
         self._apply_map_filters()
 
     def _apply_map_filters(self, *args: Any) -> None:
@@ -2868,6 +2873,13 @@ class WopcApp(BaseApp):  # type: ignore
     def _launch_game(self) -> None:
         """Run the game in a background thread (solo mode)."""
         self._persist_widget_values()
+
+        # Validate map selection before launching
+        active_map = prefs.get_active_map()
+        if not active_map:
+            self.log("Cannot launch: no map selected. Pick a map first.")
+            return
+
         ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
         game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
         color = self.get_human_color_index()

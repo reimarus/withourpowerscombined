@@ -190,8 +190,8 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
         return
     end
 
-    -- Tell the engine we're hosting a game
-    comm:HostGame()
+    -- Tell the engine we're hosting a game (friendsOnly = false)
+    comm:HostGame(false)
 
     -- Apply WOPC player settings to engine profile prefs.
     -- These must be set before LaunchGame() transitions to game state,
