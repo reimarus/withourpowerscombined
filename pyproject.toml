@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wopc"
-version = "2.01.0005"
+version = "2.01.0006"
 description = "Standalone gameplay + FAF engine patches for Supreme Commander: Forged Alliance"
 readme = "README.md"
 license = {text = "MIT"}
