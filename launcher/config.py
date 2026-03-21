@@ -198,4 +198,4 @@ GAME_LOG = "WOPC.log"
 # Set to your Firebase project URL once the project is created, e.g.:
 #   "https://<project-id>-default-rtdb.firebaseio.com"
 # Leave empty to disable internet discovery (LAN-only mode).
-RELAY_URL: str = ""
+RELAY_URL: str = "https://wopc-75b65-default-rtdb.firebaseio.com"
