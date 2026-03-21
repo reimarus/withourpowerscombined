@@ -1,5 +1,5 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-20
+> Last updated: 2026-03-21
 > If session runs out of tokens, a new session can pick up from here.
 
 ## Current State: Phase 6 — Modern Multiplayer UX (in progress)
@@ -63,7 +63,21 @@ The exe bundles Python + assets at build time. Stale exe = old code!
 
 ### Test results: 231 tests pass (fast), ~61% coverage floor (lobby.py tests marked slow)
 
-### Branch: `main` — Latest release: v2.01.0003. No active feature branch.
+### Branch: `main` — Latest release: v2.01.0006. No active feature branch.
+
+### Recent fixes (v2.01.0006):
+- `quickstart.lua` / `multilobby.lua` — `comm:HostGame(false)` and `comm:JoinGame(false)` use pcall with fallback to no-arg form. Stock SCFA's `CLobby.HostGame()` takes no arguments; passing `false` caused silent abort and black screen.
+- `launcher/deploy.py` — cast `info["url"]`/`info["dst"]` to `str` (CORE_CONTENT_ASSETS typed as `str|bool`, causing mypy failures)
+- `launcher/gui/app.py` — suppress PIL `import-not-found` and `LANCZOS` attr errors (optional dep, Pillow stubs incomplete)
+
+### Recent fixes (v2.01.0005):
+- `multilobby.lua:BuildGameInfo()` — OwnerID now uses real peer IDs instead of synthetic sequential indices ("0","1","2"...). Engine was waiting for phantom peers that never connect.
+- `multilobby.lua:HostGame()` → `HostGame(false)` — missing `friendsOnly` arg (same fix as quickstart.lua in v2.01.0003)
+- `prefs.py:get/set_expected_humans()` — clamping changed from `max(2,...)` to `max(1,...)`, default changed from 2 to 1. Previously impossible to set expected_humans=1, forcing all launches through multilobby path.
+- `.claude/utils/read_game_log.py` — fixed stale path (was pointing to old `C:\ProgramData\WOPC\` after directory relocation)
+
+### Recent fixes (v2.01.0004):
+- `quickstart.lua` — OwnerID must use host's real peer ID, not sequential index
 
 ### Recent fixes (v2.01.0003):
 - `comm:HostGame()` → `comm:HostGame(false)` — missing `friendsOnly` arg caused black screen
