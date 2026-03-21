@@ -290,6 +290,7 @@ class TestScmapPreviewExtraction:
     """Tests for _extract_scmap_preview()."""
 
     def test_extracts_dds_from_valid_scmap(self, tmp_path: Path) -> None:
+        pytest.importorskip("PIL")
         map_dir = tmp_path / "TestMap"
         map_dir.mkdir()
         _make_scmap(map_dir / "TestMap.scmap", width=2, height=2)
@@ -381,6 +382,7 @@ class TestScmapPreviewExtraction:
         assert info.preview_path.read_bytes() == b"EXISTING_PNG"
 
     def test_parse_scenario_uses_scmap_fallback(self, tmp_path: Path) -> None:
+        pytest.importorskip("PIL")
         map_dir = tmp_path / "ScmapOnly"
         map_dir.mkdir()
         scenario = map_dir / "ScmapOnly_scenario.lua"
