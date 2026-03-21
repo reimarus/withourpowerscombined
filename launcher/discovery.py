@@ -52,6 +52,7 @@ class GameBeacon:
     lobby_port: int
     host_ip: str = ""
     last_seen: float = field(default_factory=time.monotonic)
+    source: str = "lan"  # "lan" or "internet"
 
 
 # ---------------------------------------------------------------------------

@@ -193,3 +193,9 @@ CORE_CONTENT_ASSETS: dict[str, dict[str, str | bool]] = {
 
 GAME_EXE = "SupremeCommander.exe"
 GAME_LOG = "WOPC.log"
+
+# --- Internet relay (Firebase Realtime Database) ---
+# Set to your Firebase project URL once the project is created, e.g.:
+#   "https://<project-id>-default-rtdb.firebaseio.com"
+# Leave empty to disable internet discovery (LAN-only mode).
+RELAY_URL: str = "https://wopc-75b65-default-rtdb.firebaseio.com"
