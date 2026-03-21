@@ -194,8 +194,14 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
         return
     end
 
-    -- Tell the engine we're hosting a game (friendsOnly = false)
-    comm:HostGame(false)
+    -- Tell the engine we're hosting a game.
+    -- Stock SCFA: HostGame() takes no args.
+    -- FAF-patched: HostGame(friendsOnly) accepts one bool.
+    -- Use pcall to support both engine variants.
+    local hostOk, hostErr = pcall(function() comm:HostGame(false) end)
+    if not hostOk then
+        comm:HostGame()
+    end
 
     -- Get the host's peer ID — ALL player slots (human + AI) must use this
     -- as their OwnerID, otherwise the engine waits for non-existent peers.
