@@ -1,5 +1,5 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-21
+> Last updated: 2026-03-20
 > If session runs out of tokens, a new session can pick up from here.
 
 ## Current State: Phase 6 — Modern Multiplayer UX (in progress)
@@ -63,12 +63,7 @@ The exe bundles Python + assets at build time. Stale exe = old code!
 
 ### Test results: 231 tests pass (fast), ~61% coverage floor (lobby.py tests marked slow)
 
-### Branch: `main` — Latest release: v2.01.0006. No active feature branch.
-
-### Recent fixes (v2.01.0006):
-- `quickstart.lua` / `multilobby.lua` — `comm:HostGame(false)` and `comm:JoinGame(false)` use pcall with fallback to no-arg form. Stock SCFA's `CLobby.HostGame()` takes no arguments; passing `false` caused silent abort and black screen.
-- `launcher/deploy.py` — cast `info["url"]`/`info["dst"]` to `str` (CORE_CONTENT_ASSETS typed as `str|bool`, causing mypy failures)
-- `launcher/gui/app.py` — suppress PIL `import-not-found` and `LANCZOS` attr errors (optional dep, Pillow stubs incomplete)
+### Branch: `main` — Latest release: v2.01.0005. No active feature branch.
 
 ### Recent fixes (v2.01.0005):
 - `multilobby.lua:BuildGameInfo()` — OwnerID now uses real peer IDs instead of synthetic sequential indices ("0","1","2"...). Engine was waiting for phantom peers that never connect.
