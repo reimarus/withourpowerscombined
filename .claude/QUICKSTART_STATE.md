@@ -1,5 +1,5 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-19
+> Last updated: 2026-03-20
 > If session runs out of tokens, a new session can pick up from here.
 
 ## Current State: Phase 6 — Modern Multiplayer UX (in progress)
@@ -61,6 +61,13 @@ The exe bundles Python + assets at build time. Stale exe = old code!
 - UI is basic — needs polish pass
 - Solo ↔ multiplayer UI inconsistency
 
-### Test results: 196 tests pass (fast), ~60% coverage floor (lobby.py tests marked slow)
+### Test results: 231 tests pass (fast), ~61% coverage floor (lobby.py tests marked slow)
 
-### Branch: `main` — Phase 6 core merged (PR #17 ✅). No active feature branch.
+### Branch: `main` — Latest release: v2.01.0003. No active feature branch.
+
+### Recent fixes (v2.01.0003):
+- `comm:HostGame()` → `comm:HostGame(false)` — missing `friendsOnly` arg caused black screen
+- Auto-select first map on fresh install (empty `active_map` pref)
+- Block solo launch when no map selected
+- Launch mode normalization (invalid pref values default to `"solo"`)
+- Renamed `faf_ui.scd` → `wopc_core.scd` throughout codebase

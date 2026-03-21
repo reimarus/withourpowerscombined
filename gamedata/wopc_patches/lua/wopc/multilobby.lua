@@ -46,7 +46,14 @@ local function ResolveGameMods(uidList)
 end
 
 --- Build the flat gameInfo table that LobbyComm:LaunchGame() expects.
-local function BuildGameInfo(cfg)
+--- CRITICAL: OwnerID must map to real peer IDs, not synthetic indices.
+--- The engine waits for ALL unique OwnerIDs to connect before starting
+--- the sim.  AI slots must use the host's peer ID (host "owns" the AI).
+--- Human slots must use the actual peer ID of that player.
+---@param cfg table        Game config from launcher
+---@param hostPeerId any   Host's peer ID from GetLocalPlayerID()
+---@param connectedPeers table  peerId → true map of connected peers
+local function BuildGameInfo(cfg, hostPeerId, connectedPeers)
     local options = {
         Score = 'no',
         TeamSpawn = 'fixed',
@@ -71,10 +78,26 @@ local function BuildGameInfo(cfg)
         end
     end
 
+    -- Build ordered list of real peer IDs: host first, then connected peers.
+    local peerIds = { tostring(hostPeerId) }
+    for peerId, _ in connectedPeers do
+        table.insert(peerIds, tostring(peerId))
+    end
+    LOG("WOPC MultiLobby: BuildGameInfo — peerIds: host=" .. peerIds[1] .. " +" .. (table.getn(peerIds) - 1) .. " remote")
+
     local playerOptions = {}
+    local humanIdx = 1  -- tracks which peer ID to assign to human slots
     for i, p in cfg.Players do
         local isHuman = p.Human != false
         local faction = ResolveFaction(p.Faction or 1)
+        -- Human slots get their actual peer ID; AI slots get the host's peer ID.
+        local ownerID
+        if isHuman and peerIds[humanIdx] then
+            ownerID = peerIds[humanIdx]
+            humanIdx = humanIdx + 1
+        else
+            ownerID = tostring(hostPeerId)
+        end
         playerOptions[i] = {
             Team = p.Team or 1,
             PlayerColor = p.PlayerColor or i,
@@ -86,8 +109,9 @@ local function BuildGameInfo(cfg)
             AIPersonality = p.AIPersonality or '',
             Human = isHuman,
             Civilian = false,
-            OwnerID = tostring(i - 1),
+            OwnerID = ownerID,
         }
+        LOG("WOPC MultiLobby: Slot " .. i .. " OwnerID=" .. ownerID .. " Human=" .. tostring(isHuman))
     end
 
     local gameMods = ResolveGameMods(cfg.ActiveMods)
@@ -285,13 +309,13 @@ local WopcMultilobby = Class(moho.lobby_methods) {
 
         local gameInfo
         if _isHost then
-            gameInfo = BuildGameInfo(_cfg)
+            gameInfo = BuildGameInfo(_cfg, _localPeerId, _connectedPeers)
             -- Broadcast the launch signal + config to all peers
             LOG("WOPC MultiLobby: Broadcasting Launch to all peers")
             self:BroadcastData({ Type = "Launch", GameConfig = gameInfo })
         else
             -- Use config received from host, or fall back to our local config
-            gameInfo = _receivedConfig or BuildGameInfo(_cfg)
+            gameInfo = _receivedConfig or BuildGameInfo(_cfg, _localPeerId, _connectedPeers)
         end
 
         LOG("WOPC MultiLobby: Launching game...")
@@ -341,8 +365,8 @@ function HostGame(cfg, protocol, port, playerName, gameName, mapFile, natTravers
         return
     end
 
-    -- Tell the engine we're hosting
-    _comm:HostGame()
+    -- Tell the engine we're hosting (friendsOnly = false)
+    _comm:HostGame(false)
 end
 
 --- Joiner entry point: connect to host, wait for launch signal.
