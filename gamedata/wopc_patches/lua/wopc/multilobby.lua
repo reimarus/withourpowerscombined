@@ -365,8 +365,14 @@ function HostGame(cfg, protocol, port, playerName, gameName, mapFile, natTravers
         return
     end
 
-    -- Tell the engine we're hosting (friendsOnly = false)
-    _comm:HostGame(false)
+    -- Tell the engine we're hosting.
+    -- Stock SCFA: HostGame() takes no args.
+    -- FAF-patched: HostGame(friendsOnly) accepts one bool.
+    -- Use pcall to support both engine variants.
+    local hostOk, hostErr = pcall(function() _comm:HostGame(false) end)
+    if not hostOk then
+        _comm:HostGame()
+    end
 end
 
 --- Joiner entry point: connect to host, wait for launch signal.
@@ -395,6 +401,11 @@ function JoinGame(cfg, protocol, address, playerName, natTraversalProvider)
         return
     end
 
-    -- Tell the engine to join the host
-    _comm:JoinGame(address, false)
+    -- Tell the engine to join the host.
+    -- Stock SCFA: JoinGame(address) takes one arg.
+    -- FAF-patched: JoinGame(address, useNAT) accepts two.
+    local joinOk, joinErr = pcall(function() _comm:JoinGame(address, false) end)
+    if not joinOk then
+        _comm:JoinGame(address)
+    end
 end

@@ -5,7 +5,7 @@ import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 try:
-    from PIL import Image as PilImage
+    from PIL import Image as PilImage  # type: ignore[import-not-found]
 
     _PIL_AVAILABLE = True
 except ImportError:
@@ -229,7 +229,7 @@ class WopcApp(BaseApp):  # type: ignore
             try:
                 raw = PilImage.open(info.preview_path).convert("RGB")
                 # Solo preview (larger)
-                solo = raw.resize((self._PREVIEW_SIZE, self._PREVIEW_SIZE), PilImage.LANCZOS)
+                solo = raw.resize((self._PREVIEW_SIZE, self._PREVIEW_SIZE), PilImage.LANCZOS)  # type: ignore[attr-defined]
                 ctk_img = ctk.CTkImage(
                     light_image=solo,
                     dark_image=solo,
@@ -239,7 +239,7 @@ class WopcApp(BaseApp):  # type: ignore
                 self._preview_ctk_image = ctk_img
                 # Lobby preview (slightly smaller)
                 lsz = self._LOBBY_PREVIEW_SIZE
-                lobby = raw.resize((lsz, lsz), PilImage.LANCZOS)
+                lobby = raw.resize((lsz, lsz), PilImage.LANCZOS)  # type: ignore[attr-defined]
                 lobby_ctk_img = ctk.CTkImage(light_image=lobby, dark_image=lobby, size=(lsz, lsz))
                 self._lobby_preview_ctk_image = lobby_ctk_img
             except Exception as exc:
