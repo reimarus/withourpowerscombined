@@ -11,7 +11,40 @@ Usage: python .claude/utils/read_game_log.py              (last 50 lines)
 import sys
 from pathlib import Path
 
-LOG_PATH = Path(r"C:\ProgramData\WOPC\bin\WOPC.log")
+
+def _find_log() -> Path:
+    """Find WOPC.log at the current install location.
+
+    After the directory relocation (commit 4b869e4), the game directory moved
+    from C:\\ProgramData\\WOPC\\ to SCFA\\WOPC\\.  Try the launcher's config
+    module first, then fall back to known paths.
+    """
+    try:
+        from launcher import config
+
+        path = config.WOPC_BIN / config.GAME_LOG
+        if path.exists():
+            return path
+    except Exception:
+        pass
+
+    # Known paths — new location first, then legacy
+    candidates = [
+        Path(
+            r"C:\Program Files (x86)\Steam\steamapps\common"
+            r"\Supreme Commander Forged Alliance\WOPC\bin\WOPC.log"
+        ),
+        Path(r"C:\ProgramData\WOPC\bin\WOPC.log"),
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+
+    # Default to new location even if missing (gives clear error message)
+    return candidates[0]
+
+
+LOG_PATH = _find_log()
 
 
 def main() -> None:

@@ -25,7 +25,7 @@ DEFAULT_PREFS = {
         "launch_mode": "solo",  # solo | multiplayer
         "host_port": "15000",
         "join_address": "",  # e.g. "192.168.1.50:15000"
-        "expected_humans": "2",  # number of human players for host mode
+        "expected_humans": "1",  # number of human players (set by lobby on launch)
     },
     "Mods": {
         # Mods are stored as keys with boolean values (Enabled/Disabled)
@@ -173,18 +173,18 @@ def set_join_address(address: str) -> None:
 
 
 def get_expected_humans() -> int:
-    """Return the number of expected human players (2-8)."""
+    """Return the number of expected human players (1-8)."""
     parser = load_prefs()
     try:
-        val = int(parser.get("Game", "expected_humans", fallback="2"))
-        return max(2, min(8, val))
+        val = int(parser.get("Game", "expected_humans", fallback="1"))
+        return max(1, min(8, val))
     except ValueError:
-        return 2
+        return 1
 
 
 def set_expected_humans(count: int) -> None:
-    """Set the expected human player count (clamped to 2-8)."""
-    count = max(2, min(8, count))
+    """Set the expected human player count (clamped to 1-8)."""
+    count = max(1, min(8, count))
     parser = load_prefs()
     parser.set("Game", "expected_humans", str(count))
     save_prefs(parser)
