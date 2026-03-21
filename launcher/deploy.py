@@ -173,7 +173,7 @@ def _acquire_core_content() -> None:
     Iterates CORE_CONTENT_ASSETS and downloads anything missing.
     """
     for name, info in config.CORE_CONTENT_ASSETS.items():
-        dst_subdir = info["dst"]
+        dst_subdir = str(info["dst"])
         dst_dir = config.WOPC_ROOT / dst_subdir
         dst_dir.mkdir(parents=True, exist_ok=True)
 
@@ -185,13 +185,13 @@ def _acquire_core_content() -> None:
                 logger.info("  %s already populated, skipping %s", dst_subdir, name)
                 continue
             logger.info("  downloading and extracting %s", name)
-            _download_and_extract(info["url"], dst_dir)
+            _download_and_extract(str(info["url"]), dst_dir)
         else:
             dst_file = dst_dir / name
             if dst_file.exists():
                 logger.info("  %s already exists, skipping", name)
                 continue
-            _download_file(info["url"], dst_file)
+            _download_file(str(info["url"]), dst_file)
 
 
 def _extract_mods_from_scd(scd_path: Path) -> list[str]:
@@ -395,7 +395,7 @@ def run_setup(
         else:
             icons_info = config.CORE_CONTENT_ASSETS.get(icons_name)
             if icons_info:
-                _download_file(icons_info["url"], icons_dst)
+                _download_file(str(icons_info["url"]), icons_dst)
 
     # --- Step 3: Copy init files from repo ---
     _report("[3/6] Copying init files", 3)
@@ -518,7 +518,7 @@ def run_setup(
                 logger.info("  downloading %s", config.WOPC_CORE_SCD)
                 asset_info = config.CORE_CONTENT_ASSETS["wopc_core.scd.zip"]
                 zip_dst = config.WOPC_GAMEDATA / "wopc_core.scd.zip"
-                _download_file(asset_info["url"], zip_dst)
+                _download_file(str(asset_info["url"]), zip_dst)
                 with zipfile.ZipFile(zip_dst, "r") as zf:
                     zf.extractall(config.WOPC_GAMEDATA)
                 zip_dst.unlink()
@@ -574,7 +574,7 @@ def run_setup(
         maps_info = config.CORE_CONTENT_ASSETS.get("wopc-maps.zip")
         if maps_info:
             logger.info("  downloading curated map pack")
-            _download_and_extract(maps_info["url"], config.WOPC_MAPS)
+            _download_and_extract(str(maps_info["url"]), config.WOPC_MAPS)
 
     # Copy SCFA stock maps (from Steam installation)
     scfa_maps = config.SCFA_STEAM / "maps"
