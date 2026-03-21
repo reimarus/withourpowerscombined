@@ -48,7 +48,7 @@ Items to tackle over time, roughly grouped by priority.
 30. **Launcher settings persistence** — remember window size, position, panel state, last-used filters across sessions
 31. **Modern matchmaking UX** — Steam friends integration, game browser (find visible games), invite system (replaces manual IP/port)
 32. **Steam friends integration** — Steam API for multiplayer invites and presence
-35. **Internet multiplayer** — replace LAN-only UDP beacons with internet-capable matchmaking. Phase A: simple relay/matchmaking server (host registers, joiners discover — no port forwarding for discovery). Phase B: ICE/STUN NAT traversal (like FAF's java-ice-adapter — eliminates port forwarding for gameplay). Phase C: Steam P2P API for zero-config multiplayer.
+35. **Internet multiplayer** — ~~Phase A: Firebase relay for internet game discovery~~ ✅ (merged: `launcher/relay.py`, `RELAY_URL` in config, 🌐 badge in browser, LAN+internet merge). **Needs**: Firebase project created + `RELAY_URL` set in config to activate. Phase B: ICE/STUN NAT traversal (eliminates port forwarding for gameplay). Phase C: Steam P2P API for zero-config multiplayer.
 33. **"Leave a comment or idea" feature** — in-launcher feedback button that lets players submit ideas, bug reports, or feature requests (e.g. opens a GitHub Issue template or a simple form that creates an issue). We review and implement what makes sense.
 
 ## Platform Support

@@ -111,6 +111,10 @@ class WopcApp(BaseApp):  # type: ignore
         self._pending_download: dict[str, Any] = {}
         self._beacon_broadcaster: Any = None
         self._beacon_listener: Any = None
+        self._relay_client: Any = None
+        self._relay_poll_active: bool = False
+        self._lan_games: list[Any] = []
+        self._internet_games: list[Any] = []
         self._is_hosting: bool = False
         self._current_screen: str = "solo"
 
@@ -714,7 +718,7 @@ class WopcApp(BaseApp):  # type: ignore
         # Empty state label
         self.no_games_label = ctk.CTkLabel(
             self.game_list_frame,
-            text="Searching for games on your network...",
+            text="Searching for games on your network and the internet...",
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=14),
         )
@@ -2007,6 +2011,7 @@ class WopcApp(BaseApp):  # type: ignore
         if self._current_screen == "lobby":
             self._show_screen("browser")
             self._start_beacon_listener()
+            self._start_relay_polling()
 
     def _on_lobby_error(self, error: str) -> None:
         """TCP callback: connection error."""
@@ -2016,6 +2021,7 @@ class WopcApp(BaseApp):  # type: ignore
         if self._current_screen == "lobby":
             self._show_screen("browser")
             self._start_beacon_listener()
+            self._start_relay_polling()
 
     # ------------------------------------------------------------------
     # File transfer callbacks
@@ -2160,6 +2166,7 @@ class WopcApp(BaseApp):  # type: ignore
         if self._current_screen == "lobby":
             self._show_screen("browser")
             self._start_beacon_listener()
+            self._start_relay_polling()
 
     def _kick_player(self, player_id: int) -> None:
         """Host kicks a player from the lobby."""
@@ -2569,12 +2576,15 @@ class WopcApp(BaseApp):  # type: ignore
             self._disconnect_lobby_client()
             self._stop_beacon_listener()
             self._stop_beacon_broadcaster()
+            self._stop_relay_polling()
+            self._stop_relay_registration()
             self._show_screen("solo")
             self.primary_btn.configure(text="PLAY MATCH", fg_color=COLOR_READY, state="normal")
             self.primary_btn.grid()
         elif mode == "MULTIPLAYER":
             self._show_screen("browser")
             self._start_beacon_listener()
+            self._start_relay_polling()
             # Hide the play button in sidebar (actions are in the lobby/browser screens)
             self.primary_btn.grid_remove()
 
@@ -2915,6 +2925,7 @@ class WopcApp(BaseApp):  # type: ignore
 
         # Give peers a moment to receive the Launch message, then stop server
         time.sleep(3)
+        self.after(0, self._stop_relay_registration)
         self.after(0, self._stop_lobby_server)
         self.after(
             0,
@@ -2951,6 +2962,8 @@ class WopcApp(BaseApp):  # type: ignore
             return
         self._start_beacon_broadcaster()
         self._stop_beacon_listener()
+        self._stop_relay_polling()
+        self._start_relay_registration()
         self._show_screen("lobby")
         self._update_lobby_for_host()
 
@@ -2979,6 +2992,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._lobby_client = LobbyClient(host, port, name, faction, callbacks)
         self._lobby_client.connect()
         self._stop_beacon_listener()
+        self._stop_relay_polling()
         self._show_screen("lobby")
         self._update_lobby_for_joiner()
         self.lobby_launch_btn.configure(text="CONNECTING...", state="disabled")
@@ -2992,6 +3006,7 @@ class WopcApp(BaseApp):  # type: ignore
         """Leave the current multiplayer lobby."""
         if self._is_hosting:
             self._stop_beacon_broadcaster()
+            self._stop_relay_registration()
             if self._lobby_server:
                 self._lobby_server.stop()
                 self._lobby_server = None
@@ -3003,6 +3018,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._clear_lobby_player_slots()
         self._show_screen("browser")
         self._start_beacon_listener()
+        self._start_relay_polling()
         self.log("Left the lobby.")
 
     def _on_lobby_launch_click(self) -> None:
@@ -3227,6 +3243,19 @@ class WopcApp(BaseApp):  # type: ignore
             )
             count_lbl.grid(row=0, column=1, rowspan=2, padx=5, sticky="e")
 
+            # Internet badge — shown only for relay-discovered games
+            row_widgets = [row_frame, name_lbl, map_lbl, count_lbl]
+            if getattr(game, "source", "lan") == "internet":
+                badge = ctk.CTkLabel(
+                    row_frame,
+                    text="🌐",
+                    text_color=COLOR_TEXT_MUTED,
+                    font=ctk.CTkFont(size=11),
+                    width=20,
+                )
+                badge.grid(row=1, column=1, padx=(0, 5), pady=(0, 8), sticky="e")
+                row_widgets.append(badge)
+
             join_btn = ctk.CTkButton(
                 row_frame,
                 text="Join",
@@ -3236,12 +3265,9 @@ class WopcApp(BaseApp):  # type: ignore
                 command=lambda g=game: self._join_discovered_game(g),
             )
             join_btn.grid(row=0, column=2, rowspan=2, padx=(5, 10), pady=8)
+            row_widgets.append(join_btn)
 
-            self.game_rows.append(
-                {
-                    "widgets": [row_frame, name_lbl, map_lbl, count_lbl, join_btn],
-                }
-            )
+            self.game_rows.append({"widgets": row_widgets})
 
     # ------------------------------------------------------------------
     # Beacon lifecycle methods
@@ -3290,15 +3316,122 @@ class WopcApp(BaseApp):  # type: ignore
             "max_players": int(self.expected_var.get()),
         }
 
+    # ------------------------------------------------------------------
+    # Internet relay lifecycle methods
+    # ------------------------------------------------------------------
+
+    def _start_relay_polling(self) -> None:
+        """Start the 5-second internet relay poll loop."""
+        if self._relay_poll_active:
+            return
+        self._relay_poll_active = True
+        self._poll_relay_once()
+
+    def _stop_relay_polling(self) -> None:
+        """Stop the internet relay poll loop and clear cached results."""
+        self._relay_poll_active = False
+        self._internet_games = []
+
+    def _poll_relay_once(self) -> None:
+        """Fetch internet games once, then reschedule the next poll (GUI thread)."""
+        if not self._relay_poll_active:
+            return
+
+        def _fetch() -> None:
+            from launcher import config
+            from launcher.relay import RelayClient
+
+            if not config.RELAY_URL:
+                return
+            games = RelayClient().fetch_games()
+            self.after(0, self._on_internet_games_fetched, games)
+
+        threading.Thread(target=_fetch, daemon=True).start()
+        self.after(5000, self._poll_relay_once)
+
+    def _on_internet_games_fetched(self, games: list[Any]) -> None:
+        """GUI thread callback: relay fetch completed."""
+        self._internet_games = games
+        self._merge_and_refresh()
+
+    def _start_relay_registration(self) -> None:
+        """Register this hosted game on the internet relay (background thread)."""
+        from launcher import config
+
+        if not config.RELAY_URL:
+            return
+
+        def _register() -> None:
+            from launcher.relay import RelayClient, get_public_ip
+
+            public_ip = get_public_ip()
+            if not public_ip:
+                logger.warning("Relay registration skipped: could not resolve public IP")
+                msg = "Internet relay: could not detect public IP — visible on LAN only."
+                self.after(0, lambda m=msg: self.log(m))
+                return
+            port = int(prefs.get_host_port() or "15000")
+            state = self._beacon_state()
+            client = RelayClient()
+            ok = client.register(
+                host_name=state["host_name"],
+                map_name=state["map_name"],
+                player_count=int(state["player_count"]),
+                max_players=int(state["max_players"]),
+                lobby_port=port,
+                public_ip=public_ip,
+            )
+            if ok:
+                client.start_heartbeat(self._beacon_state)
+                self._relay_client = client
+                self.after(0, lambda: self.log("Registered on internet relay."))
+            else:
+                self.after(
+                    0,
+                    lambda: self.log("Internet relay unavailable — visible on LAN only."),
+                )
+
+        threading.Thread(target=_register, daemon=True).start()
+
+    def _stop_relay_registration(self) -> None:
+        """Deregister from the internet relay and stop heartbeat."""
+        client = self._relay_client
+        if not client:
+            return
+        self._relay_client = None
+        threading.Thread(target=client.deregister, daemon=True).start()
+
     def _on_games_discovered(self, games: list[Any]) -> None:
         """Callback from BeaconListener (background thread)."""
-        self.after(0, self._refresh_game_browser, games)
+        self._lan_games = games
+        self.after(0, self._merge_and_refresh)
+
+    def _merge_and_refresh(self) -> None:
+        """Merge LAN + internet game lists and refresh the browser (GUI thread).
+
+        LAN games take priority: if the same host:port appears in both lists,
+        the LAN entry is shown (and the internet duplicate dropped).
+        """
+        seen: set[str] = set()
+        merged: list[Any] = []
+        for g in self._lan_games:
+            key = f"{g.host_ip}:{g.lobby_port}"
+            seen.add(key)
+            merged.append(g)
+        for g in self._internet_games:
+            if f"{g.host_ip}:{g.lobby_port}" not in seen:
+                merged.append(g)
+        self._refresh_game_browser(merged)
 
     def destroy(self) -> None:
         """Save window size and clean up lobby connections before closing."""
         self._save_window_size()
         self._stop_beacon_broadcaster()
         self._stop_beacon_listener()
+        self._stop_relay_polling()
+        if self._relay_client:
+            self._relay_client.deregister()
+            self._relay_client = None
         self._stop_lobby_server()
         self._disconnect_lobby_client()
         super().destroy()
