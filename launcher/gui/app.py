@@ -344,9 +344,10 @@ class WopcApp(BaseApp):  # type: ignore
         dy = event.y - self._drag_start[1]
         if abs(dx) > 3 or abs(dy) > 3:
             self._drag_moved = True
-        # If dragging from a spawn point, don't pan the map — we'll handle
-        # the swap on release instead.
+        # If dragging from a spawn point, draw a ghost icon at cursor position
         if getattr(self, "_drag_spawn_src", -1) >= 0:
+            if self._drag_moved:
+                self._draw_drag_ghost(event.x, event.y)
             return
         self._drag_start = (event.x, event.y)
         self._pan_x += dx
@@ -367,6 +368,8 @@ class WopcApp(BaseApp):  # type: ignore
         self._drag_start = None
         self._drag_moved = False
         self._drag_spawn_src = -1
+        # Clean up drag ghost overlay
+        self._clear_drag_ghost()
 
     def _on_canvas_motion(self, event: Any) -> None:
         """Track mouse hover over spawn positions for halo effect."""
@@ -376,6 +379,56 @@ class WopcApp(BaseApp):  # type: ignore
             canvas = self.map_canvas
             canvas.configure(cursor="hand2" if hit >= 0 else "")
             self._redraw_canvas()
+
+    def _draw_drag_ghost(self, cx: int, cy: int) -> None:
+        """Draw a semi-transparent ghost icon at the cursor during spawn drag."""
+        canvas = self.map_canvas
+        # Remove previous ghost items
+        canvas.delete("drag_ghost")
+        # Draw ghost commander icon at cursor
+        icon_size = max(16, min(canvas.winfo_width(), canvas.winfo_height()) // 22)
+        r = icon_size // 2
+        canvas.create_oval(
+            cx - r,
+            cy - r,
+            cx + r,
+            cy + r,
+            fill="",
+            outline="#FFFFFF",
+            width=2,
+            stipple="gray50",
+            tags="drag_ghost",
+        )
+        # Highlight valid drop targets
+        dst = self._hit_test_spawn(cx, cy)
+        if dst >= 0 and dst != getattr(self, "_drag_spawn_src", -1):
+            info = self._current_map_info
+            if info and info.markers and info.map_width:
+                cw = canvas.winfo_width()
+                ch = canvas.winfo_height()
+                base_size = min(cw, ch)
+                size = int(base_size * self._zoom)
+                ox = int((cw - size) / 2 + self._pan_x)
+                oy = int((ch - size) / 2 + self._pan_y)
+                _name, mx, mz = info.markers.armies[dst]
+                px = ox + int(mx / info.map_width * size)
+                py = oy + int(mz / (info.map_height or info.map_width) * size)
+                halo_r = icon_size // 2 + 6
+                canvas.create_oval(
+                    px - halo_r,
+                    py - halo_r,
+                    px + halo_r,
+                    py + halo_r,
+                    fill="",
+                    outline="#00FF00",
+                    width=2,
+                    tags="drag_ghost",
+                )
+
+    def _clear_drag_ghost(self) -> None:
+        """Remove the drag ghost overlay from the canvas."""
+        if hasattr(self, "map_canvas"):
+            self.map_canvas.delete("drag_ghost")
 
     def _hit_test_spawn(self, mx: int, my: int) -> int:
         """Return spawn index under (mx, my), or -1 if none."""
@@ -563,8 +616,8 @@ class WopcApp(BaseApp):  # type: ignore
                     py - r,
                     px + r,
                     py + r,
-                    fill="#FFFFFF",
-                    outline="#808080",
+                    fill="#00C800",
+                    outline="#006400",
                     width=max(1, size // 300),
                 )
 
@@ -581,8 +634,8 @@ class WopcApp(BaseApp):  # type: ignore
                     py - r,
                     px + r,
                     py + r,
-                    fill="#00CC00",
-                    outline="#006600",
+                    fill="#FFD700",
+                    outline="#B8860B",
                     width=max(1, size // 250),
                 )
 
@@ -1479,8 +1532,8 @@ class WopcApp(BaseApp):  # type: ignore
         self.name_entry = ctk.CTkEntry(settings, width=100, height=22, placeholder_text="Player")
         saved_name = prefs.get_player_name()
         self.name_entry.insert(0, saved_name)
-        self.name_entry.bind("<FocusOut>", lambda e: prefs.set_player_name(self.name_entry.get()))
-        self.name_entry.bind("<Return>", lambda e: prefs.set_player_name(self.name_entry.get()))
+        self.name_entry.bind("<FocusOut>", lambda e: self._on_name_change())
+        self.name_entry.bind("<Return>", lambda e: self._on_name_change())
         self.name_entry.grid(row=0, column=1, sticky="w")
 
         ctk.CTkLabel(
@@ -1656,17 +1709,17 @@ class WopcApp(BaseApp):  # type: ignore
         return [name for _, name in PLAYER_COLORS]
 
     def _next_free_color(self) -> str:
-        """Return the next color name not already taken by another slot."""
+        """Return the next hex color not already taken by another slot."""
         used: set[str] = set()
         for slot in self.player_slots:
             cvar = slot.get("color_var")
             if cvar:
                 used.add(cvar.get())
-        for _, name in PLAYER_COLORS:
-            if name not in used:
-                return name
+        for hex_val, _name in PLAYER_COLORS:
+            if hex_val not in used:
+                return hex_val
         # All taken — just return first
-        return PLAYER_COLORS[0][1]
+        return PLAYER_COLORS[0][0]
 
     def _on_color_change(self, _val: str) -> None:
         """Broadcast state and redraw map when a color changes."""
@@ -1681,7 +1734,9 @@ class WopcApp(BaseApp):  # type: ignore
 
     @staticmethod
     def _color_name_to_hex(name: str) -> str:
-        """Convert a color display name to its hex value."""
+        """Convert a color name or hex value to its hex value."""
+        if name.startswith("#"):
+            return name
         for hex_val, cname in PLAYER_COLORS:
             if cname == name:
                 return hex_val
@@ -1699,9 +1754,15 @@ class WopcApp(BaseApp):  # type: ignore
             bg=COLOR_PANEL,
             cursor="hand2",
         )
-        hex_color = self._color_name_to_hex(color_var.get())
+        raw_color = color_var.get()
+        hex_color = raw_color if raw_color.startswith("#") else self._color_name_to_hex(raw_color)
         swatch.create_rectangle(
-            2, 2, swatch_size - 1, swatch_size - 1, fill=hex_color, outline="#333333"
+            2,
+            2,
+            swatch_size - 1,
+            swatch_size - 1,
+            fill=hex_color,
+            outline="#333333",
         )
         swatch.grid(row=row, column=col, padx=5, pady=2)
 
@@ -1716,7 +1777,10 @@ class WopcApp(BaseApp):  # type: ignore
         return swatch
 
     def _show_color_popup(self, anchor: Any, color_var: Any) -> None:
-        """Show a popup grid of color swatches for selection."""
+        """Show an HSV color wheel popup with brightness slider."""
+        import colorsys
+        import math
+
         popup = tk.Toplevel(self)
         popup.overrideredirect(True)
         popup.configure(bg=COLOR_PANEL)
@@ -1726,36 +1790,142 @@ class WopcApp(BaseApp):  # type: ignore
         y = anchor.winfo_rooty() + anchor.winfo_height() + 2
         popup.geometry(f"+{x}+{y}")
 
-        swatch_sz = 28
-        cols = 4
-        for idx, (hex_val, name) in enumerate(PLAYER_COLORS):
-            r, c = divmod(idx, cols)
-            btn = tk.Canvas(
-                popup,
-                width=swatch_sz,
-                height=swatch_sz,
-                highlightthickness=1,
-                highlightbackground=COLOR_BG,
-                cursor="hand2",
-            )
-            btn.create_rectangle(0, 0, swatch_sz, swatch_sz, fill=hex_val, outline="")
-            # Highlight current selection
-            if name == color_var.get():
-                btn.configure(highlightbackground="#FFFFFF", highlightthickness=2)
-            btn.grid(row=r, column=c, padx=2, pady=2)
+        wheel_size = 160
+        brightness = [1.0]  # mutable container for closure access
+        wheel_canvas = tk.Canvas(
+            popup,
+            width=wheel_size,
+            height=wheel_size,
+            bg=COLOR_PANEL,
+            highlightthickness=0,
+        )
+        wheel_canvas.grid(row=0, column=0, padx=8, pady=(8, 4))
 
-            def _select(n: str = name, h: str = hex_val) -> None:
-                color_var.set(n)
-                # Update the anchor swatch color
-                swatch_ref = getattr(color_var, "_swatch", None)
-                if swatch_ref:
-                    sz = getattr(color_var, "_swatch_size", 22)
-                    swatch_ref.delete("all")
-                    swatch_ref.create_rectangle(0, 0, sz, sz, fill=h, outline="")
-                self._on_color_change(n)
-                popup.destroy()
+        # Generate the HSV wheel image
+        if _PIL_AVAILABLE:
+            from PIL import ImageTk  # type: ignore[import-not-found]
 
-            btn.bind("<Button-1>", lambda e, sel=_select: sel())  # type: ignore[misc]
+            def _render_wheel(val: float = 1.0) -> Any:
+                wheel_img = PilImage.new("RGBA", (wheel_size, wheel_size), (0, 0, 0, 0))
+                px = wheel_img.load()
+                cx, cy = wheel_size // 2, wheel_size // 2
+                radius = wheel_size // 2 - 2
+                for yi in range(wheel_size):
+                    for xi in range(wheel_size):
+                        dx = xi - cx
+                        dy = yi - cy
+                        dist = math.sqrt(dx * dx + dy * dy)
+                        if dist <= radius:
+                            hue = (math.atan2(dy, dx) / (2 * math.pi)) % 1.0
+                            sat = dist / radius
+                            r, g, b = colorsys.hsv_to_rgb(hue, sat, val)
+                            px[xi, yi] = (int(r * 255), int(g * 255), int(b * 255), 255)  # type: ignore[index]
+                return wheel_img
+
+            wheel_pil = _render_wheel(1.0)
+            wheel_tk = ImageTk.PhotoImage(wheel_pil)
+            wheel_canvas.create_image(0, 0, anchor="nw", image=wheel_tk)
+            wheel_canvas._wheel_tk = wheel_tk  # type: ignore[attr-defined]
+            wheel_canvas._wheel_pil = wheel_pil  # type: ignore[attr-defined]
+
+        # Preview swatch showing selected color
+        preview_frame = tk.Frame(popup, bg=COLOR_PANEL)
+        preview_frame.grid(row=0, column=1, padx=(0, 8), pady=(8, 4), sticky="n")
+        preview = tk.Canvas(
+            preview_frame,
+            width=40,
+            height=40,
+            bg=COLOR_PANEL,
+            highlightthickness=1,
+            highlightbackground=COLOR_TEXT_MUTED,
+        )
+        raw_val = color_var.get()
+        current_hex = raw_val if raw_val.startswith("#") else self._color_name_to_hex(raw_val)
+        preview.create_rectangle(0, 0, 40, 40, fill=current_hex, outline="", tags="prev")
+        preview.grid(row=0, column=0, pady=(0, 4))
+
+        # "Apply" button
+        def _apply_color() -> None:
+            hex_val = preview._chosen_hex  # type: ignore[attr-defined]
+            color_var.set(hex_val)
+            swatch_ref = getattr(color_var, "_swatch", None)
+            if swatch_ref:
+                sz = getattr(color_var, "_swatch_size", 22)
+                swatch_ref.delete("all")
+                swatch_ref.create_rectangle(0, 0, sz, sz, fill=hex_val, outline="")
+            self._on_color_change(hex_val)
+            popup.destroy()
+
+        apply_btn = tk.Button(
+            preview_frame,
+            text="OK",
+            command=_apply_color,
+            bg=COLOR_ACCENT,
+            fg=COLOR_BG,
+            width=5,
+            relief="flat",
+            cursor="hand2",
+        )
+        apply_btn.grid(row=1, column=0, pady=(2, 0))
+        preview._chosen_hex = current_hex  # type: ignore[attr-defined]
+
+        # Brightness slider
+        slider_frame = tk.Frame(popup, bg=COLOR_PANEL)
+        slider_frame.grid(row=1, column=0, columnspan=2, padx=8, pady=(0, 8), sticky="ew")
+
+        slider = tk.Scale(
+            slider_frame,
+            from_=100,
+            to=10,
+            orient="horizontal",
+            bg=COLOR_PANEL,
+            fg=COLOR_TEXT_PRIMARY,
+            troughcolor=COLOR_BG,
+            highlightthickness=0,
+            length=wheel_size,
+            showvalue=False,
+            command=lambda v: _on_brightness(int(v)),
+        )
+        slider.set(100)
+        slider.grid(row=0, column=0, sticky="ew")
+        tk.Label(
+            slider_frame,
+            text="Brightness",
+            bg=COLOR_PANEL,
+            fg=COLOR_TEXT_MUTED,
+            font=("Segoe UI", 9),
+        ).grid(row=1, column=0)
+
+        def _on_brightness(val: int) -> None:
+            brightness[0] = val / 100.0
+            if _PIL_AVAILABLE:
+                from PIL import ImageTk  # type: ignore[import-not-found]
+
+                wheel_pil_new = _render_wheel(brightness[0])
+                wheel_tk_new = ImageTk.PhotoImage(wheel_pil_new)
+                wheel_canvas.delete("all")
+                wheel_canvas.create_image(0, 0, anchor="nw", image=wheel_tk_new)
+                wheel_canvas._wheel_tk = wheel_tk_new  # type: ignore[attr-defined]
+                wheel_canvas._wheel_pil = wheel_pil_new  # type: ignore[attr-defined]
+
+        def _on_wheel_click(event: Any) -> None:
+            cx, cy = wheel_size // 2, wheel_size // 2
+            dx = event.x - cx
+            dy = event.y - cy
+            dist = math.sqrt(dx * dx + dy * dy)
+            radius = wheel_size // 2 - 2
+            if dist > radius:
+                return
+            hue = (math.atan2(dy, dx) / (2 * math.pi)) % 1.0
+            sat = min(dist / radius, 1.0)
+            r, g, b = colorsys.hsv_to_rgb(hue, sat, brightness[0])
+            hex_val = f"#{int(r * 255):02X}{int(g * 255):02X}{int(b * 255):02X}"
+            preview.delete("prev")
+            preview.create_rectangle(0, 0, 40, 40, fill=hex_val, outline="", tags="prev")
+            preview._chosen_hex = hex_val  # type: ignore[attr-defined]
+
+        wheel_canvas.bind("<Button-1>", _on_wheel_click)
+        wheel_canvas.bind("<B1-Motion>", _on_wheel_click)
 
         # Close popup when clicking elsewhere
         popup.bind("<FocusOut>", lambda e: popup.destroy())
@@ -1792,9 +1962,10 @@ class WopcApp(BaseApp):  # type: ignore
         lbl.grid(row=row, column=0, padx=(0, 5), pady=2)
         widgets.append(lbl)
 
+        player_name = prefs.get_player_name() or "Player"
         type_lbl = ctk.CTkLabel(
             self.slots_scroll,
-            text="Human",
+            text=player_name,
             text_color=COLOR_ACCENT,
             font=ctk.CTkFont(size=12, weight="bold"),
             anchor="w",
@@ -2128,11 +2299,26 @@ class WopcApp(BaseApp):  # type: ignore
         self.lobby_player_slots.clear()
 
     @staticmethod
-    def _color_name_to_index(name: str) -> int:
-        """Convert a color display name to the 1-based SCFA engine color index."""
-        for i, (_, cname) in enumerate(PLAYER_COLORS):
-            if cname == name:
+    def _color_name_to_index(val: str) -> int:
+        """Convert a color name or hex to the nearest 1-based SCFA engine color index."""
+        # Direct name match
+        for i, (hex_val, cname) in enumerate(PLAYER_COLORS):
+            if cname == val or hex_val == val:
                 return i + 1
+        # Nearest color by RGB distance for arbitrary hex values
+        if val.startswith("#") and len(val) == 7:
+            r = int(val[1:3], 16)
+            g = int(val[3:5], 16)
+            b = int(val[5:7], 16)
+            best_i, best_d = 0, float("inf")
+            for i, (hex_val, _) in enumerate(PLAYER_COLORS):
+                pr = int(hex_val[1:3], 16)
+                pg = int(hex_val[3:5], 16)
+                pb = int(hex_val[5:7], 16)
+                d = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2
+                if d < best_d:
+                    best_i, best_d = i, d
+            return best_i + 1
         return 1
 
     def get_human_color_index(self) -> int:
@@ -2141,10 +2327,22 @@ class WopcApp(BaseApp):  # type: ignore
             return self._color_name_to_index(self.player_slots[0]["color_var"].get())
         return 1
 
+    def get_human_start_spot(self) -> int:
+        """Return the human player's selected spawn position (1-based)."""
+        if self.player_slots:
+            return int(self.player_slots[0].get("start_spot", 0)) + 1
+        return 1
+
+    def get_human_team(self) -> int:
+        """Return the human player's selected team number."""
+        if self.player_slots and self.player_slots[0].get("team_var"):
+            return int(self.player_slots[0]["team_var"].get())
+        return 1
+
     def get_ai_opponents(self) -> list[dict[str, Any]]:
         """Collect AI opponent config from the slot UI for game_config.py."""
         opponents: list[dict[str, Any]] = []
-        for _i, slot in enumerate(self.player_slots):
+        for si, slot in enumerate(self.player_slots):
             if slot["type"] != "ai":
                 continue
             ai_display = slot["ai_var"].get()
@@ -2152,6 +2350,7 @@ class WopcApp(BaseApp):  # type: ignore
             faction = slot["faction_var"].get().lower()
             team = int(slot["team_var"].get())
             color = self._color_name_to_index(slot["color_var"].get())
+            start_spot = slot.get("start_spot", si) + 1  # 1-based for engine
             opponents.append(
                 {
                     "name": f"AI {len(opponents) + 1}: {ai_display}",
@@ -2159,6 +2358,7 @@ class WopcApp(BaseApp):  # type: ignore
                     "ai": ai_key,
                     "team": team,
                     "color": color,
+                    "start_spot": start_spot,
                 }
             )
         return opponents
@@ -2386,6 +2586,14 @@ class WopcApp(BaseApp):  # type: ignore
         if not filtered_maps and not preview_shown:
             self._update_map_preview(None)
 
+    def _on_name_change(self) -> None:
+        """Persist player name and update the human slot label."""
+        name = self.name_entry.get() or "Player"
+        prefs.set_player_name(name)
+        # Update the human slot label (widget index 1 = type/name label)
+        if hasattr(self, "player_slots") and self.player_slots:
+            self.player_slots[0]["widgets"][1].configure(text=name)
+
     def _on_faction_change(self, choice: str) -> None:
         """Persist faction preference when dropdown changes."""
         parser = prefs.load_prefs()
@@ -2505,10 +2713,14 @@ class WopcApp(BaseApp):  # type: ignore
             ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
             game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
             color = self.get_human_color_index()
+            start_spot = self.get_human_start_spot() if hasattr(self, "player_slots") else 1
+            team = self.get_human_team() if hasattr(self, "player_slots") else 1
             ret = cmd_launch(
                 ai_opponents=ai_opponents,
                 game_options=game_options,
                 player_color=color,
+                player_start_spot=start_spot,
+                player_team=team,
                 launch_mode="join",
             )
             if ret == 0:
@@ -3446,11 +3658,15 @@ class WopcApp(BaseApp):  # type: ignore
         ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
         game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
         color = self.get_human_color_index()
+        start_spot = self.get_human_start_spot() if hasattr(self, "player_slots") else 1
+        team = self.get_human_team() if hasattr(self, "player_slots") else 1
 
         ret = cmd_launch(
             ai_opponents=ai_opponents,
             game_options=game_options,
             player_color=color,
+            player_start_spot=start_spot,
+            player_team=team,
             launch_mode="solo",
         )
         if ret == 0:
@@ -3464,11 +3680,15 @@ class WopcApp(BaseApp):  # type: ignore
         ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
         game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
         color = self.get_human_color_index()
+        start_spot = self.get_human_start_spot() if hasattr(self, "player_slots") else 1
+        team = self.get_human_team() if hasattr(self, "player_slots") else 1
 
         ret = cmd_launch(
             ai_opponents=ai_opponents,
             game_options=game_options,
             player_color=color,
+            player_start_spot=start_spot,
+            player_team=team,
             launch_mode="host",
         )
         if ret == 0:

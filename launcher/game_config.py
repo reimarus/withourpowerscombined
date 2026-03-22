@@ -27,6 +27,8 @@ def write_game_config(
     player_name: str = "Player",
     player_faction: str = "random",
     player_color: int = 1,
+    player_start_spot: int = 1,
+    player_team: int = 1,
     ai_opponents: list[dict[str, Any]] | None = None,
     game_options: dict[str, str] | None = None,
     active_mod_uids: list[str] | None = None,
@@ -46,6 +48,10 @@ def write_game_config(
         Faction key for the human player (uef/aeon/cybran/seraphim/random).
     player_color:
         1-based color index for the human player (1=Red … 8=Green).
+    player_start_spot:
+        1-based spawn position for the human player.
+    player_team:
+        Team number for the human player (1-4).
     ai_opponents:
         List of AI player dicts, each with keys:
         ``name`` (str), ``faction`` (str), ``ai`` (str), ``team`` (int).
@@ -80,9 +86,9 @@ def write_game_config(
         "            Human = true,\n"
         f"            PlayerName = '{_escape_lua(player_name)}',\n"
         f"            Faction = {player_faction_num},\n"
-        "            Team = 1,\n"
+        f"            Team = {player_team},\n"
         f"            PlayerColor = {player_color},\n"
-        "            StartSpot = 1,\n"
+        f"            StartSpot = {player_start_spot},\n"
         "            AIPersonality = '',\n"
         "        }"
     )
@@ -94,6 +100,7 @@ def write_game_config(
         ai_key = ai.get("ai", "medium")
         ai_team = ai.get("team", 1)
         ai_color = ai.get("color", idx)
+        ai_start = ai.get("start_spot", idx)
 
         players_lua.append(
             "        {\n"
@@ -102,7 +109,7 @@ def write_game_config(
             f"            Faction = {ai_faction},\n"
             f"            Team = {ai_team},\n"
             f"            PlayerColor = {ai_color},\n"
-            f"            StartSpot = {idx},\n"
+            f"            StartSpot = {ai_start},\n"
             f"            AIPersonality = '{_escape_lua(ai_key)}',\n"
             "        }"
         )

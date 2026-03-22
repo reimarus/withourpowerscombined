@@ -7,8 +7,8 @@ Source: `vendor/faf-ui/textures/ui/` (DDS originals).
 
 | File | Size | Source | Usage |
 |------|------|--------|-------|
-| `marker_mass.png` | 32×32 | `icons_strategic/structure_mass.dds` | Mass deposit markers on map preview |
-| `marker_hydro.png` | 32×32 | `icons_strategic/structure_energy.dds` | Hydrocarbon markers on map preview |
+| `marker_mass.png` | 32×32 | `icons_strategic/structure_mass.dds` | Mass deposit markers on map preview (tinted green #00C800) |
+| `marker_hydro.png` | 32×32 | `icons_strategic/structure_energy.dds` | Hydrocarbon markers on map preview (tinted yellow/gold #FFD700) |
 | `marker_commander.png` | 32×32 | `icons_strategic/commander_generic.dds` | Spawn/army position markers on map preview |
 
 ## Faction Icons

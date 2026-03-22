@@ -19,7 +19,7 @@ Items to tackle over time, roughly grouped by priority.
 5. ~~**Launcher self-update**~~ ✅ — check GitHub Releases on startup, download and replace exe, restart (PR #28)
 6. **SupCom-authentic UI assets** — the launcher currently uses generic CustomTkinter buttons and backgrounds. Extract and implement actual Supreme Commander design assets (metallic button frames, brushed-metal backgrounds, faction-themed borders, glowing hover states) so the launcher feels like a modern SupCom experience, not a generic app with a color theme.
 7. ~~**Remember launcher window size**~~ ✅ — persist width/height in wopc_prefs.ini Window section, restore on launch (PR #29)
-8. **SupCom color picker** — use a SupCom-authentic color palette/picker for faction and player colors instead of the generic one.
+8. ~~**SupCom color picker**~~ ✅ — HSV color wheel popup with brightness slider, click/drag to pick any color, nearest-match to SCFA engine palette for game config (v2.01.0027)
 9. **Content-v2 release build** — run `scripts/build_content_release.py` and upload wopc_core.scd, wopc-maps.zip, strategic icons to `content-v2` GitHub Release so the standalone installer can download them
 10. **Player ratings / balancing** — track skill ratings for fairer matchmaking (ELO or similar)
 
@@ -48,7 +48,7 @@ Items to tackle over time, roughly grouped by priority.
 44. ~~**Icon-based map markers**~~ ✅ — tinted commander icons with preserved outlines, hover halo, click-to-select spawn. Mass/hydro use strategic icons from `launcher/gui/icons/marker_*.png`.
 45. ~~**Unify lobby map UI with solo**~~ ✅ — unified 4-column layout with inline map canvas, zoom/pan, searchable map list. Map inspect window removed.
 46. **Design asset library** — `launcher/gui/icons/ASSETS.md` indexes all available game textures. Faction icons (`faction_*.png`), strategic icons, chrome borders all pre-converted. Expand as new UI features need assets.
-47. **Show player name in slot** — player slots should display the player/AI name occupying the slot instead of "(see Player Settings)" text.
+47. ~~**Show player name in slot**~~ ✅ — human slot shows player name from prefs, updates on name change (v2.01.0027)
 
 ## Features
 

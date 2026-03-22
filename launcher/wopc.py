@@ -144,6 +144,8 @@ def cmd_launch(
     ai_opponents: list[dict[str, Any]] | None = None,
     game_options: dict[str, str] | None = None,
     player_color: int = 1,
+    player_start_spot: int = 1,
+    player_team: int = 1,
     launch_mode: str | None = None,
 ) -> int:
     """Launch the game from the WOPC directory.
@@ -253,6 +255,8 @@ def cmd_launch(
             player_name=player_name,
             player_faction=player_faction,
             player_color=player_color,
+            player_start_spot=player_start_spot,
+            player_team=player_team,
             ai_opponents=ai_opponents,
             game_options=merged_options,
             active_mod_uids=all_mod_uids,
@@ -290,6 +294,8 @@ def cmd_launch(
                 player_name=player_name,
                 player_faction=player_faction,
                 player_color=player_color,
+                player_start_spot=player_start_spot,
+                player_team=player_team,
                 ai_opponents=ai_opponents,
                 game_options=merged_options_solo,
                 active_mod_uids=all_mod_uids,
