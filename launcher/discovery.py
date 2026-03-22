@@ -51,6 +51,7 @@ class GameBeacon:
     max_players: int
     lobby_port: int
     host_ip: str = ""
+    game_name: str = ""
     last_seen: float = field(default_factory=time.monotonic)
     source: str = "lan"  # "lan" or "internet"
 
@@ -150,6 +151,7 @@ class BeaconBroadcaster:
             "max": state.get("max_players", 2),
             "port": self.lobby_port,
             "ver": _get_version(),
+            "game_name": state.get("game_name", ""),
         }
         data = json.dumps(beacon).encode("utf-8")
         sock.sendto(data, (self._target, self.port))
@@ -264,6 +266,7 @@ class BeaconListener:
             max_players=msg.get("max", 2),
             lobby_port=lobby_port,
             host_ip=source_ip,
+            game_name=msg.get("game_name", ""),
             last_seen=time.monotonic(),
         )
 

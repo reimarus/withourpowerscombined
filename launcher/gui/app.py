@@ -819,7 +819,16 @@ class WopcApp(BaseApp):  # type: ignore
         # Bottom bar
         bottom = ctk.CTkFrame(self.browser_screen, fg_color="transparent")
         bottom.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="ew")
-        bottom.grid_columnconfigure(1, weight=1)
+        bottom.grid_columnconfigure(2, weight=1)
+
+        # Game name entry (host names their game before creating)
+        self.game_name_entry = ctk.CTkEntry(
+            bottom,
+            placeholder_text="Game name (e.g. Friday Night Match)",
+            width=250,
+            height=44,
+        )
+        self.game_name_entry.grid(row=0, column=0, sticky="w", padx=(0, 8))
 
         self.create_game_btn = ctk.CTkButton(
             bottom,
@@ -832,7 +841,21 @@ class WopcApp(BaseApp):  # type: ignore
             corner_radius=4,
             command=self._on_create_game,
         )
-        self.create_game_btn.grid(row=0, column=0, sticky="w")
+        self.create_game_btn.grid(row=0, column=1, sticky="w")
+
+        # Refresh button
+        self.refresh_browser_btn = ctk.CTkButton(
+            bottom,
+            text="⟳  Refresh",
+            fg_color=COLOR_SURFACE,
+            hover_color=COLOR_ACCENT_HOVER,
+            text_color=COLOR_TEXT_PRIMARY,
+            width=100,
+            height=36,
+            corner_radius=4,
+            command=self._on_refresh_browser,
+        )
+        self.refresh_browser_btn.grid(row=0, column=3, padx=(0, 8), sticky="e")
 
         # Direct Connect (collapsed)
         self.direct_connect_toggle = ctk.CTkButton(
@@ -845,7 +868,7 @@ class WopcApp(BaseApp):  # type: ignore
             width=140,
             command=self._toggle_direct_connect,
         )
-        self.direct_connect_toggle.grid(row=0, column=2, sticky="e")
+        self.direct_connect_toggle.grid(row=0, column=4, sticky="e")
 
         self.direct_connect_frame = ctk.CTkFrame(
             self.browser_screen, fg_color=COLOR_SURFACE, corner_radius=4
@@ -3332,17 +3355,21 @@ class WopcApp(BaseApp):  # type: ignore
             row_frame.grid(row=i, column=0, padx=5, pady=3, sticky="ew")
             row_frame.grid_columnconfigure(1, weight=1)
 
+            # Title: game name if set, otherwise host name
+            title = getattr(game, "game_name", "") or game.host_name
             name_lbl = ctk.CTkLabel(
                 row_frame,
-                text=game.host_name,
+                text=title,
                 text_color=COLOR_TEXT_PRIMARY,
                 font=ctk.CTkFont(size=14, weight="bold"),
             )
             name_lbl.grid(row=0, column=0, padx=(10, 5), pady=(8, 0), sticky="w")
 
+            # Subtitle: "host — map"
+            subtitle = f"{game.host_name}  —  {game.map_name}"
             map_lbl = ctk.CTkLabel(
                 row_frame,
-                text=game.map_name,
+                text=subtitle,
                 text_color=COLOR_TEXT_MUTED,
             )
             map_lbl.grid(row=1, column=0, padx=(10, 5), pady=(0, 8), sticky="w")
@@ -3421,8 +3448,12 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _beacon_state(self) -> dict[str, Any]:
         """Return fresh game info for the beacon broadcaster."""
+        game_name = ""
+        if hasattr(self, "game_name_entry"):
+            game_name = self.game_name_entry.get().strip()
         return {
             "host_name": self.name_entry.get() or "Player",
+            "game_name": game_name,
             "map_name": prefs.get_active_map() or "No map",
             "player_count": 1 + len(self._remote_players),
             "max_players": int(self.expected_var.get()),
@@ -3492,6 +3523,7 @@ class WopcApp(BaseApp):  # type: ignore
                 max_players=int(state["max_players"]),
                 lobby_port=port,
                 public_ip=public_ip,
+                game_name=state.get("game_name", ""),
             )
             if ok:
                 client.start_heartbeat(self._beacon_state)
@@ -3517,6 +3549,31 @@ class WopcApp(BaseApp):  # type: ignore
         """Callback from BeaconListener (background thread)."""
         self._lan_games = games
         self.after(0, self._merge_and_refresh)
+
+    def _on_refresh_browser(self) -> None:
+        """Handle manual refresh button click — force immediate relay + LAN poll."""
+        self.refresh_browser_btn.configure(text="Refreshing...", state="disabled")
+        # Clear cached games to force a full refresh
+        self._internet_games = []
+        self._lan_games = []
+        self._refresh_game_browser([])
+
+        def _fetch() -> None:
+            from launcher import config
+            from launcher.relay import RelayClient
+
+            games: list[Any] = []
+            if config.RELAY_URL:
+                games = RelayClient().fetch_games()
+            self.after(0, self._on_manual_refresh_done, games)
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _on_manual_refresh_done(self, internet_games: list[Any]) -> None:
+        """Callback after manual refresh fetch completes."""
+        self._internet_games = internet_games
+        self._merge_and_refresh()
+        self.refresh_browser_btn.configure(text="⟳  Refresh", state="normal")
 
     def _merge_and_refresh(self) -> None:
         """Merge LAN + internet game lists and refresh the browser (GUI thread).
