@@ -131,6 +131,9 @@ class WopcApp(BaseApp):  # type: ignore
         self._current_map_info: map_scanner.MapInfo | None = None
         self._raw_preview: Any = None
         self._canvas_redraw_id: str | None = None
+        self._marker_icons: dict[str, Any] = {}  # raw PIL images
+        self._marker_tk_cache: list[Any] = []  # keep refs alive for tk
+        self._load_marker_icons()
 
         self.title("WOPC - Match Lobby")
         self._restore_window_size()
@@ -159,6 +162,19 @@ class WopcApp(BaseApp):  # type: ignore
         updater.cleanup_old_exe()
         self._pending_update: updater.UpdateInfo | None = None
         threading.Thread(target=self._check_for_update, daemon=True).start()
+
+    def _load_marker_icons(self) -> None:
+        """Load map marker icon PNGs from the icons directory."""
+        if not _PIL_AVAILABLE:
+            return
+        icons = _icons_dir()
+        for name in ("marker_mass", "marker_hydro", "marker_commander"):
+            path = icons / f"{name}.png"
+            if path.exists():
+                try:
+                    self._marker_icons[name] = PilImage.open(path).convert("RGBA")
+                except Exception as exc:
+                    logger.debug("Failed to load icon %s: %s", name, exc)
 
     def _set_window_icon(self) -> None:
         """Set the application window icon if it exists."""
@@ -320,47 +336,68 @@ class WopcApp(BaseApp):  # type: ignore
         if info is None or info.markers is None or info.map_width == 0:
             return
 
+        from PIL import ImageTk  # type: ignore[import-not-found]
+
         mw = info.map_width
         mh = info.map_height or mw  # fallback to square
+        self._marker_tk_cache.clear()
 
         def _map_to_px(mx: float, mz: float) -> tuple[int, int]:
             px = ox + int(mx / mw * size)
             py = oy + int(mz / mh * size)
             return px, py
 
-        # Mass points — white dots
+        def _draw_icon(icon_key: str, px: int, py: int, icon_size: int) -> None:
+            raw = self._marker_icons.get(icon_key)
+            if raw is not None:
+                scaled = raw.resize((icon_size, icon_size), PilImage.LANCZOS)  # type: ignore[attr-defined]
+                tk_img = ImageTk.PhotoImage(scaled)
+                canvas.create_image(px, py, image=tk_img)
+                self._marker_tk_cache.append(tk_img)
+
+        # Mass points — strategic mass extractor icon
+        mass_icon_size = max(8, size // 40)
         for mx, mz in info.markers.mass:
             px, py = _map_to_px(mx, mz)
-            r = max(3, size // 80)
-            canvas.create_oval(
-                px - r,
-                py - r,
-                px + r,
-                py + r,
-                fill="#FFFFFF",
-                outline="#808080",
-                width=max(1, size // 300),
-            )
+            if "marker_mass" in self._marker_icons:
+                _draw_icon("marker_mass", px, py, mass_icon_size)
+            else:
+                r = max(3, size // 80)
+                canvas.create_oval(
+                    px - r,
+                    py - r,
+                    px + r,
+                    py + r,
+                    fill="#FFFFFF",
+                    outline="#808080",
+                    width=max(1, size // 300),
+                )
 
-        # Hydro points — green dots, slightly larger
+        # Hydro points — strategic energy icon, slightly larger
+        hydro_icon_size = max(10, size // 32)
         for mx, mz in info.markers.hydro:
             px, py = _map_to_px(mx, mz)
-            r = max(4, size // 60)
-            canvas.create_oval(
-                px - r,
-                py - r,
-                px + r,
-                py + r,
-                fill="#00CC00",
-                outline="#006600",
-                width=max(1, size // 250),
-            )
+            if "marker_hydro" in self._marker_icons:
+                _draw_icon("marker_hydro", px, py, hydro_icon_size)
+            else:
+                r = max(4, size // 60)
+                canvas.create_oval(
+                    px - r,
+                    py - r,
+                    px + r,
+                    py + r,
+                    fill="#00CC00",
+                    outline="#006600",
+                    width=max(1, size // 250),
+                )
 
-        # Army spawn positions — numbered circles with player colors
+        # Army spawn positions — commander icon with player color ring + number
+        spawn_icon_size = max(20, size // 18)
         for i, (name, mx, mz) in enumerate(info.markers.armies):
             px, py = _map_to_px(mx, mz)
-            r = max(10, size // 30)
             color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0]
+            r = spawn_icon_size // 2 + 2
+            # Colored background circle
             canvas.create_oval(
                 px - r,
                 py - r,
@@ -370,10 +407,14 @@ class WopcApp(BaseApp):  # type: ignore
                 outline="#FFFFFF",
                 width=max(2, size // 200),
             )
+            # Commander icon on top
+            if "marker_commander" in self._marker_icons:
+                _draw_icon("marker_commander", px, py, spawn_icon_size)
+            # Player number
             num = name.split("_")[1] if "_" in name else str(i + 1)
             canvas.create_text(
-                px,
-                py,
+                px + r,
+                py - r,
                 text=num,
                 fill="#FFFFFF",
                 font=("Segoe UI", max(9, size // 40), "bold"),

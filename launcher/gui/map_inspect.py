@@ -38,6 +38,16 @@ PLAYER_COLORS: list[tuple[str, str]] = [
 ]
 
 
+def _icons_dir() -> Any:
+    """Resolve the GUI icons directory (works in dev mode and frozen exe)."""
+    import sys
+    from pathlib import Path
+
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "launcher" / "gui" / "icons"  # type: ignore[attr-defined]
+    return Path(__file__).parent / "icons"
+
+
 class MapInspectWindow(tk.Toplevel):
     """Detailed map inspect window with zoom, markers, and legend."""
 
@@ -67,6 +77,9 @@ class MapInspectWindow(tk.Toplevel):
         self._raw_preview = raw_preview
         self._zoom = 1.0
         self._tk_image: Any = None
+        self._marker_icons: dict[str, Any] = {}
+        self._marker_tk_cache: list[Any] = []
+        self._load_marker_icons()
 
         # Header with map info
         header = tk.Frame(self, bg=COLOR_PANEL)
@@ -154,6 +167,19 @@ class MapInspectWindow(tk.Toplevel):
         self.focus_set()
         self.after(50, self._redraw)
 
+    def _load_marker_icons(self) -> None:
+        """Load map marker icon PNGs from the icons directory."""
+        if not _PIL_AVAILABLE:
+            return
+        icons = _icons_dir()
+        for name in ("marker_mass", "marker_hydro", "marker_commander"):
+            path = icons / f"{name}.png"
+            if path.exists():
+                try:
+                    self._marker_icons[name] = PilImage.open(path).convert("RGBA")
+                except Exception as exc:
+                    logger.debug("Failed to load icon %s: %s", name, exc)
+
     def _on_resize(self, event: Any) -> None:
         self._redraw()
 
@@ -203,58 +229,78 @@ class MapInspectWindow(tk.Toplevel):
 
         mw = info.map_width
         mh = info.map_height or mw
+        self._marker_tk_cache.clear()
 
         def _map_to_px(mx: float, mz: float) -> tuple[int, int]:
             px = ox + int(mx / mw * size)
             py = oy + int(mz / mh * size)
             return px, py
 
-        # Mass points
-        r_mass = max(2, size // 100)
+        def _draw_icon(icon_key: str, px: int, py: int, icon_size: int) -> None:
+            raw = self._marker_icons.get(icon_key)
+            if raw is not None:
+                scaled = raw.resize((icon_size, icon_size), PilImage.LANCZOS)  # type: ignore[attr-defined]
+                tk_img = ImageTk.PhotoImage(scaled)
+                canvas.create_image(px, py, image=tk_img)
+                self._marker_tk_cache.append(tk_img)
+
+        # Mass points — strategic mass extractor icon
+        mass_icon_size = max(8, size // 40)
         for mx, mz in info.markers.mass:
             px, py = _map_to_px(mx, mz)
-            canvas.create_oval(
-                px - r_mass,
-                py - r_mass,
-                px + r_mass,
-                py + r_mass,
-                fill="#FFFFFF",
-                outline="#808080",
-                width=1,
-            )
+            if "marker_mass" in self._marker_icons:
+                _draw_icon("marker_mass", px, py, mass_icon_size)
+            else:
+                r = max(2, size // 100)
+                canvas.create_oval(
+                    px - r,
+                    py - r,
+                    px + r,
+                    py + r,
+                    fill="#FFFFFF",
+                    outline="#808080",
+                    width=1,
+                )
 
-        # Hydro points
-        r_hydro = max(3, size // 70)
+        # Hydro points — strategic energy icon
+        hydro_icon_size = max(10, size // 32)
         for mx, mz in info.markers.hydro:
             px, py = _map_to_px(mx, mz)
-            canvas.create_oval(
-                px - r_hydro,
-                py - r_hydro,
-                px + r_hydro,
-                py + r_hydro,
-                fill="#00CC00",
-                outline="#006600",
-                width=1,
-            )
+            if "marker_hydro" in self._marker_icons:
+                _draw_icon("marker_hydro", px, py, hydro_icon_size)
+            else:
+                r = max(3, size // 70)
+                canvas.create_oval(
+                    px - r,
+                    py - r,
+                    px + r,
+                    py + r,
+                    fill="#00CC00",
+                    outline="#006600",
+                    width=1,
+                )
 
-        # Army spawns
-        r_army = max(10, size // 35)
+        # Army spawns — commander icon with player color ring + number
+        spawn_icon_size = max(20, size // 18)
         for i, (name, mx, mz) in enumerate(info.markers.armies):
             px, py = _map_to_px(mx, mz)
             color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0]
+            r = spawn_icon_size // 2 + 2
             canvas.create_oval(
-                px - r_army,
-                py - r_army,
-                px + r_army,
-                py + r_army,
+                px - r,
+                py - r,
+                px + r,
+                py + r,
                 fill=color,
                 outline="#FFFFFF",
-                width=2,
+                width=max(2, size // 200),
             )
+            if "marker_commander" in self._marker_icons:
+                _draw_icon("marker_commander", px, py, spawn_icon_size)
             num = name.split("_")[1] if "_" in name else str(i + 1)
             canvas.create_text(
-                px,
-                py,
+                px + r,
+                py - r,
                 text=num,
                 fill="#FFFFFF",
                 font=("Segoe UI", max(9, size // 45), "bold"),
