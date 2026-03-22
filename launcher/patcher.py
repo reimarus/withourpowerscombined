@@ -23,7 +23,7 @@ class PatchBuildError(Exception):
 def _short_path(path: Path) -> str:
     """Convert to 8.3 short path on Windows to avoid spaces in os.system() calls.
 
-    The FAF patcher uses ``os.system()`` which passes commands through
+    The patcher uses ``os.system()`` which passes commands through
     ``cmd.exe``.  Paths containing spaces (e.g. ``C:\\Program Files\\...``)
     break because they are interpolated unquoted into f-strings.  Short
     path names (e.g. ``PROGRA~1``) side-step the limitation entirely.
@@ -89,7 +89,7 @@ def _prepare_staging(staging_dir: Path, patches_src: Path, clean: bool = False) 
     (staging_dir / "build").mkdir(exist_ok=True)
 
     # Apply MinGW Clang compatibility fixups to staging copies.
-    # FAF upstream targets MSVC-hosted Clang where <cstddef> (NULL, offsetof)
+    # Upstream patches target MSVC-hosted Clang where <cstddef> (NULL, offsetof)
     # is implicitly available.  MinGW Clang needs an explicit include.
     _apply_mingw_compat(staging_dir)
 
@@ -97,7 +97,7 @@ def _prepare_staging(staging_dir: Path, patches_src: Path, clean: bool = False) 
 def _apply_mingw_compat(staging_dir: Path) -> None:
     """Patch staging headers for MinGW-targeted Clang compatibility.
 
-    FAF patches are developed against MSVC-hosted Clang where standard
+    Binary patches are developed against MSVC-hosted Clang where standard
     macros like ``NULL`` and ``offsetof`` are implicitly available.
     MinGW Clang requires an explicit ``#include <cstddef>`` for these.
 
@@ -122,26 +122,26 @@ def _apply_mingw_compat(staging_dir: Path) -> None:
     logger.info("  Applied MinGW compatibility shim to include/lua/lua.h")
 
 
-def _download_faf_base_exe(cache_path: Path) -> Path:
-    """Download FAF's base exe if not already cached.
+def _download_base_exe(cache_path: Path) -> Path:
+    """Download the patchable base exe if not already cached.
 
-    FAF binary patches use hardcoded addresses for a specific base exe
-    distributed by FAF.  The Steam SupremeCommander.exe has different code
-    layout and cannot be used.
+    Binary patches use hardcoded addresses for a specific base exe.
+    The Steam SupremeCommander.exe has different code layout and cannot
+    be used as the patch target.
 
     Returns:
-        Path to the cached FAF base exe.
+        Path to the cached base exe.
 
     Raises:
         PatchBuildError: If the download fails.
     """
     if cache_path.is_file():
-        logger.info("  Using cached FAF base exe: %s", cache_path)
+        logger.info("  Using cached base exe: %s", cache_path)
         return cache_path
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    url = config.FAF_BASE_EXE_URL
-    logger.info("  Downloading FAF base exe from %s ...", url)
+    url = config.BASE_EXE_URL
+    logger.info("  Downloading base exe from %s ...", url)
 
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "WOPC-Patcher/1.0"})
@@ -149,7 +149,7 @@ def _download_faf_base_exe(cache_path: Path) -> Path:
             shutil.copyfileobj(resp, f)
     except (urllib.error.URLError, OSError) as exc:
         raise PatchBuildError(
-            f"Failed to download FAF base exe from {url}: {exc}\n"
+            f"Failed to download base exe from {url}: {exc}\n"
             "Check your internet connection, or manually place "
             f"ForgedAlliance_base.exe at {cache_path}"
         ) from exc
@@ -159,9 +159,9 @@ def _download_faf_base_exe(cache_path: Path) -> Path:
 
 
 def _copy_base_exe(staging_dir: Path) -> Path:
-    """Copy the FAF base exe to the staging directory as ForgedAlliance_base.exe.
+    """Copy the base exe to the staging directory as ForgedAlliance_base.exe.
 
-    Downloads from FAF's content server on first use (cached for future builds).
+    Downloads on first use (cached for future builds).
 
     Returns:
         Path to the copied base exe.
@@ -169,7 +169,7 @@ def _copy_base_exe(staging_dir: Path) -> Path:
     Raises:
         PatchBuildError: If the download or copy fails.
     """
-    src_exe = _download_faf_base_exe(config.FAF_BASE_EXE_CACHE)
+    src_exe = _download_base_exe(config.BASE_EXE_CACHE)
     dst_exe = staging_dir / "ForgedAlliance_base.exe"
 
     shutil.copy2(src_exe, dst_exe)
@@ -182,7 +182,7 @@ def _run_patcher(
     patcher_dir: Path,
     toolchain: Toolchain,
 ) -> Path:
-    """Invoke fa-python-binary-patcher on the staging directory.
+    """Invoke the binary patcher on the staging directory.
 
     Args:
         staging_dir: Directory with prepared patch sources + base exe.
@@ -202,7 +202,7 @@ def _run_patcher(
             f"Did you initialize submodules? Run: git submodule update --init"
         )
 
-    # The FAF patcher uses os.system() which can't handle spaces in paths.
+    # The patcher uses os.system() which can't handle spaces in paths.
     # Convert toolchain paths to 8.3 short names to avoid this limitation.
     cmd = [
         sys.executable,
@@ -215,7 +215,7 @@ def _run_patcher(
 
     logger.info("  Running patcher: %s", " ".join(cmd))
 
-    # The FAF patcher invokes compilers via os.system() which spawns
+    # The patcher invokes compilers via os.system() which spawns
     # subprocesses (cc1plus.exe, as.exe, etc.) that need the toolchain's
     # DLLs on PATH.  Ensure the toolchain bin directories are available.
     env = os.environ.copy()
@@ -265,7 +265,7 @@ def build_patches(
     """Build the patched SCFA executable.
 
     This is the main entry point for the patch build process:
-      1. Prepare staging directory from FA-Binary-Patches submodule
+      1. Prepare staging directory from binary patches submodule
       2. Apply exclusions from the manifest
       3. Copy the stock exe as the base
       4. Run the patcher

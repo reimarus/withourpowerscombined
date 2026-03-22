@@ -39,7 +39,7 @@ _LLVM_DEFAULT = Path(r"C:\Program Files\LLVM\bin")
 
 _SEARCH_PATHS: list[Path] = [
     # LLVM first for clang++: standalone LLVM targets MSVC (SEH exceptions),
-    # which is what FAF patches expect.  MSYS2 Clang targets MinGW (DWARF)
+    # which is what the binary patches expect.  MSYS2 Clang targets MinGW (DWARF)
     # and produces _Unwind_Resume references that break with -nostdlib.
     # LLVM's bin/ has no g++/ld, so those still come from MSYS2.
     _LLVM_DEFAULT,

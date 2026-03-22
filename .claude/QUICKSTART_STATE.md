@@ -8,12 +8,12 @@
 1. **Solo mode** (quickstart bypass): GUI → select map/players/options → PLAY MATCH → game enters sim
 2. **Multiplayer mode** (quickstart bypass): GUI → MULTIPLAYER → game browser (LAN + internet discovery) or Create Game → lobby room (map, players, options, chat) → LAUNCH → all players enter sim via quickstart
 3. **Content packs**: TotalMayhem + BlackOps units toggleable in launcher
-4. **Content icons**: Auto-extracted from LOUD's textures.scd during deploy
+4. **Content icons**: Downloaded from GitHub Releases during deploy
 5. **Internet game discovery**: Firebase relay (wopc-75b65) for finding games worldwide
 6. **Interactive map preview**: Canvas-based with mass/hydro/spawn overlays, click-to-inspect window with zoom
 
 ### CRITICAL ARCHITECTURE NOTE:
-**Our launcher IS the lobby.** ALL launch modes (solo, host, join) use `/wopcquickstart`. The FAF in-game lobby UI is NEVER shown. All multiplayer coordination (player list, game options, map selection, chat, ready state, file transfer) happens in the Python launcher over TCP. The engine just receives the final config and starts the match.
+**Our launcher IS the lobby.** ALL launch modes (solo, host, join) use `/wopcquickstart`. The in-game lobby UI is NEVER shown. All multiplayer coordination (player list, game options, map selection, chat, ready state, file transfer) happens in the Python launcher over TCP. The engine just receives the final config and starts the match.
 
 ### Launch modes (implemented in wopc.py):
 | Mode | Engine args | Behaviour |

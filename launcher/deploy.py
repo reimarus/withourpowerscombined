@@ -221,71 +221,28 @@ def _collect_content_unit_ids() -> set[str]:
 
 
 def _build_content_icons_scd() -> None:
-    """Build ``content_icons.scd`` containing unit icons for all content packs.
+    """Download ``content_icons.scd`` containing unit icons for content packs.
 
     SCFA looks for unit icons at ``/textures/ui/{faction}/icons/units/{id}_icon.dds``
     with a fallback to ``/textures/ui/common/icons/units/{id}_icon.dds``.  Content
-    pack SCDs (like TotalMayhem.scd) don't include these icon textures — LOUD stores
-    them separately in its own ``textures.scd``.
-
-    This function:
-    1. Scans all extracted content-pack mods for unit IDs.
-    2. Extracts matching icon DDS files from LOUD's ``textures.scd``.
-    3. Packs them into ``WOPC/gamedata/content_icons.scd``.
-
-    If LOUD is not installed, downloads a pre-built SCD from GitHub.
+    pack SCDs (like TotalMayhem.scd) don't include these icon textures — they are
+    distributed separately via GitHub releases.
     """
     dst = config.WOPC_GAMEDATA / config.CONTENT_ICONS_SCD
     unit_ids = _collect_content_unit_ids()
     if not unit_ids:
-        logger.info("  no content pack units found, skipping icon extraction")
+        logger.info("  no content pack units found, skipping icon download")
         return
 
-    if config.LOUD_TEXTURES_SCD.exists():
-        logger.info(
-            "  building %s from LOUD textures.scd (%d unit IDs)",
-            config.CONTENT_ICONS_SCD,
-            len(unit_ids),
-        )
-        _build_icons_from_loud(dst, unit_ids)
-    elif not dst.exists():
-        logger.info("  LOUD not installed, downloading %s", config.CONTENT_ICONS_SCD)
+    if not dst.exists():
+        logger.info("  downloading %s", config.CONTENT_ICONS_SCD)
         _download_file(config.CONTENT_ICONS_URL, dst)
 
 
-def _build_icons_from_loud(dst: Path, unit_ids: set[str]) -> None:
-    """Extract matching unit icons from LOUD's textures.scd into a new SCD."""
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    extracted = 0
-    try:
-        with zipfile.ZipFile(config.LOUD_TEXTURES_SCD, "r") as src_zf:
-            # Index icon entries by lowercase unit ID
-            icon_map: dict[str, list[zipfile.ZipInfo]] = {}
-            for info in src_zf.infolist():
-                lower = info.filename.lower()
-                if "/icons/units/" in lower and lower.endswith(".dds"):
-                    # Extract unit ID from filename like "brmt1pd_icon.dds"
-                    fname = lower.rsplit("/", 1)[-1]
-                    uid = fname.replace("_icon.dds", "")
-                    icon_map.setdefault(uid, []).append(info)
-
-            with zipfile.ZipFile(dst, "w", zipfile.ZIP_STORED) as out_zf:
-                for uid in sorted(unit_ids):
-                    for info in icon_map.get(uid, []):
-                        # Preserve original path (textures/ui/common/icons/units/...)
-                        arcname = info.filename.lower()
-                        out_zf.writestr(arcname, src_zf.read(info))
-                        extracted += 1
-
-        logger.info("  packed %d icon textures into %s", extracted, config.CONTENT_ICONS_SCD)
-    except (zipfile.BadZipFile, OSError) as exc:
-        logger.warning("  WARNING: could not build %s: %s", config.CONTENT_ICONS_SCD, exc)
-
-
 def _acquire_content_packs() -> None:
-    """Copy content packs from local LOUD install or download from GitHub.
+    """Download content packs from GitHub releases.
 
-    Also extracts mod directories from SCDs to WOPC/usermods/ so the
+    Also extracts mod directories from SCDs to WOPC/mods/ so the
     engine's mount_mods() can discover and activate them.
     """
     config.WOPC_GAMEDATA.mkdir(parents=True, exist_ok=True)
@@ -294,13 +251,7 @@ def _acquire_content_packs() -> None:
     for scd_name, asset_info in config.CONTENT_PACK_ASSETS.items():
         scd_dst = config.WOPC_GAMEDATA / scd_name
         if not scd_dst.exists():
-            # Try local LOUD install first
-            local_scd = config.LOUD_GAMEDATA / scd_name
-            if local_scd.exists():
-                logger.info("  copying %s from LOUD install", scd_name)
-                shutil.copy2(local_scd, scd_dst)
-            else:
-                _download_file(asset_info["url"], scd_dst)
+            _download_file(asset_info["url"], scd_dst)
 
         # Extract mods/ subtree so mount_mods() can find them
         if scd_dst.exists():
@@ -309,12 +260,7 @@ def _acquire_content_packs() -> None:
         for sound_name, sound_url in asset_info.get("sounds", {}).items():
             sound_dst = config.WOPC_SOUNDS / sound_name
             if not sound_dst.exists():
-                local_sound = config.LOUD_SOUNDS / sound_name
-                if local_sound.exists():
-                    logger.info("  copying %s from LOUD install", sound_name)
-                    shutil.copy2(local_sound, sound_dst)
-                else:
-                    _download_file(sound_url, sound_dst)
+                _download_file(sound_url, sound_dst)
 
     # Clean up excluded mods from previous extractions (e.g. BlackopsACUs
     # was extracted before we added the exclusion list).
@@ -350,17 +296,17 @@ def run_setup(
         d.mkdir(parents=True, exist_ok=True)
 
     # --- Step 1: Copy exe + DLLs from Steam SCFA/bin/ ---
-    # Prefer FAF-patched exe if available, fall back to stock
+    # Prefer patched exe if available, fall back to stock
     patched_exe = config.PATCH_BUILD_DIR / "ForgedAlliance_exxt.exe"
     exe_dst = config.WOPC_BIN / config.GAME_EXE
     if patched_exe.is_file():
-        _report("[1/6] Copying FAF-patched game binaries", 1)
+        _report("[1/6] Copying patched game binaries", 1)
         # Always overwrite exe with latest patched version
         shutil.copy2(patched_exe, exe_dst)
-        logger.info("  copied  %s (FAF-patched)", config.GAME_EXE)
+        logger.info("  copied  %s (patched)", config.GAME_EXE)
     else:
         _report("[1/6] Copying game binaries from SCFA", 1)
-        logger.info("  NOTE: Using stock exe. Run 'wopc patch' to build FAF-patched version.")
+        logger.info("  NOTE: Using stock exe. Run 'wopc patch' to build patched version.")
 
     missing = []
     for fname in config.BIN_FILES:
@@ -387,15 +333,9 @@ def run_setup(
     icons_name = "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd"
     icons_dst = config.WOPC_BIN / icons_name
     if not icons_dst.exists():
-        # Try LOUD first
-        loud_icons = config.LOUD_ROOT / "bin" / icons_name
-        if loud_icons.exists():
-            shutil.copy2(loud_icons, icons_dst)
-            logger.info("  copied %s from LOUD", icons_name)
-        else:
-            icons_info = config.CORE_CONTENT_ASSETS.get(icons_name)
-            if icons_info:
-                _download_file(str(icons_info["url"]), icons_dst)
+        icons_info = config.CORE_CONTENT_ASSETS.get(icons_name)
+        if icons_info:
+            _download_file(str(icons_info["url"]), icons_dst)
 
     # --- Step 3: Copy init files from repo ---
     _report("[3/6] Copying init files", 3)
@@ -437,7 +377,7 @@ def run_setup(
     if wopc_core_src.exists():
         logger.info("  building %s", config.WOPC_CORE_SCD)
         with zipfile.ZipFile(wopc_core_dst, "w", zipfile.ZIP_STORED) as zf:
-            # 1. Add FAF source files (these take priority over vanilla).
+            # 1. Add game logic source files (these take priority over vanilla).
             # Normalize arcnames to lowercase — the engine's import() lowercases all
             # paths before lookup (import.lua line 116), but ZIP lookups are
             # case-sensitive.  Without this, 833/1264 files are unreachable.
@@ -486,10 +426,10 @@ def run_setup(
             else:
                 logger.warning("  WARNING: vanilla lua.scd not found at %s", vanilla_lua_scd)
 
-            # 3. Add WOPC patches (override FAF + vanilla files where needed).
+            # 3. Add WOPC patches (override base + vanilla files where needed).
             # These are our own fixes and additions — quickstart.lua, uimain.lua
             # hook, StructureUnit fix, AI stubs, etc.  Written LAST so they
-            # overwrite any FAF or vanilla duplicate with the same arcname.
+            # overwrite any base or vanilla duplicate with the same arcname.
             wopc_patches_src = config.REPO_WOPC_PATCHES
             if wopc_patches_src.exists():
                 patched = 0
@@ -539,19 +479,9 @@ def run_setup(
     wopc_patches_src = config.REPO_WOPC_PATCHES
     if wopc_patches_src.exists():
         uimain_src = wopc_patches_src / "lua" / "ui" / "uimain.lua"
-        if uimain_src.exists():
-            # Patch wopc_core.scd with our uimain.lua
-            if wopc_core_dst.exists():
-                _patch_scd(wopc_core_dst, "lua/ui/uimain.lua", uimain_src)
-                logger.info("  patched wopc_core.scd with WOPC uimain.lua")
-
-            # Also patch LOUD's lua.scd if present — when LOUD content packs
-            # are enabled, lua.scd is mounted before wopc_core.scd, so the
-            # engine would find LOUD's uimain.lua first without this patch.
-            lua_scd_path = config.WOPC_GAMEDATA / "lua.scd"
-            if lua_scd_path.exists():
-                _patch_scd(lua_scd_path, "lua/ui/uimain.lua", uimain_src)
-                logger.info("  patched lua.scd with WOPC uimain.lua")
+        if uimain_src.exists() and wopc_core_dst.exists():
+            _patch_scd(wopc_core_dst, "lua/ui/uimain.lua", uimain_src)
+            logger.info("  patched wopc_core.scd with WOPC uimain.lua")
 
         # Patch any other files that the engine C++ loads via doscript
         # (first-added priority). These have bugs we fix.
@@ -561,7 +491,7 @@ def run_setup(
             _patch_scd(wopc_core_dst, "lua/sim/units/structureunit.lua", structure_src)
             logger.info("  patched wopc_core.scd with fixed StructureUnit.lua")
 
-    # --- Step 4b: Acquire content packs (LOUD mods) ---
+    # --- Step 4b: Acquire content packs ---
     _report("[4/6] Downloading content packs", 4)
     _acquire_content_packs()
 

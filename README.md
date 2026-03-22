@@ -1,13 +1,8 @@
 # WOPC - With Our Powers Combined
 
-**LOUD gameplay + FAF engine patches for Supreme Commander: Forged Alliance**
+**Standalone Supreme Commander: Forged Alliance with engine patches, extended content, and a modern launcher**
 
-WOPC merges two community projects that independently improved Supreme Commander: Forged Alliance:
-
-- **[LOUD](https://github.com/LOUD-Project/Git-LOUD)** - A complete gameplay overhaul: 545 rewritten Lua files, AI from scratch, 17 content packs adding hundreds of units, and aggressive performance optimization.
-- **[FAF (Forged Alliance Forever)](https://github.com/FAForever)** - Binary patches to the compiled C++ engine: collision fixes, Lua API extensions, and 10-15% performance improvement at the engine level.
-
-Neither project benefits from the other today. WOPC combines them into a single self-contained distribution and provides a foundation for **replacing the game's compiled C++ subsystems** (pathfinding, steering, collision) one at a time.
+WOPC is a self-contained distribution of Supreme Commander: Forged Alliance. It combines community-developed engine patches (collision fixes, memory improvements, Lua API extensions) with curated gameplay content (hundreds of additional units, maps, and AI improvements) into a single launcher that handles everything automatically.
 
 ---
 
@@ -18,7 +13,7 @@ Neither project benefits from the other today. WOPC combines them into a single 
 1. **Supreme Commander: Forged Alliance** on Steam (must be installed)
 2. **Windows 10/11**
 
-That's it — no Python, no LOUD, no FAF needed.
+That's it — no Python or other tools needed.
 
 ### First-time setup
 
@@ -49,7 +44,6 @@ If you want to contribute or build from source:
 
 - Python 3.10+
 - Supreme Commander: Forged Alliance on Steam
-- LOUD installed (optional — content is downloaded from GitHub if missing)
 
 ### Building the launcher
 
@@ -71,14 +65,14 @@ python -m launcher.gui
 cd launcher
 python wopc.py status     # Detect game installation, print paths
 python wopc.py setup      # Create C:\ProgramData\WOPC\, copy game files
-python wopc.py launch     # Start the game with LOUD gameplay
+python wopc.py launch     # Start the game
 ```
 
 ## How It Works
 
 WOPC creates an isolated game directory at `C:\ProgramData\WOPC\` containing:
 - A copy of the game executable and engine DLLs (from your Steam installation)
-- LOUD gameplay content (downloaded from GitHub Releases, or copied from local LOUD if available)
+- Gameplay content (downloaded from GitHub Releases)
 - A custom init file (`init_wopc.lua`) that loads content in the correct order
 - A WOPC overlay layer for our own patches
 - Content pack mods (BlackOps, TotalMayhem, etc.)
@@ -89,7 +83,7 @@ WOPC creates an isolated game directory at `C:\ProgramData\WOPC\` containing:
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 1 | ✅ Complete | Project foundation, LOUD validation, FAF binary patches |
+| 1 | ✅ Complete | Project foundation, binary patches integration |
 | 2 | ✅ Complete | WOPC Lua overlay, compatibility patches |
 | 3 | ✅ Complete | Multiplayer — content manifests, TCP lobby, file transfer |
 | 4 | ✅ Complete | GUI Launcher — install/play, mod selection, map browser |
@@ -111,10 +105,10 @@ C:\ProgramData\WOPC\                    (isolated game directory)
     MohoEngine.dll + other DLLs        (copied from Steam)
   gamedata\
     wopc_core.scd                      (downloaded from GitHub or built locally)
-    blackops.scd, TotalMayhem.scd      (downloaded from GitHub or copied from LOUD)
+    blackops.scd, TotalMayhem.scd      (downloaded from GitHub)
     content_icons.scd                  (unit icons for content packs)
-  maps\                                (downloaded or copied from LOUD/Steam)
-  sounds\                              (downloaded or copied from LOUD)
+  maps\                                (downloaded from GitHub)
+  sounds\                              (downloaded from GitHub)
   usermods\                            (extracted from content pack SCDs)
 ```
 
@@ -122,13 +116,13 @@ C:\ProgramData\WOPC\                    (isolated game directory)
 
 The init file loads content in this order (later entries shadow earlier ones):
 
-1. BrewLAN strategic icons
-2. LOUD gamedata SCDs (lua.scd, units.scd, brewlan.scd, etc.)
-3. LOUD maps and sounds
+1. Bundled strategic icons
+2. Content pack gamedata SCDs (lua.scd, units.scd, brewlan.scd, etc.)
+3. Bundled maps and sounds
 4. Vanilla SCFA content (fonts, textures, effects, meshes, movies)
-5. **WOPC patches overlay** (our fixes and enhancements)
-6. User mods (BetterPathing, etc.)
-7. User maps
+5. **WOPC core** (game logic, patches, and enhancements)
+6. User maps
+7. User mods (BetterPathing, etc.)
 
 ## Contributing
 
@@ -140,6 +134,5 @@ MIT License - see [LICENSE](LICENSE).
 
 ## Credits
 
-- **LOUD Project** - Gameplay content, AI, and performance optimization
-- **Forged Alliance Forever** - Binary patching infrastructure and engine improvements
-- **Gas Powered Games** - Original Supreme Commander: Forged Alliance
+- **SupCom modding community** — the foundation this project builds on
+- **Gas Powered Games** — original Supreme Commander: Forged Alliance

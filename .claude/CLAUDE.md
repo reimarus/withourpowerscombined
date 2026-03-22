@@ -20,7 +20,7 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 - Run `git branch` + `gh pr list --state open` — know what branch you're on and what's in flight
 - If `QUICKSTART_STATE.md` references a merged PR or deleted branch, **update it immediately**
 - If `docs/plan.md` shows completed items with no active next step, flag it to the user
-- If any doc references architecture that no longer exists (e.g., "FAF lobby"), fix it before proceeding (see Rule #2)
+- If any doc references architecture that no longer exists, fix it before proceeding (see Rule #2)
 
 **Step 3 — Before executing any implementation plan:**
 - Write or update the plan in `.claude/plans/`
@@ -35,7 +35,7 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 
 ## Project
 
-**WOPC** (With Our Powers Combined) merges LOUD gameplay with FAF engine patches for Supreme Commander: Forged Alliance.
+**WOPC** (With Our Powers Combined) is a standalone Supreme Commander: Forged Alliance distribution with engine patches, extended content, and a modern launcher.
 
 - Repo: https://github.com/reimarus/withourpowerscombined
 - Local: `C:\Users\roskv\wopc\`
@@ -57,7 +57,7 @@ This is a game people play with friends. Bugs crash the party. Every line of cod
 - Framework: pytest + pytest-cov + pytest-mock
 - Coverage floor: 70% (enforced in pyproject.toml)
 - **No junk tests.** A test that just checks a function doesn't throw is worthless. Test behavior, edge cases, and failure modes.
-- **No real filesystem.** Use `tmp_path` fixtures with fake directory trees. Tests must run without SCFA, LOUD, or WOPC installed.
+- **No real filesystem.** Use `tmp_path` fixtures with fake directory trees. Tests must run without SCFA or WOPC installed.
 - **Mock at the right level.** `deploy.py` uses `config.ATTR` access (not `from config import ATTR`) so `patch("launcher.config.X")` works. If you import names directly, patching breaks.
 - **Test the sad path.** Missing files, missing directories, permission errors, corrupt data. These are the bugs that ruin game night.
 - Run tests: `pytest` (coverage included via pyproject.toml addopts)
@@ -137,7 +137,7 @@ C:\Users\roskv\wopc\          (repo)
     init_wopc.lua              VFS mount order
     CommonDataPath.lua         VFS helper functions
   vendor/                      Git submodules
-    FA-Binary-Patches/         FAF C++ patches (66 hooks + 53 sections)
+    FA-Binary-Patches/         C++ engine patches (66 hooks + 53 sections)
     fa-python-binary-patcher/  Python patcher tool (compiles + injects patches)
   wopc_patches.toml            Patch manifest (exclude list)
   patches/build/               Build output (gitignored)
@@ -195,7 +195,7 @@ quickstart.lua
 | `launcher/wopc.py` | Writes config, passes /wopcquickstart + /wopcconfig |
 | `launcher/game_config.py` | Generates wopc_game_config.lua (Lua table) |
 | `launcher/deploy.py` | `_patch_scd()` patches wopc_core.scd + lua.scd with our uimain.lua |
-| `gamedata/wopc_patches/lua/ui/uimain.lua` | Full FAF copy + quickstart hook |
+| `gamedata/wopc_patches/lua/ui/uimain.lua` | Patched uimain.lua + quickstart hook |
 | `gamedata/wopc_patches/lua/wopc/quickstart.lua` | LobbyComm-based game launcher |
 
 **Critical discoveries (hard-won):**
@@ -206,7 +206,7 @@ quickstart.lua
 ## Phase Roadmap
 - **Phase 0** ✅ Foundation — launcher, init, CI, tests
 - **Phase 1** ✅ Game launches from WOPC directory
-- **Phase 2** ✅ FAF binary patches integration
+- **Phase 2** ✅ Binary patches integration
 - **Phase 3** ✅ WOPC Lua overlay (quickstart system + content packs)
 - **Phase 4** ✅ Multiplayer support — TCP lobby, game state sync, file transfer, chat, kick, ready
 - **Phase 5** ✅ Player slot management + game options (colors, teams, victory, unit cap, share)
@@ -216,7 +216,7 @@ quickstart.lua
 ## Rules (MUST follow)
 
 1. **Plan files live in HOME, not project.** `ExitPlanMode` reads from `C:\Users\roskv\.claude\plans\`, NOT `C:\Users\roskv\wopc\.claude\plans\`. Always write/update plans at the HOME path. Stale content at the wrong path caused 4 consecutive plan rejections.
-2. **Stale docs poison context.** When architecture changes (e.g., dropping FAF lobby), update ALL docs that reference the old approach: `QUICKSTART_STATE.md`, `CLAUDE.md`, `docs/plan.md`, `docs/architecture.md`, and any `.claude/plans/*.md` files. If Claude keeps producing wrong plans, the root cause is almost always stale documentation.
+2. **Stale docs poison context.** When architecture changes, update ALL docs that reference the old approach: `QUICKSTART_STATE.md`, `CLAUDE.md`, `docs/plan.md`, `docs/architecture.md`, and any `.claude/plans/*.md` files. If Claude keeps producing wrong plans, the root cause is almost always stale documentation.
 3. **When you hit a recurring problem, add a rule here.** If you spend more than 2 rounds fixing the same class of issue, add a numbered entry to this section so future sessions avoid the trap. This is mandatory — don't just fix the problem, encode the fix as a rule.
 4. **Before submitting any plan via ExitPlanMode, verify the plan file content at the HOME path.** Read `C:\Users\roskv\.claude\plans\<filename>.md` back AFTER writing it to confirm the content matches intent. Never assume a write succeeded — stale content at that path has caused repeated plan rejections.
 5. **Solo and multiplayer UI must be visually consistent.** Shared concepts (map selector, player slots, game options, victory conditions) must use the same widgets, styling, and layout patterns in both solo and multiplayer screens. If you change a UI element in one screen, update the other to match. No visual drift between modes.
@@ -239,7 +239,7 @@ quickstart.lua
   - **Lua `import()` function**: **last-added = highest priority** — later mounts shadow earlier ones
   - This means VFS overlays work for Lua `import()` but NOT for engine-loaded files
   - To override engine-loaded files like uimain.lua, `_patch_scd()` in deploy.py rewrites the SCD so our version is the first entry (first-added wins)
-  - Mount order in init_wopc.lua: (1) icons → (2) content packs (LOUD, disabled by default) → (3) maps/sounds → (4) wopc_core.scd → (5) vanilla SCFA (units, textures, loc, etc.) → (6) usermaps → (7) server mods → (8) usermods
+  - Mount order in init_wopc.lua: (1) icons → (2) content packs (disabled by default) → (3) maps/sounds → (4) wopc_core.scd → (5) vanilla SCFA (units, textures, loc, etc.) → (6) usermaps → (7) server mods → (8) usermods
 - **`InitFileDir` is NOT available in the UI Lua state.** It only exists during init file execution. Use `GetCommandLineArg()` to pass paths from the launcher.
 - **Patcher uses module-level config.** `patcher.py` uses `from launcher import config` then `config.SCFA_BIN`, same pattern as `deploy.py`. Mock with `patch("launcher.patcher.config")` in tests.
 - **Patcher staging is disposable.** `patches/build/staging/` is a temp copy — never modify the submodule sources directly.

@@ -41,13 +41,13 @@ if ctk is not None:
     # We'll use the built-in dark-blue theme as a sleek base
     ctk.set_default_color_theme("dark-blue")
 
-# FAF/SupCom-inspired color palette — deep space navy + gold
+# SupCom-inspired color palette — deep space navy + gold
 COLOR_BG = "#080C14"  # Deep space black-navy (sidebar, deepest level)
 COLOR_PANEL = "#0D1220"  # Dark navy main background
 COLOR_MOD_PANEL = "#111827"  # Secondary panel (mod pane, cards)
 COLOR_SURFACE = "#162030"  # Card/elevated surface
 COLOR_BORDER = "#1E2D42"  # Subtle panel border
-COLOR_ACCENT = "#C8A84B"  # FAF Gold — primary interactive
+COLOR_ACCENT = "#C8A84B"  # Gold — primary interactive
 COLOR_ACCENT_HOVER = "#E8C870"  # Gold hover state
 COLOR_ACCENT_DIM = "#6B5A28"  # Dimmed gold for decorative lines/dividers
 COLOR_READY = "#C8A84B"  # Gold — PLAY MATCH (matches accent)

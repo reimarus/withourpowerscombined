@@ -5,9 +5,9 @@ needed for the content-v2 GitHub Release, then prints the gh commands
 to upload them.
 
 Requirements:
-    - LOUD installed (for strategic icons SCD)
     - Full repo with vendor submodules (for wopc_core.scd build)
-    - Steam SCFA installed (for vanilla lua.scd merge)
+    - Steam SCFA installed (for vanilla lua.scd merge and stock maps)
+    - WOPC setup completed (for deployed maps directory)
 
 Usage:
     python scripts/build_content_release.py
@@ -25,20 +25,6 @@ sys.path.insert(0, str(REPO_ROOT))
 from launcher import config  # noqa: E402
 
 STAGING = REPO_ROOT / "release-staging"
-
-# Curated multiplayer maps — popular maps for day-one play
-CURATED_MAPS = [
-    "Seton's Clutch",
-    "Dual Gap",
-    "Fields of Isis",
-    "Emerald Crater 40",
-    "Gap of Rohan",
-    "Burial Mounds 40",
-    "Cold Valley",
-    "Amazonia",
-    "Battle Isles 40",
-    "Caldera",
-]
 
 
 def build_wopc_core_scd() -> Path:
@@ -82,7 +68,7 @@ def build_wopc_core_scd() -> Path:
                         core_count += 1
         print(f"  Added {core_count} game logic source files")
 
-        # 2. Merge vanilla lua.scd files that FAF doesn't replace
+        # 2. Merge vanilla lua.scd files not present in our source
         vanilla_lua_scd = config.SCFA_STEAM / "gamedata" / "lua.scd"
         if vanilla_lua_scd.exists():
             existing = {name.replace("\\", "/").lower() for name in zf.namelist()}
@@ -99,7 +85,7 @@ def build_wopc_core_scd() -> Path:
         else:
             print(f"  WARNING: vanilla lua.scd not found at {vanilla_lua_scd}")
 
-        # 3. Add WOPC patches (override FAF + vanilla)
+        # 3. Add WOPC patches (override base + vanilla)
         wopc_patches = config.REPO_WOPC_PATCHES
         if wopc_patches.exists():
             patched = 0
@@ -112,6 +98,7 @@ def build_wopc_core_scd() -> Path:
             print(f"  Added {patched} WOPC patch files")
 
     # Patch SCD for engine-level overrides (first-entry wins for C++ doscript)
+    wopc_patches = config.REPO_WOPC_PATCHES
     uimain_src = wopc_patches / "lua" / "ui" / "uimain.lua"
     if uimain_src.exists():
         from launcher.deploy import _patch_scd
@@ -132,36 +119,32 @@ def build_wopc_core_scd() -> Path:
 
 
 def build_maps_zip() -> Path:
-    """Create wopc-maps.zip with curated multiplayer maps from LOUD."""
+    """Create wopc-maps.zip from deployed WOPC maps and SCFA stock maps."""
     dst = STAGING / "wopc-maps.zip"
-    loud_maps = config.LOUD_ROOT / "maps"
-
-    if not loud_maps.exists():
-        print(f"WARNING: LOUD maps not found at {loud_maps}, skipping maps zip")
-        return dst
 
     print("Building wopc-maps.zip...")
     map_count = 0
     with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zf:
-        for map_dir in sorted(loud_maps.iterdir()):
-            if not map_dir.is_dir():
-                continue
-            # Check against curated list (case-insensitive)
-            if not any(map_dir.name.lower() == cm.lower() for cm in CURATED_MAPS):
-                continue
-            # Add all files in the map directory
-            for file_path in map_dir.rglob("*"):
-                if file_path.is_file():
-                    arcname = str(file_path.relative_to(loud_maps)).replace("\\", "/")
-                    zf.write(file_path, arcname)
-            map_count += 1
-            print(f"  Added map: {map_dir.name}")
+        # Add maps from the deployed WOPC maps directory
+        wopc_maps = config.WOPC_MAPS
+        if wopc_maps.exists():
+            for map_dir in sorted(wopc_maps.iterdir()):
+                if not map_dir.is_dir():
+                    continue
+                for file_path in map_dir.rglob("*"):
+                    if file_path.is_file():
+                        arcname = str(file_path.relative_to(wopc_maps)).replace("\\", "/")
+                        zf.write(file_path, arcname)
+                map_count += 1
+        else:
+            print(f"  WARNING: WOPC maps not found at {wopc_maps}")
 
-        # Also add SCFA stock maps
+        # Also add SCFA stock maps (if not already present from WOPC dir)
         scfa_maps = config.SCFA_STEAM / "maps"
         if scfa_maps.exists():
+            existing_maps = {name.split("/")[0].lower() for name in zf.namelist() if "/" in name}
             for map_dir in sorted(scfa_maps.iterdir()):
-                if map_dir.is_dir():
+                if map_dir.is_dir() and map_dir.name.lower() not in existing_maps:
                     for file_path in map_dir.rglob("*"):
                         if file_path.is_file():
                             arcname = str(file_path.relative_to(scfa_maps)).replace("\\", "/")
@@ -174,17 +157,19 @@ def build_maps_zip() -> Path:
 
 
 def copy_icons_scd() -> Path:
-    """Copy the strategic icons SCD from LOUD."""
+    """Copy the strategic icons SCD from the deployed WOPC bin directory."""
     name = "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd"
-    src = config.LOUD_ROOT / "bin" / name
     dst = STAGING / name
 
-    if src.exists():
-        shutil.copy2(src, dst)
-        size_mb = dst.stat().st_size / 1e6
-        print(f"Copied {name} ({size_mb:.1f} MB)")
-    else:
-        print(f"WARNING: {name} not found at {src}")
+    # Try deployed WOPC location first, then bundled repo location
+    for src in [config.WOPC_BIN / name, config.REPO_BUNDLED_BIN / name]:
+        if src.exists():
+            shutil.copy2(src, dst)
+            size_mb = dst.stat().st_size / 1e6
+            print(f"Copied {name} from {src.parent} ({size_mb:.1f} MB)")
+            return dst
+
+    print(f"WARNING: {name} not found in WOPC/bin/ or bundled/bin/")
     return dst
 
 

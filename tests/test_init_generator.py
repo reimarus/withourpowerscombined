@@ -55,7 +55,7 @@ class TestGenerateInitLua:
     """Tests for generate_init_lua()."""
 
     def test_generates_faf_only_by_default(self, gamedata_dir: Path, tmp_path: Path) -> None:
-        """With no ContentPacks section, no gamedata SCDs are mounted (FAF-only mode)."""
+        """With no ContentPacks section, no gamedata SCDs are mounted."""
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
 
@@ -70,7 +70,7 @@ class TestGenerateInitLua:
         assert result.exists()
         content = result.read_text()
         assert "AUTO-GENERATED" in content
-        # No LOUD content packs mounted in FAF-only mode (CORE_SCDS is empty)
+        # No content packs mounted when none are enabled (CORE_SCDS is empty)
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\lua.scd', '/')" not in content
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\loc_US.scd', '/')" not in content
         assert "mount_dir(WOPCRoot .. '\\\\gamedata\\\\brewlan.scd', '/')" not in content
