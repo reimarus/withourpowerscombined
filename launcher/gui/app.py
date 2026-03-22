@@ -337,13 +337,17 @@ class WopcApp(BaseApp):  # type: ignore
         self._drag_spawn_src = self._hit_test_spawn(event.x, event.y)
 
     def _on_canvas_drag(self, event: Any) -> None:
-        """Pan the map canvas by dragging."""
+        """Pan the map canvas by dragging, or drag a spawn to swap positions."""
         if self._drag_start is None:
             return
         dx = event.x - self._drag_start[0]
         dy = event.y - self._drag_start[1]
         if abs(dx) > 3 or abs(dy) > 3:
             self._drag_moved = True
+        # If dragging from a spawn point, don't pan the map — we'll handle
+        # the swap on release instead.
+        if getattr(self, "_drag_spawn_src", -1) >= 0:
+            return
         self._drag_start = (event.x, event.y)
         self._pan_x += dx
         self._pan_y += dy
@@ -931,7 +935,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.config_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         self.config_panel.grid(row=1, column=0, sticky="nsew")
         self.config_panel.grid_columnconfigure(0, weight=0, minsize=180)
-        self.config_panel.grid_columnconfigure(1, weight=0, minsize=200)
+        self.config_panel.grid_columnconfigure(1, weight=1, minsize=340)
         self.config_panel.grid_columnconfigure(2, weight=4)  # map hero
         self.config_panel.grid_columnconfigure(3, weight=0, minsize=200)
         self.config_panel.grid_rowconfigure(0, weight=1)
@@ -1541,6 +1545,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.search_entry.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 3))
 
         self.type_var = ctk.StringVar(value="All")
+        self.type_var.trace_add("write", self._apply_map_filters)
         self.type_menu = ctk.CTkOptionMenu(
             self.filter_frame,
             values=["All", "Skirmish", "Campaign"],
@@ -1552,6 +1557,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.type_menu.grid(row=1, column=0, padx=(0, 2), sticky="ew")
 
         self.players_var = ctk.StringVar(value="Any")
+        self.players_var.trace_add("write", self._apply_map_filters)
         self.players_menu = ctk.CTkOptionMenu(
             self.filter_frame,
             values=["Any"],
@@ -1563,6 +1569,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.players_menu.grid(row=1, column=1, padx=(0, 2), sticky="ew")
 
         self.size_var = ctk.StringVar(value="Any")
+        self.size_var.trace_add("write", self._apply_map_filters)
         self.size_menu = ctk.CTkOptionMenu(
             self.filter_frame,
             values=["Any"],
@@ -1664,6 +1671,11 @@ class WopcApp(BaseApp):  # type: ignore
     def _on_color_change(self, _val: str) -> None:
         """Broadcast state and redraw map when a color changes."""
         self._tinted_icon_cache.clear()
+        self._broadcast_game_state()
+        self._redraw_canvas()
+
+    def _on_team_change(self, _val: str) -> None:
+        """Broadcast state and redraw map when a team assignment changes."""
         self._broadcast_game_state()
         self._redraw_canvas()
 
@@ -1805,6 +1817,7 @@ class WopcApp(BaseApp):  # type: ignore
             self.slots_scroll,
             values=["1", "2", "3", "4"],
             variable=team_var,
+            command=self._on_team_change,
             width=50,
             height=24,
         )
@@ -1893,6 +1906,7 @@ class WopcApp(BaseApp):  # type: ignore
             self.slots_scroll,
             values=["1", "2", "3", "4"],
             variable=team_var,
+            command=self._on_team_change,
             width=50,
             height=24,
         )
