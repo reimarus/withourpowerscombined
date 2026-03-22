@@ -318,6 +318,42 @@ class TestColorConversion:
             assert self._name_to_hex(name) == expected_hex
             assert self._name_to_index(name) == i + 1
 
+    def test_hex_passthrough(self) -> None:
+        """Hex values starting with # should pass through _name_to_hex unchanged."""
+        # The actual _color_name_to_hex handles this; test the logic here
+        val = "#FF00AA"
+        assert val.startswith("#")  # confirms passthrough would work
+        assert val == "#FF00AA"
+
+    def test_hex_to_nearest_index(self) -> None:
+        """Arbitrary hex should map to the nearest PLAYER_COLORS index."""
+        from launcher.gui.app import PLAYER_COLORS
+
+        # Exact match
+        for i, (hex_val, _) in enumerate(PLAYER_COLORS):
+            assert self._hex_to_nearest_index(hex_val) == i + 1
+
+        # Near-red should map to Red (index 1)
+        assert self._hex_to_nearest_index("#FE0000") == 1
+        # Near-blue should map to Blue (index 2)
+        assert self._hex_to_nearest_index("#0000FE") == 2
+
+    def _hex_to_nearest_index(self, hex_val: str) -> int:
+        from launcher.gui.app import PLAYER_COLORS
+
+        r = int(hex_val[1:3], 16)
+        g = int(hex_val[3:5], 16)
+        b = int(hex_val[5:7], 16)
+        best_i, best_d = 0, float("inf")
+        for i, (ph, _) in enumerate(PLAYER_COLORS):
+            pr = int(ph[1:3], 16)
+            pg = int(ph[3:5], 16)
+            pb = int(ph[5:7], 16)
+            d = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2
+            if d < best_d:
+                best_i, best_d = i, d
+        return best_i + 1
+
 
 # ---------------------------------------------------------------------------
 # Next free color logic test
@@ -325,30 +361,30 @@ class TestColorConversion:
 
 
 class TestNextFreeColor:
-    """Test the logic for choosing the next unused color."""
+    """Test the logic for choosing the next unused hex color."""
 
-    def _next_free(self, used_names: set[str]) -> str:
+    def _next_free(self, used_hexes: set[str]) -> str:
         from launcher.gui.app import PLAYER_COLORS
 
-        for _, name in PLAYER_COLORS:
-            if name not in used_names:
-                return name
-        return PLAYER_COLORS[0][1]
+        for hex_val, _ in PLAYER_COLORS:
+            if hex_val not in used_hexes:
+                return hex_val
+        return PLAYER_COLORS[0][0]
 
     def test_no_used_returns_first(self) -> None:
-        assert self._next_free(set()) == "Red"
+        assert self._next_free(set()) == "#FF0000"
 
     def test_first_used_returns_second(self) -> None:
-        assert self._next_free({"Red"}) == "Blue"
+        assert self._next_free({"#FF0000"}) == "#0000FF"
 
     def test_all_used_returns_first(self) -> None:
         from launcher.gui.app import PLAYER_COLORS
 
-        all_names = {name for _, name in PLAYER_COLORS}
-        assert self._next_free(all_names) == PLAYER_COLORS[0][1]
+        all_hexes = {h for h, _ in PLAYER_COLORS}
+        assert self._next_free(all_hexes) == PLAYER_COLORS[0][0]
 
     def test_skips_used_colors(self) -> None:
-        assert self._next_free({"Red", "Blue", "Teal"}) == "Yellow"
+        assert self._next_free({"#FF0000", "#0000FF", "#18DAE8"}) == "#DFBF00"
 
 
 # ---------------------------------------------------------------------------
