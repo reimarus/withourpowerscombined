@@ -12,7 +12,7 @@ Items to tackle over time, roughly grouped by priority.
 6. ~~**Map preview not working (multiplayer)**~~ ✅ — lobby preview image widget added (PR #26)
 7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
 42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers at lines 194, 303, 317, 398 in `deploy.py` don't check the return value. The immediate crash (`FileNotFoundError` at line 522) is fixed (PR #42), but other download calls still fail silently. Also: the `content-v2` GitHub Release doesn't exist yet — must create it with `wopc_core.scd.zip`, `wopc-maps.zip`, and strategic icons so first-time setup works for new users.
-43. **"Send Logs" button** — one-click button in the launcher that uploads the launcher log (`WOPC.log` or Python log) to Firebase `/reports/` node. Lets us diagnose remote issues (setup crashes, multiplayer failures) without asking users to copy-paste logs.
+43. ~~**"Send Logs" button**~~ ✅ — one-click button in launcher uploads log to Firebase `/reports/` node for remote troubleshooting (v2.01.0014)
 
 ## High Priority — Player Experience
 
@@ -41,10 +41,13 @@ Items to tackle over time, roughly grouped by priority.
 
 36. ~~**Map preview too small**~~ ✅ — enlarged preview with 5:1 column weight ratio, reduced padding, preview dominates left side
 37. ~~**Map list should be narrower**~~ ✅ — compact sidebar with minsize=200, map list no longer competes with preview
-38. **Game browser refresh button** — users need a manual "Refresh" to force re-poll for games. Currently only auto-polls every 5s, but first-time users need instant feedback.
-39. **SupCom-authentic UI chrome** — use metallic SupCom frames/borders. Our launcher feels like a generic app with a color theme. Extract and render actual game UI textures for borders, buttons, and panel backgrounds.
+38. ~~**Game browser refresh button**~~ ✅ — manual "⟳ Refresh" button + auto-poll every 5s
+39. **SupCom-authentic UI chrome** — use metallic SupCom frames/borders. Chrome PNGs extracted to `launcher/gui/icons/frame_*.png` (9-slice pattern from UEF lobby textures). Need to implement 9-slice rendering in CustomTkinter panels.
 40. ~~**Marker visibility at small sizes**~~ ✅ — increased marker radii and outline widths with better scaling formulas
-41. **Map description panel** — show map description text below the preview. We stripped description to reduce clutter but should show it in the inspect window.
+41. ~~**Map description panel**~~ ✅ — description shown in inspect window header (map_inspect.py lines 102-112)
+44. **Icon-based map markers** — replace colored circles with actual game strategic icons (mass extractor, hydro, commander). PNGs extracted to `launcher/gui/icons/marker_*.png`. Spawns should be clickable for location selection.
+45. **Unify lobby map UI with solo** — lobby uses inferior static preview + modal map picker. Should match solo layout: canvas with markers, inline searchable map list, map as hero element.
+46. **Design asset library** — `launcher/gui/icons/ASSETS.md` indexes all available game textures. Faction icons (`faction_*.png`), strategic icons, chrome borders all pre-converted. Expand as new UI features need assets.
 
 ## Features
 
@@ -75,3 +78,4 @@ Items to tackle over time, roughly grouped by priority.
 27. **wopc_core.scd build deduplication** — setup produces "Duplicate name" warnings because WOPC patches overlap with game logic files. Need a merge strategy (last-write-wins with explicit override manifest).
 28. **Game.prefs management** — SCFA's preference system is not managed by WOPC. We write active_mods at launch but don't own the file. Need a clean strategy.
 29. **Asset integrity validation** — content pack SCDs are downloaded once and never verified. Need hash checking on download and periodic validation.
+30. **Remove or fix post-commit hook** — the background `build_exe.py` post-commit hook causes persistent `index.lock` conflicts on Windows. The background process outlives the hook, fights with subsequent git commands, and MSYS2 bash can't release the lock even after the process dies. Either delete the hook entirely (per Rule #9 we use releases, not manual exe rebuilds) or replace it with a non-blocking approach.

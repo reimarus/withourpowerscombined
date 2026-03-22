@@ -3,6 +3,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 try:
@@ -69,6 +70,13 @@ PLAYER_COLORS: list[tuple[str, str]] = [
     ("#FF88FF", "Pink"),
     ("#00FF00", "Green"),
 ]
+
+
+def _icons_dir() -> Path:
+    """Resolve the GUI icons directory (works in dev mode and frozen exe)."""
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "launcher" / "gui" / "icons"  # type: ignore[attr-defined]
+    return Path(__file__).parent / "icons"
 
 
 class WopcApp(BaseApp):  # type: ignore
