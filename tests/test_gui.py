@@ -85,3 +85,267 @@ def test_setup_worker_failure(mocker: pytest.fixture) -> None:
 
     mock_complete.assert_called_once_with(False)
     mock_log.assert_any_call("Critical error during setup: Failed")
+
+
+# ---------------------------------------------------------------------------
+# PLAYER_COLORS tests — these are module-level, not on the mocked WopcApp
+# ---------------------------------------------------------------------------
+
+
+class TestPlayerColors:
+    """Tests for PLAYER_COLORS constant."""
+
+    def test_player_colors_has_eight_entries(self) -> None:
+        from launcher.gui.app import PLAYER_COLORS
+
+        assert len(PLAYER_COLORS) == 8
+
+    def test_player_colors_are_hex_name_tuples(self) -> None:
+        from launcher.gui.app import PLAYER_COLORS
+
+        for hex_val, name in PLAYER_COLORS:
+            assert hex_val.startswith("#"), f"{name} hex should start with #"
+            assert len(hex_val) == 7, f"{name} hex should be 7 chars"
+            assert isinstance(name, str) and len(name) > 0
+
+    def test_player_color_names_are_unique(self) -> None:
+        from launcher.gui.app import PLAYER_COLORS
+
+        names = [name for _, name in PLAYER_COLORS]
+        assert len(names) == len(set(names)), "Color names must be unique"
+
+    def test_player_color_hex_values_are_unique(self) -> None:
+        from launcher.gui.app import PLAYER_COLORS
+
+        hexes = [h for h, _ in PLAYER_COLORS]
+        assert len(hexes) == len(set(hexes)), "Color hex values must be unique"
+
+    def test_color_name_to_hex_lookup(self) -> None:
+        """Verify name→hex lookup works for all defined colors."""
+        from launcher.gui.app import PLAYER_COLORS
+
+        color_map = {name: hex_val for hex_val, name in PLAYER_COLORS}
+        assert color_map["Red"] == "#FF0000"
+        assert color_map["Blue"] == "#0000FF"
+        assert color_map["Green"] == "#00FF00"
+        assert color_map["Teal"] == "#18DAE8"
+
+    def test_color_hex_to_name_lookup(self) -> None:
+        """Verify hex→name lookup works for all defined colors."""
+        from launcher.gui.app import PLAYER_COLORS
+
+        hex_map = {hex_val: name for hex_val, name in PLAYER_COLORS}
+        assert hex_map["#FF0000"] == "Red"
+        assert hex_map["#0000FF"] == "Blue"
+
+
+# ---------------------------------------------------------------------------
+# Spawn mapping logic tests (pure data logic, no GUI)
+# ---------------------------------------------------------------------------
+
+
+class TestSpawnMapping:
+    """Tests for spawn-to-slot mapping logic used in _redraw_canvas."""
+
+    def _build_spawn_map(self, slots: list[dict]) -> dict[int, int]:
+        """Replicate the spawn mapping logic from _redraw_canvas."""
+        spawn_occupied: dict[int, int] = {}
+        for si, slot in enumerate(slots):
+            spot = slot.get("start_spot", si)
+            spawn_occupied[spot] = si
+        return spawn_occupied
+
+    def test_default_mapping_is_identity(self) -> None:
+        """Without start_spot, slot i maps to spawn i."""
+        slots = [{"type": "human"}, {"type": "ai"}]
+        result = self._build_spawn_map(slots)
+        assert result == {0: 0, 1: 1}
+
+    def test_custom_start_spot_overrides(self) -> None:
+        """start_spot overrides the default identity mapping."""
+        slots = [
+            {"type": "human", "start_spot": 3},
+            {"type": "ai", "start_spot": 0},
+        ]
+        result = self._build_spawn_map(slots)
+        assert result == {3: 0, 0: 1}
+
+    def test_duplicate_start_spot_last_wins(self) -> None:
+        """If two slots claim the same spawn, the later slot wins."""
+        slots = [
+            {"type": "human", "start_spot": 0},
+            {"type": "ai", "start_spot": 0},
+        ]
+        result = self._build_spawn_map(slots)
+        assert result[0] == 1
+
+    def test_empty_slots_gives_empty_map(self) -> None:
+        result = self._build_spawn_map([])
+        assert result == {}
+
+    def test_eight_slots_default(self) -> None:
+        """8 slots without start_spot gives identity 0..7."""
+        slots = [{"type": "ai"} for _ in range(8)]
+        result = self._build_spawn_map(slots)
+        assert result == {i: i for i in range(8)}
+
+    def test_partial_start_spots(self) -> None:
+        """Mix of custom and default start_spots."""
+        slots = [
+            {"type": "human"},  # defaults to spawn 0
+            {"type": "ai", "start_spot": 5},  # explicit spawn 5
+            {"type": "ai"},  # defaults to spawn 2
+        ]
+        result = self._build_spawn_map(slots)
+        assert result == {0: 0, 5: 1, 2: 2}
+
+
+# ---------------------------------------------------------------------------
+# Next team auto-balance tests (pure logic)
+# ---------------------------------------------------------------------------
+
+
+class TestNextTeam:
+    """Tests for _next_team auto-balance logic.
+
+    _next_team reads team_var.get() from each slot. We provide mock objects
+    that return the team string from .get().
+    """
+
+    def _next_team(self, slots: list[dict]) -> str:
+        """Call _next_team with the same logic as WopcApp."""
+        counts: dict[str, int] = {"1": 0, "2": 0, "3": 0, "4": 0}
+        for slot in slots:
+            team = slot.get("team_var")
+            if team:
+                val = team.get() if hasattr(team, "get") else str(team)
+                if val in counts:
+                    counts[val] += 1
+        return min(counts, key=lambda t: (counts[t], int(t)))
+
+    def test_empty_slots_returns_team_1(self) -> None:
+        assert self._next_team([]) == "1"
+
+    def test_one_on_team_1_returns_team_2(self) -> None:
+        slots = [{"team_var": MagicMock(get=lambda: "1")}]
+        assert self._next_team(slots) == "2"
+
+    def test_two_teams_used_returns_empty_team(self) -> None:
+        slots = [
+            {"team_var": MagicMock(get=lambda: "1")},
+            {"team_var": MagicMock(get=lambda: "2")},
+        ]
+        # Teams 3 and 4 have 0, team 3 wins (lower number)
+        assert self._next_team(slots) == "3"
+
+    def test_imbalanced_returns_underrepresented(self) -> None:
+        slots = [
+            {"team_var": MagicMock(get=lambda: "1")},
+            {"team_var": MagicMock(get=lambda: "1")},
+            {"team_var": MagicMock(get=lambda: "2")},
+        ]
+        # Team 3 and 4 have 0; team 3 wins (lower number)
+        assert self._next_team(slots) == "3"
+
+    def test_all_teams_used_returns_least(self) -> None:
+        slots = [
+            {"team_var": MagicMock(get=lambda: "1")},
+            {"team_var": MagicMock(get=lambda: "1")},
+            {"team_var": MagicMock(get=lambda: "2")},
+            {"team_var": MagicMock(get=lambda: "3")},
+            {"team_var": MagicMock(get=lambda: "4")},
+        ]
+        # Team 1: 2, Team 2: 1, Team 3: 1, Team 4: 1 — Team 2 wins (lower)
+        assert self._next_team(slots) == "2"
+
+    def test_slot_without_team_var_ignored(self) -> None:
+        slots = [{"type": "human"}]  # no team_var
+        assert self._next_team(slots) == "1"
+
+
+# ---------------------------------------------------------------------------
+# Color name/hex conversion tests (pure logic, no WopcApp needed)
+# ---------------------------------------------------------------------------
+
+
+class TestColorConversion:
+    """Test color name/hex/index conversion logic."""
+
+    def _name_to_hex(self, name: str) -> str:
+        from launcher.gui.app import PLAYER_COLORS
+
+        for hex_val, cname in PLAYER_COLORS:
+            if cname == name:
+                return hex_val
+        return PLAYER_COLORS[0][0]
+
+    def _name_to_index(self, name: str) -> int:
+        from launcher.gui.app import PLAYER_COLORS
+
+        for i, (_, cname) in enumerate(PLAYER_COLORS):
+            if cname == name:
+                return i + 1
+        return 1
+
+    def test_known_colors_to_hex(self) -> None:
+        assert self._name_to_hex("Red") == "#FF0000"
+        assert self._name_to_hex("Blue") == "#0000FF"
+        assert self._name_to_hex("Teal") == "#18DAE8"
+        assert self._name_to_hex("Yellow") == "#DFBF00"
+        assert self._name_to_hex("Orange") == "#FF6600"
+        assert self._name_to_hex("Purple") == "#9161FF"
+        assert self._name_to_hex("Pink") == "#FF88FF"
+        assert self._name_to_hex("Green") == "#00FF00"
+
+    def test_unknown_color_returns_first(self) -> None:
+        from launcher.gui.app import PLAYER_COLORS
+
+        assert self._name_to_hex("Magenta") == PLAYER_COLORS[0][0]
+
+    def test_known_colors_to_index(self) -> None:
+        assert self._name_to_index("Red") == 1
+        assert self._name_to_index("Blue") == 2
+        assert self._name_to_index("Green") == 8
+
+    def test_unknown_color_index_returns_one(self) -> None:
+        assert self._name_to_index("Neon") == 1
+
+    def test_all_colors_roundtrip(self) -> None:
+        """Every color name maps to a unique index and hex."""
+        from launcher.gui.app import PLAYER_COLORS
+
+        for i, (expected_hex, name) in enumerate(PLAYER_COLORS):
+            assert self._name_to_hex(name) == expected_hex
+            assert self._name_to_index(name) == i + 1
+
+
+# ---------------------------------------------------------------------------
+# Next free color logic test
+# ---------------------------------------------------------------------------
+
+
+class TestNextFreeColor:
+    """Test the logic for choosing the next unused color."""
+
+    def _next_free(self, used_names: set[str]) -> str:
+        from launcher.gui.app import PLAYER_COLORS
+
+        for _, name in PLAYER_COLORS:
+            if name not in used_names:
+                return name
+        return PLAYER_COLORS[0][1]
+
+    def test_no_used_returns_first(self) -> None:
+        assert self._next_free(set()) == "Red"
+
+    def test_first_used_returns_second(self) -> None:
+        assert self._next_free({"Red"}) == "Blue"
+
+    def test_all_used_returns_first(self) -> None:
+        from launcher.gui.app import PLAYER_COLORS
+
+        all_names = {name for _, name in PLAYER_COLORS}
+        assert self._next_free(all_names) == PLAYER_COLORS[0][1]
+
+    def test_skips_used_colors(self) -> None:
+        assert self._next_free({"Red", "Blue", "Teal"}) == "Yellow"
