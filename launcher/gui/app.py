@@ -605,14 +605,16 @@ class WopcApp(BaseApp):  # type: ignore
             self.sidebar,
             text="Send Logs",
             font=ctk.CTkFont(size=11),
-            height=24,
-            fg_color="transparent",
-            hover_color=COLOR_PANEL,
+            height=26,
+            fg_color=COLOR_PANEL,
+            hover_color=COLOR_ACCENT_DIM,
             text_color=COLOR_TEXT_MUTED,
+            border_width=1,
+            border_color=COLOR_TEXT_MUTED,
             corner_radius=4,
             command=self._on_send_logs,
         )
-        self.send_logs_btn.grid(row=14, column=0, padx=20, pady=(4, 0), sticky="w")
+        self.send_logs_btn.grid(row=14, column=0, padx=20, pady=(4, 0), sticky="ew")
 
         # Version tag
         self.version_label = ctk.CTkLabel(
