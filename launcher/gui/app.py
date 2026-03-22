@@ -2,6 +2,7 @@ import logging
 import sys
 import threading
 import time
+import tkinter as tk
 from typing import TYPE_CHECKING, Any, ClassVar
 
 try:
@@ -90,7 +91,7 @@ class WopcApp(BaseApp):  # type: ignore
     selected_map_label: Any
     map_scroll: Any
     map_buttons: list[Any]
-    map_preview_label: Any
+    map_canvas: Any
     map_preview_name: Any
     map_preview_detail: Any
     map_preview_desc: Any
@@ -117,6 +118,12 @@ class WopcApp(BaseApp):  # type: ignore
         self._internet_games: list[Any] = []
         self._is_hosting: bool = False
         self._current_screen: str = "solo"
+
+        # Map preview state
+        self._canvas_image_id: int | None = None
+        self._canvas_tk_image: Any = None
+        self._current_map_info: map_scanner.MapInfo | None = None
+        self._raw_preview: Any = None
 
         self.title("WOPC - Match Lobby")
         self._restore_window_size()
@@ -197,13 +204,16 @@ class WopcApp(BaseApp):  # type: ignore
         """Return a thin 1-pixel accent line for use as a section separator."""
         return ctk.CTkFrame(parent, fg_color=color, height=1, corner_radius=0)
 
-    _PREVIEW_SIZE: ClassVar[int] = 320
+    _PREVIEW_MIN: ClassVar[int] = 320
     _LOBBY_PREVIEW_SIZE: ClassVar[int] = 280
 
     def _update_map_preview(self, info: "map_scanner.MapInfo | None") -> None:
         """Load and display the map preview image and metadata."""
+        self._current_map_info = info
+
         if info is None:
-            self.map_preview_label.configure(image=None, text="No Preview")
+            self._raw_preview = None
+            self._redraw_canvas()
             self.map_preview_name.configure(text="")
             self.map_preview_detail.configure(text="")
             self.map_preview_desc.configure(text="")
@@ -226,43 +236,147 @@ class WopcApp(BaseApp):  # type: ignore
         self.map_preview_detail.configure(text=detail_text)
         self.map_preview_desc.configure(text=info.description or "")
 
-        # Preview image — solo screen (large)
-        ctk_img = None
+        # Load raw preview image for canvas rendering
+        self._raw_preview = None
         lobby_ctk_img = None
         if _PIL_AVAILABLE and info.preview_path and info.preview_path.exists():
             try:
-                raw = PilImage.open(info.preview_path).convert("RGB")
-                # Solo preview (larger)
-                solo = raw.resize((self._PREVIEW_SIZE, self._PREVIEW_SIZE), PilImage.LANCZOS)  # type: ignore[attr-defined]
-                ctk_img = ctk.CTkImage(
-                    light_image=solo,
-                    dark_image=solo,
-                    size=(self._PREVIEW_SIZE, self._PREVIEW_SIZE),
-                )
-                self.map_preview_label.configure(image=ctk_img, text="")
-                self._preview_ctk_image = ctk_img
-                # Lobby preview (slightly smaller)
+                self._raw_preview = PilImage.open(info.preview_path).convert("RGB")
+                # Lobby preview (separate widget, still uses CTkImage)
                 lsz = self._LOBBY_PREVIEW_SIZE
-                lobby = raw.resize((lsz, lsz), PilImage.LANCZOS)  # type: ignore[attr-defined]
+                lobby = self._raw_preview.resize(
+                    (lsz, lsz),
+                    PilImage.LANCZOS,  # type: ignore[attr-defined]
+                )
                 lobby_ctk_img = ctk.CTkImage(light_image=lobby, dark_image=lobby, size=(lsz, lsz))
                 self._lobby_preview_ctk_image = lobby_ctk_img
             except Exception as exc:
                 logger.warning("Failed to load map preview %s: %s", info.preview_path, exc)
 
-        if ctk_img is None:
-            self.map_preview_label.configure(image=None, text="No Preview")
-            self._preview_ctk_image = None
+        self._redraw_canvas()
 
-        # Also update lobby preview widget
+        # Update lobby preview widget
         if hasattr(self, "lobby_map_preview_label"):
             if lobby_ctk_img is not None:
                 self.lobby_map_preview_label.configure(image=lobby_ctk_img, text="")
-            elif ctk_img is not None:
-                self.lobby_map_preview_label.configure(image=ctk_img, text="")
             else:
                 self.lobby_map_preview_label.configure(image=None, text="No Preview")
             self.lobby_map_label.configure(text=info.display_name)
             self.lobby_map_info.configure(text=detail_text)
+
+    def _on_canvas_resize(self, event: Any) -> None:
+        """Redraw the map canvas when its size changes."""
+        self._redraw_canvas()
+
+    def _redraw_canvas(self) -> None:
+        """Redraw the map preview and marker overlays on the canvas."""
+        canvas = self.map_canvas
+        canvas.delete("all")
+
+        cw = canvas.winfo_width()
+        ch = canvas.winfo_height()
+        if cw < 10 or ch < 10:
+            return
+
+        # Square preview, centered, filling the smaller dimension
+        size = min(cw, ch)
+        ox = (cw - size) // 2
+        oy = (ch - size) // 2
+
+        if self._raw_preview is not None and _PIL_AVAILABLE:
+            from PIL import ImageTk  # type: ignore[import-not-found]
+
+            resized = self._raw_preview.resize(
+                (size, size),
+                PilImage.LANCZOS,  # type: ignore[attr-defined]
+            )
+            self._canvas_tk_image = ImageTk.PhotoImage(resized)
+            self._canvas_image_id = canvas.create_image(
+                ox, oy, anchor="nw", image=self._canvas_tk_image
+            )
+        else:
+            # Dark placeholder rectangle
+            canvas.create_rectangle(ox, oy, ox + size, oy + size, fill=COLOR_BG, outline="")
+            canvas.create_text(
+                ox + size // 2,
+                oy + size // 2,
+                text="No Preview",
+                fill=COLOR_TEXT_MUTED,
+                font=("Segoe UI", 12),
+            )
+            return
+
+        # Draw marker overlays if available
+        info = self._current_map_info
+        if info is None or info.markers is None or info.map_width == 0:
+            return
+
+        mw = info.map_width
+        mh = info.map_height or mw  # fallback to square
+
+        def _map_to_px(mx: float, mz: float) -> tuple[int, int]:
+            px = ox + int(mx / mw * size)
+            py = oy + int(mz / mh * size)
+            return px, py
+
+        # Mass points — small white dots
+        for mx, mz in info.markers.mass:
+            px, py = _map_to_px(mx, mz)
+            r = max(2, size // 120)
+            canvas.create_oval(
+                px - r,
+                py - r,
+                px + r,
+                py + r,
+                fill="#FFFFFF",
+                outline="#808080",
+                width=1,
+            )
+
+        # Hydro points — green dots, slightly larger
+        for mx, mz in info.markers.hydro:
+            px, py = _map_to_px(mx, mz)
+            r = max(3, size // 80)
+            canvas.create_oval(
+                px - r,
+                py - r,
+                px + r,
+                py + r,
+                fill="#00CC00",
+                outline="#006600",
+                width=1,
+            )
+
+        # Army spawn positions — numbered circles with player colors
+        for i, (name, mx, mz) in enumerate(info.markers.armies):
+            px, py = _map_to_px(mx, mz)
+            r = max(8, size // 40)
+            color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0]
+            canvas.create_oval(
+                px - r,
+                py - r,
+                px + r,
+                py + r,
+                fill=color,
+                outline="#FFFFFF",
+                width=2,
+            )
+            num = name.split("_")[1] if "_" in name else str(i + 1)
+            canvas.create_text(
+                px,
+                py,
+                text=num,
+                fill="#FFFFFF",
+                font=("Segoe UI", max(8, size // 50), "bold"),
+            )
+
+    def _on_map_inspect(self, event: Any) -> None:
+        """Open the map inspect window for detailed view."""
+        if self._current_map_info is None:
+            return
+        from launcher.gui.map_inspect import MapInspectWindow
+
+        MapInspectWindow(self, self._current_map_info, self._raw_preview)
 
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
@@ -515,13 +629,14 @@ class WopcApp(BaseApp):  # type: ignore
         self.config_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         self.config_panel.grid(row=1, column=0, sticky="nsew")
         self.config_panel.grid_rowconfigure(1, weight=1)
-        self.config_panel.grid_columnconfigure(0, weight=2)  # preview column (left)
-        self.config_panel.grid_columnconfigure(1, weight=1)  # map list column (right)
+        self.config_panel.grid_columnconfigure(0, weight=3)  # preview column (hero)
+        self.config_panel.grid_columnconfigure(1, weight=1)  # map list column (compact)
 
-        # --- Map Preview Panel (LEFT column — prominent, FAF-style) ---
+        # --- Map Preview Panel (LEFT column — hero element, fills space) ---
         preview_panel = ctk.CTkFrame(self.config_panel, fg_color=COLOR_PANEL, corner_radius=4)
         preview_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=10, pady=10)
         preview_panel.grid_columnconfigure(0, weight=1)
+        preview_panel.grid_rowconfigure(1, weight=1)
 
         self.selected_map_label = ctk.CTkLabel(
             preview_panel,
@@ -531,25 +646,24 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.selected_map_label.grid(row=0, column=0, pady=(10, 5), padx=12, sticky="w")
 
-        # Large preview image
-        _ps = self._PREVIEW_SIZE
-        self.map_preview_label = ctk.CTkLabel(
+        # Canvas-based map preview — fills available space, supports overlays
+        self.map_canvas = tk.Canvas(
             preview_panel,
-            text="No Preview",
-            text_color=COLOR_TEXT_MUTED,
-            fg_color=COLOR_BG,
-            width=_ps,
-            height=_ps,
-            corner_radius=3,
+            bg=COLOR_BG,
+            highlightthickness=0,
+            cursor="hand2",
         )
-        self.map_preview_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="n")
+        self.map_canvas.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="nsew")
+        self.map_canvas.bind("<Configure>", self._on_canvas_resize)
+        self.map_canvas.bind("<Double-Button-1>", self._on_map_inspect)
 
+        # Metadata below canvas
         self.map_preview_name = ctk.CTkLabel(
             preview_panel,
             text="",
             text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=15, weight="bold"),
-            wraplength=_ps,
+            wraplength=400,
             justify="left",
         )
         self.map_preview_name.grid(row=2, column=0, padx=12, pady=(0, 2), sticky="nw")
@@ -567,10 +681,23 @@ class WopcApp(BaseApp):  # type: ignore
             text="",
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=11, slant="italic"),
-            wraplength=_ps,
+            wraplength=400,
             justify="left",
         )
-        self.map_preview_desc.grid(row=4, column=0, padx=12, pady=(0, 10), sticky="nw")
+        self.map_preview_desc.grid(row=4, column=0, padx=12, pady=(0, 4), sticky="nw")
+
+        # Inspect button
+        self.inspect_btn = ctk.CTkButton(
+            preview_panel,
+            text="Inspect Map",
+            fg_color=COLOR_SURFACE,
+            hover_color=COLOR_BORDER,
+            text_color=COLOR_TEXT_PRIMARY,
+            height=28,
+            corner_radius=3,
+            command=lambda: self._on_map_inspect(None),
+        )
+        self.inspect_btn.grid(row=5, column=0, padx=12, pady=(0, 10), sticky="w")
 
         # --- Map List (RIGHT column — compact, scrollable) ---
         list_panel = ctk.CTkFrame(self.config_panel, fg_color="transparent")
@@ -612,10 +739,11 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.type_menu.grid(row=1, column=0, padx=(0, 4), sticky="ew")
 
+        # Player count and size dropdowns — populated dynamically after scan
         self.players_var = ctk.StringVar(value="Any")
         self.players_menu = ctk.CTkOptionMenu(
             self.filter_frame,
-            values=["Any", "2", "4", "6", "8", "10", "12", "14", "16"],
+            values=["Any"],
             variable=self.players_var,
             command=self._apply_map_filters,
             width=60,
@@ -626,7 +754,7 @@ class WopcApp(BaseApp):  # type: ignore
         self.size_var = ctk.StringVar(value="Any")
         self.size_menu = ctk.CTkOptionMenu(
             self.filter_frame,
-            values=["Any", "5km", "10km", "20km", "40km", "81km"],
+            values=["Any"],
             variable=self.size_var,
             command=self._apply_map_filters,
             width=70,
@@ -1771,9 +1899,20 @@ class WopcApp(BaseApp):  # type: ignore
             self._all_maps = map_scanner.scan_all_maps()
 
         # Auto-select the first map if none is set in prefs.
-        # This ensures a fresh install always has a playable default.
         if self._all_maps and not prefs.get_active_map():
             prefs.set_active_map(self._all_maps[0].folder_name)
+
+        # Build dynamic filter dropdown values from actual map data
+        player_counts = sorted({str(m.max_players) for m in self._all_maps if m.max_players > 0})
+        self.players_menu.configure(values=["Any", *player_counts])
+
+        sizes = sorted(
+            {m.size_label for m in self._all_maps if m.size_label != "?"},
+            key=lambda s: map_scanner._SIZE_LABELS.get(
+                next((k for k, v in map_scanner._SIZE_LABELS.items() if v == s), 0), s
+            ),
+        )
+        self.size_menu.configure(values=["Any", *sizes])
 
         self._apply_map_filters()
 
@@ -1809,6 +1948,13 @@ class WopcApp(BaseApp):  # type: ignore
                 continue
             filtered_maps.append(info)
 
+        # If active map is filtered out, auto-select the first visible map
+        active_in_list = any(m.folder_name == active_map for m in filtered_maps)
+        if not active_in_list and filtered_maps:
+            active_map = filtered_maps[0].folder_name
+            prefs.set_active_map(active_map)
+
+        preview_shown = False
         for idx, info in enumerate(filtered_maps):
             is_active = info.folder_name == active_map
 
@@ -1861,6 +2007,11 @@ class WopcApp(BaseApp):  # type: ignore
             if is_active:
                 self.selected_map_label.configure(text=f"Selected Map: {info.display_name}")
                 self._update_map_preview(info)
+                preview_shown = True
+
+        # If no maps matched filters, clear the preview
+        if not filtered_maps and not preview_shown:
+            self._update_map_preview(None)
 
     def _on_faction_change(self, choice: str) -> None:
         """Persist faction preference when dropdown changes."""
