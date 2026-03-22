@@ -115,6 +115,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._internet_games: list[Any] = []
         self._is_hosting: bool = False
         self._current_screen: str = "solo"
+        self._log_lines: list[str] = []
 
         # Map preview state
         self._canvas_image_id: int | None = None
@@ -599,6 +600,20 @@ class WopcApp(BaseApp):  # type: ignore
             font=ctk.CTkFont(size=11),
         )
 
+        # Send Logs button
+        self.send_logs_btn = ctk.CTkButton(
+            self.sidebar,
+            text="Send Logs",
+            font=ctk.CTkFont(size=11),
+            height=24,
+            fg_color="transparent",
+            hover_color=COLOR_PANEL,
+            text_color=COLOR_TEXT_MUTED,
+            corner_radius=4,
+            command=self._on_send_logs,
+        )
+        self.send_logs_btn.grid(row=14, column=0, padx=20, pady=(4, 0), sticky="w")
+
         # Version tag
         self.version_label = ctk.CTkLabel(
             self.sidebar,
@@ -606,7 +621,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_ACCENT_DIM,
             font=ctk.CTkFont(size=11),
         )
-        self.version_label.grid(row=14, column=0, padx=20, pady=(0, 20), sticky="w")
+        self.version_label.grid(row=15, column=0, padx=20, pady=(0, 20), sticky="w")
 
     def _build_main_lobby(self) -> None:
         """Construct the central matching routing/configuration area."""
@@ -2740,6 +2755,7 @@ class WopcApp(BaseApp):  # type: ignore
 
     def log(self, message: str) -> None:
         """Add a message to the GUI text box."""
+        self._log_lines.append(message)
 
         def _update():
             self.log_textbox.configure(state="normal")
@@ -2880,6 +2896,34 @@ class WopcApp(BaseApp):  # type: ignore
         self._refresh_mods_list()
         self._refresh_map_list()
 
+    def _on_send_logs(self) -> None:
+        """Upload captured log lines to Firebase for remote troubleshooting."""
+        if not self._log_lines:
+            self.log("No log messages to send.")
+            return
+
+        self.send_logs_btn.configure(state="disabled", text="Sending...")
+        host_name = prefs.get_player_name()
+
+        def _upload():
+            from launcher.relay import RelayClient
+
+            ok = RelayClient.upload_logs(self._log_lines, host_name=host_name)
+            self.after(
+                0,
+                lambda: self._on_send_logs_done(ok),
+            )
+
+        threading.Thread(target=_upload, daemon=True).start()
+
+    def _on_send_logs_done(self, success: bool) -> None:
+        """Handle log upload result."""
+        if success:
+            self.log("Logs sent successfully — thank you!")
+        else:
+            self.log("Failed to send logs. Check your connection.")
+        self.send_logs_btn.configure(state="normal", text="Send Logs")
+
     def _on_primary_click(self) -> None:
         """Handle main button action -- SOLO mode only."""
         btn_text = self.primary_btn.cget("text")
@@ -2903,17 +2947,17 @@ class WopcApp(BaseApp):  # type: ignore
         self.primary_btn.configure(state="disabled", text="⬇  INSTALLING...")
         # Show progress bar
         self.setup_progress.set(0)
-        self.setup_progress.grid(row=15, column=0, padx=20, pady=(2, 0), sticky="ew")
+        self.setup_progress.grid(row=16, column=0, padx=20, pady=(2, 0), sticky="ew")
         self.setup_progress_label.configure(text="Preparing...")
         self.setup_progress_label.grid(
-            row=16,
+            row=17,
             column=0,
             padx=20,
             pady=(2, 0),
             sticky="w",
         )
         # Move version label down
-        self.version_label.grid(row=17, column=0, padx=20, pady=(0, 20), sticky="w")
+        self.version_label.grid(row=18, column=0, padx=20, pady=(0, 20), sticky="w")
         worker = SetupWorker(
             on_complete=self._on_setup_complete,
             on_log=self.log,
@@ -2938,7 +2982,7 @@ class WopcApp(BaseApp):  # type: ignore
             # Hide progress bar
             self.setup_progress.grid_forget()
             self.setup_progress_label.grid_forget()
-            self.version_label.grid(row=14, column=0, padx=20, pady=(0, 20), sticky="w")
+            self.version_label.grid(row=15, column=0, padx=20, pady=(0, 20), sticky="w")
 
             self.primary_btn.configure(state="normal")
             if success:

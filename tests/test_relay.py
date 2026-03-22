@@ -542,3 +542,62 @@ class TestAuditLogging:
             mock_cfg.RELAY_URL = "https://example.firebaseio.com"
             result = client.register("Alice", "Theta", 1, 4, 15000, "1.2.3.4")
         assert result is True  # register succeeded even though log failed
+
+
+# ---------------------------------------------------------------------------
+# Upload logs
+# ---------------------------------------------------------------------------
+
+
+class TestUploadLogs:
+    """Tests for RelayClient.upload_logs()."""
+
+    def test_upload_succeeds(self) -> None:
+        """Successful upload returns True."""
+        with (
+            patch("launcher.relay.urllib.request.urlopen") as mock_open,
+            patch("launcher.relay.config") as mock_cfg,
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            mock_cfg.VERSION = "2.01.0012"
+            mock_open.return_value = _make_response(b"{}")
+            result = RelayClient.upload_logs(["line 1", "line 2"], host_name="Alice")
+        assert result is True
+        # Verify payload was sent to /reports/ endpoint
+        req = mock_open.call_args[0][0]
+        assert "/reports/" in req.full_url
+        body = json.loads(req.data)
+        assert body["host_name"] == "Alice"
+        assert body["log"] == "line 1\nline 2"
+
+    def test_upload_caps_at_500_lines(self) -> None:
+        """Only the last 500 lines are sent."""
+        lines = [f"line {i}" for i in range(600)]
+        with (
+            patch("launcher.relay.urllib.request.urlopen") as mock_open,
+            patch("launcher.relay.config") as mock_cfg,
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            mock_cfg.VERSION = "2.01.0012"
+            mock_open.return_value = _make_response(b"{}")
+            RelayClient.upload_logs(lines)
+        body = json.loads(mock_open.call_args[0][0].data)
+        assert body["log"].count("\n") == 499  # 500 lines = 499 newlines
+
+    def test_upload_returns_false_on_network_error(self) -> None:
+        """Network error returns False instead of raising."""
+        with (
+            patch("launcher.relay.urllib.request.urlopen", side_effect=OSError("fail")),
+            patch("launcher.relay.config") as mock_cfg,
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            mock_cfg.VERSION = "2.01.0012"
+            result = RelayClient.upload_logs(["hello"])
+        assert result is False
+
+    def test_upload_returns_false_when_no_relay_url(self) -> None:
+        """No RELAY_URL configured returns False."""
+        with patch("launcher.relay.config") as mock_cfg:
+            mock_cfg.RELAY_URL = ""
+            result = RelayClient.upload_logs(["hello"])
+        assert result is False

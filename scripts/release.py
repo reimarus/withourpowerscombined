@@ -153,16 +153,49 @@ def main() -> None:
     size_mb = exe_path.stat().st_size / 1_000_000
     print(f"  OK: Built {EXE_NAME} ({size_mb:.1f} MB)")
 
-    # 5. Commit the version bump
-    run(f"git add {PYPROJECT.name}")
+    # 5. Rebuild content-v2 assets and update the content release
+    print("\n-- Rebuilding content-v2 --")
+    content_result = run("py scripts/build_content_release.py", check=False)
+    if content_result.returncode == 0:
+        staging = REPO_ROOT / "release-staging"
+        scd = staging / "wopc_core.scd"
+        scd_zip = staging / "wopc_core.scd.zip"
+        maps_zip = staging / "wopc-maps.zip"
+        icons_scd = staging / "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd"
+
+        # Zip the SCD if not already zipped
+        if scd.exists() and not scd_zip.exists():
+            import zipfile
+
+            with zipfile.ZipFile(scd_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
+                zf.write(scd, "wopc_core.scd")
+            size_mb = scd_zip.stat().st_size / 1_000_000
+            print(f"  OK: Zipped wopc_core.scd ({size_mb:.1f} MB)")
+
+        # Upload assets to content-v2 (delete old, re-upload)
+        assets = [f for f in [scd_zip, maps_zip, icons_scd] if f.exists()]
+        if assets:
+            # Delete existing assets first
+            for asset in assets:
+                run(f'gh release delete-asset content-v2 "{asset.name}" --yes', check=False)
+            # Upload new assets
+            asset_args = " ".join(f'"{a}"' for a in assets)
+            run(f"gh release upload content-v2 {asset_args} --clobber")
+            print("  OK: Updated content-v2 release")
+    else:
+        print("  WARNING: Content build failed — content-v2 not updated")
+        print("           (This is non-fatal; launcher release continues)")
+
+    # 6. Commit the version bump
+    run(f"git add {PYPROJECT.name} launcher/__version__.py")
     run(f'git commit -m "release: v{new_ver}" --no-verify')
 
-    # 6. Create GitHub release and upload exe
+    # 7. Create GitHub release and upload exe
     print("\n-- Creating GitHub release --")
     title = f"WOPC Launcher v{new_ver}"
     run(f'gh release create {tag} "{exe_path}" --title "{title}" --generate-notes --latest')
 
-    # 7. Push the commit
+    # 8. Push the commit
     run("git push")
 
     print(f"\n  DONE: Released {tag}")
