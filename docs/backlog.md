@@ -42,9 +42,12 @@ Items to tackle over time, roughly grouped by priority.
 36. ~~**Map preview too small**~~ ✅ — enlarged preview with 5:1 column weight ratio, reduced padding, preview dominates left side
 37. ~~**Map list should be narrower**~~ ✅ — compact sidebar with minsize=200, map list no longer competes with preview
 38. ~~**Game browser refresh button**~~ ✅ — manual "⟳ Refresh" button + auto-poll every 5s
-39. **SupCom-authentic UI chrome** — use metallic SupCom frames/borders. Our launcher feels like a generic app with a color theme. Extract and render actual game UI textures for borders, buttons, and panel backgrounds.
+39. **SupCom-authentic UI chrome** — use metallic SupCom frames/borders. Chrome PNGs extracted to `launcher/gui/icons/frame_*.png` (9-slice pattern from UEF lobby textures). Need to implement 9-slice rendering in CustomTkinter panels.
 40. ~~**Marker visibility at small sizes**~~ ✅ — increased marker radii and outline widths with better scaling formulas
 41. ~~**Map description panel**~~ ✅ — description shown in inspect window header (map_inspect.py lines 102-112)
+44. **Icon-based map markers** — replace colored circles with actual game strategic icons (mass extractor, hydro, commander). PNGs extracted to `launcher/gui/icons/marker_*.png`. Spawns should be clickable for location selection.
+45. **Unify lobby map UI with solo** — lobby uses inferior static preview + modal map picker. Should match solo layout: canvas with markers, inline searchable map list, map as hero element.
+46. **Design asset library** — `launcher/gui/icons/ASSETS.md` indexes all available game textures. Faction icons (`faction_*.png`), strategic icons, chrome borders all pre-converted. Expand as new UI features need assets.
 
 ## Features
 

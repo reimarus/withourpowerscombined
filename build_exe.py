@@ -67,6 +67,9 @@ def main() -> int:
         # Bundle gamedata overlay (needed by deploy.py at runtime)
         "--add-data",
         f"{repo_root / 'gamedata'}{os.pathsep}gamedata",
+        # Bundle GUI icon assets (map markers, faction icons, chrome)
+        "--add-data",
+        f"{repo_root / 'launcher' / 'gui' / 'icons'}{os.pathsep}launcher/gui/icons",
         # Output directly to repo root (not dist/)
         "--distpath",
         str(repo_root),
