@@ -349,3 +349,134 @@ class TestNextFreeColor:
 
     def test_skips_used_colors(self) -> None:
         assert self._next_free({"Red", "Blue", "Teal"}) == "Yellow"
+
+
+# ---------------------------------------------------------------------------
+# First free spawn tests (pure logic)
+# ---------------------------------------------------------------------------
+
+
+class TestFirstFreeSpawn:
+    """Tests for finding the first unoccupied spawn index."""
+
+    def _first_free(self, slots: list[dict], n_armies: int) -> int:
+        """Replicate _first_free_spawn logic."""
+        occupied: set[int] = set()
+        for si, slot in enumerate(slots):
+            occupied.add(slot.get("start_spot", si))
+        for i in range(n_armies):
+            if i not in occupied:
+                return i
+        return -1
+
+    def test_no_slots_returns_zero(self) -> None:
+        assert self._first_free([], 4) == 0
+
+    def test_one_slot_returns_next(self) -> None:
+        slots = [{"type": "human"}]  # defaults to spawn 0
+        assert self._first_free(slots, 4) == 1
+
+    def test_custom_spot_skips_occupied(self) -> None:
+        slots = [
+            {"type": "human", "start_spot": 2},
+            {"type": "ai", "start_spot": 0},
+        ]
+        assert self._first_free(slots, 4) == 1
+
+    def test_all_occupied_returns_negative(self) -> None:
+        slots = [
+            {"type": "human", "start_spot": 0},
+            {"type": "ai", "start_spot": 1},
+        ]
+        assert self._first_free(slots, 2) == -1
+
+    def test_gap_in_middle(self) -> None:
+        slots = [
+            {"type": "human", "start_spot": 0},
+            {"type": "ai", "start_spot": 2},
+        ]
+        assert self._first_free(slots, 4) == 1
+
+
+# ---------------------------------------------------------------------------
+# Spawn swap tests (pure logic)
+# ---------------------------------------------------------------------------
+
+
+class TestSpawnSwap:
+    """Tests for drag-and-drop spawn swapping logic."""
+
+    def _swap(self, slots: list[dict], src: int, dst: int) -> None:
+        """Replicate _swap_spawns logic."""
+        spawn_to_slot: dict[int, int] = {}
+        for si, slot in enumerate(slots):
+            spawn_to_slot[slot.get("start_spot", si)] = si
+        src_slot = spawn_to_slot.get(src)
+        dst_slot = spawn_to_slot.get(dst)
+        if src_slot is not None:
+            slots[src_slot]["start_spot"] = dst
+        if dst_slot is not None:
+            slots[dst_slot]["start_spot"] = src
+
+    def test_swap_two_occupied(self) -> None:
+        slots = [
+            {"type": "human", "start_spot": 0},
+            {"type": "ai", "start_spot": 1},
+        ]
+        self._swap(slots, 0, 1)
+        assert slots[0]["start_spot"] == 1
+        assert slots[1]["start_spot"] == 0
+
+    def test_swap_occupied_to_empty(self) -> None:
+        slots = [{"type": "human", "start_spot": 0}]
+        self._swap(slots, 0, 3)
+        assert slots[0]["start_spot"] == 3
+
+    def test_swap_empty_to_occupied(self) -> None:
+        """Swapping empty src to occupied dst moves the occupied player."""
+        slots = [{"type": "human", "start_spot": 1}]
+        self._swap(slots, 0, 1)
+        assert slots[0]["start_spot"] == 0
+
+    def test_swap_preserves_other_slots(self) -> None:
+        slots = [
+            {"type": "human", "start_spot": 0},
+            {"type": "ai", "start_spot": 1},
+            {"type": "ai", "start_spot": 2},
+        ]
+        self._swap(slots, 0, 2)
+        assert slots[0]["start_spot"] == 2
+        assert slots[1]["start_spot"] == 1  # untouched
+        assert slots[2]["start_spot"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Remove slot by identity tests (pure logic)
+# ---------------------------------------------------------------------------
+
+
+class TestRemoveByIdentity:
+    """Tests for remove-by-dict-identity instead of stale index."""
+
+    def test_remove_correct_slot_after_prior_removals(self) -> None:
+        """Removing slot by identity finds the right one even after shifts."""
+        slots = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
+        # Simulate removing "b" first
+        target_b = slots[1]
+        idx = slots.index(target_b)
+        assert idx == 1
+        slots.pop(idx)
+        # Now removing "c" — used to be index 2, now it's index 1
+        target_c = slots[1]
+        idx = slots.index(target_c)
+        assert idx == 1
+        slots.pop(idx)
+        assert len(slots) == 1
+        assert slots[0]["id"] == "a"
+
+    def test_remove_nonexistent_slot_is_safe(self) -> None:
+        """Removing a slot not in the list raises ValueError (caught in app)."""
+        slots = [{"id": "a"}]
+        removed = {"id": "b"}
+        with pytest.raises(ValueError):
+            slots.index(removed)
