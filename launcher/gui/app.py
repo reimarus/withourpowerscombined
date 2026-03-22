@@ -131,11 +131,15 @@ class WopcApp(BaseApp):  # type: ignore
         self._canvas_redraw_id: str | None = None
         self._marker_icons: dict[str, Any] = {}  # raw PIL images
         self._marker_tk_cache: list[Any] = []  # keep refs alive for tk
+        self._zoom: float = 1.0
+        self._pan_x: float = 0.0
+        self._pan_y: float = 0.0
+        self._drag_start: tuple[int, int] | None = None
         self._load_marker_icons()
 
         self.title("WOPC - Match Lobby")
         self._restore_window_size()
-        self.minsize(1100, 650)
+        self.minsize(1100, 700)
         self.configure(fg_color=COLOR_BG)
         self._set_window_icon()
 
@@ -194,14 +198,14 @@ class WopcApp(BaseApp):  # type: ignore
         """Restore the last saved window dimensions from user prefs."""
         try:
             parser = prefs.load_prefs()
-            w = parser.getint("Window", "width", fallback=1024)
-            h = parser.getint("Window", "height", fallback=768)
+            w = parser.getint("Window", "width", fallback=1400)
+            h = parser.getint("Window", "height", fallback=780)
             # Clamp to reasonable minimums
-            w = max(w, 800)
-            h = max(h, 600)
+            w = max(w, 1100)
+            h = max(h, 700)
             self.geometry(f"{w}x{h}")
         except Exception:
-            self.geometry("1024x768")
+            self.geometry("1400x780")
 
     def _save_window_size(self) -> None:
         """Persist current window dimensions to user prefs."""
@@ -250,6 +254,11 @@ class WopcApp(BaseApp):  # type: ignore
         label = f"{parts[0]} — {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
         self.map_preview_name.configure(text=label)
 
+        # Reset zoom/pan when map changes
+        self._zoom = 1.0
+        self._pan_x = 0.0
+        self._pan_y = 0.0
+
         # Load raw preview image for canvas rendering
         self._raw_preview = None
         lobby_ctk_img = None
@@ -290,6 +299,90 @@ class WopcApp(BaseApp):  # type: ignore
             self.after_cancel(self._canvas_redraw_id)
         self._canvas_redraw_id = self.after(50, self._redraw_canvas)
 
+    def _on_canvas_scroll(self, event: Any) -> None:
+        """Zoom the map canvas toward the mouse position."""
+        if not hasattr(self, "map_canvas"):
+            return
+        old_zoom = self._zoom
+        if event.delta > 0:
+            self._zoom = min(4.0, self._zoom * 1.15)
+        else:
+            self._zoom = max(1.0, self._zoom / 1.15)
+
+        canvas = self.map_canvas
+        cw = canvas.winfo_width()
+        ch = canvas.winfo_height()
+        # Zoom toward mouse position
+        mx_rel = event.x - cw / 2
+        my_rel = event.y - ch / 2
+        scale = self._zoom / old_zoom
+        self._pan_x = mx_rel - scale * (mx_rel - self._pan_x)
+        self._pan_y = my_rel - scale * (my_rel - self._pan_y)
+        self._clamp_pan()
+        self._redraw_canvas()
+
+    def _on_canvas_drag_start(self, event: Any) -> None:
+        """Start panning the map canvas."""
+        self._drag_start = (event.x, event.y)
+
+    def _on_canvas_drag(self, event: Any) -> None:
+        """Pan the map canvas by dragging."""
+        if self._drag_start is None:
+            return
+        dx = event.x - self._drag_start[0]
+        dy = event.y - self._drag_start[1]
+        self._drag_start = (event.x, event.y)
+        self._pan_x += dx
+        self._pan_y += dy
+        self._clamp_pan()
+        self._redraw_canvas()
+
+    def _on_canvas_drag_end(self, event: Any) -> None:
+        """End panning the map canvas."""
+        self._drag_start = None
+
+    def _on_canvas_click(self, event: Any) -> None:
+        """Handle click on map canvas — select spawn position."""
+        if not hasattr(self, "map_canvas") or self._current_map_info is None:
+            return
+        info = self._current_map_info
+        if info.markers is None or info.map_width == 0:
+            return
+        canvas = self.map_canvas
+        cw = canvas.winfo_width()
+        ch = canvas.winfo_height()
+        base_size = min(cw, ch)
+        size = int(base_size * self._zoom)
+        ox = int((cw - size) / 2 + self._pan_x)
+        oy = int((ch - size) / 2 + self._pan_y)
+        mw = info.map_width
+        mh = info.map_height or mw
+        spawn_icon_size = max(20, size // 18)
+        hit_radius = spawn_icon_size // 2 + 4
+        for i, (_name, mx, mz) in enumerate(info.markers.armies):
+            px = ox + int(mx / mw * size)
+            py = oy + int(mz / mh * size)
+            if abs(event.x - px) <= hit_radius and abs(event.y - py) <= hit_radius:
+                self._select_spawn(i)
+                return
+
+    def _select_spawn(self, spawn_index: int) -> None:
+        """Select a spawn position for the human player."""
+        # For now, log the selection — spawn assignment integration comes next
+        logger.info("Spawn %d selected", spawn_index + 1)
+
+    def _clamp_pan(self) -> None:
+        """Clamp pan offset to keep the map visible."""
+        if not hasattr(self, "map_canvas"):
+            return
+        canvas = self.map_canvas
+        cw = canvas.winfo_width()
+        ch = canvas.winfo_height()
+        base_size = min(cw, ch)
+        max_pan = base_size * self._zoom / 2
+        self._pan_x = max(-max_pan, min(max_pan, self._pan_x))
+        self._pan_y = max(-max_pan, min(max_pan, self._pan_y))
+
     def _redraw_canvas(self) -> None:
         """Redraw the map preview and marker overlays on the canvas."""
         if not hasattr(self, "map_canvas"):
@@ -302,10 +395,11 @@ class WopcApp(BaseApp):  # type: ignore
         if cw < 10 or ch < 10:
             return
 
-        # Square preview, centered, filling the smaller dimension
-        size = min(cw, ch)
-        ox = (cw - size) // 2
-        oy = (ch - size) // 2
+        # Square preview with zoom and pan
+        base_size = min(cw, ch)
+        size = int(base_size * self._zoom)
+        ox = int((cw - size) / 2 + self._pan_x)
+        oy = int((ch - size) / 2 + self._pan_y)
 
         if self._raw_preview is not None and _PIL_AVAILABLE:
             from PIL import ImageTk  # type: ignore[import-not-found]
@@ -349,10 +443,37 @@ class WopcApp(BaseApp):  # type: ignore
         def _draw_icon(icon_key: str, px: int, py: int, icon_size: int) -> None:
             raw = self._marker_icons.get(icon_key)
             if raw is not None:
-                scaled = raw.resize((icon_size, icon_size), PilImage.LANCZOS)  # type: ignore[attr-defined]
+                scaled = raw.resize(
+                    (icon_size, icon_size),
+                    PilImage.LANCZOS,  # type: ignore[attr-defined]
+                )
                 tk_img = ImageTk.PhotoImage(scaled)
                 canvas.create_image(px, py, image=tk_img)
                 self._marker_tk_cache.append(tk_img)
+
+        def _draw_tinted_icon(icon_key: str, px: int, py: int, icon_size: int, tint: str) -> None:
+            """Draw an icon tinted with a color (colorize the opaque pixels)."""
+            raw = self._marker_icons.get(icon_key)
+            if raw is None:
+                return
+            scaled = raw.resize(
+                (icon_size, icon_size),
+                PilImage.LANCZOS,  # type: ignore[attr-defined]
+            )
+            # Parse hex color to RGB
+            r_c = int(tint[1:3], 16)
+            g_c = int(tint[3:5], 16)
+            b_c = int(tint[5:7], 16)
+            # Tint: replace RGB of opaque pixels, keep alpha
+            pixels = scaled.load()
+            for yi in range(icon_size):
+                for xi in range(icon_size):
+                    _r, _g, _b, a = pixels[xi, yi]
+                    if a > 0:
+                        pixels[xi, yi] = (r_c, g_c, b_c, a)
+            tk_img = ImageTk.PhotoImage(scaled)
+            canvas.create_image(px, py, image=tk_img)
+            self._marker_tk_cache.append(tk_img)
 
         # Mass points — strategic mass extractor icon
         mass_icon_size = max(8, size // 40)
@@ -390,31 +511,22 @@ class WopcApp(BaseApp):  # type: ignore
                     width=max(1, size // 250),
                 )
 
-        # Army spawn positions — commander icon with player color ring + number
-        # Active players = human + AI slots; spawns beyond that are greyed out
+        # Army spawn positions — tinted commander icon + player number
         active_count = len(self.player_slots) if hasattr(self, "player_slots") else 0
         spawn_icon_size = max(20, size // 18)
         for i, (name, mx, mz) in enumerate(info.markers.armies):
             px, py = _map_to_px(mx, mz)
             is_active = i < active_count
             color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0] if is_active else "#333333"
-            outline = "#FFFFFF" if is_active else "#555555"
-            r = spawn_icon_size // 2 + 2
-            # Colored background circle (grey if unoccupied)
-            canvas.create_oval(
-                px - r,
-                py - r,
-                px + r,
-                py + r,
-                fill=color,
-                outline=outline,
-                width=max(2, size // 200),
-            )
-            # Commander icon on top
+            # Tinted commander icon (no background circle)
             if "marker_commander" in self._marker_icons:
-                _draw_icon("marker_commander", px, py, spawn_icon_size)
+                _draw_tinted_icon("marker_commander", px, py, spawn_icon_size, color)
+            else:
+                r = spawn_icon_size // 2
+                canvas.create_oval(px - r, py - r, px + r, py + r, fill=color, outline="")
             # Player number
             num = name.split("_")[1] if "_" in name else str(i + 1)
+            r = spawn_icon_size // 2 + 2
             canvas.create_text(
                 px + r,
                 py - r,
@@ -422,17 +534,6 @@ class WopcApp(BaseApp):  # type: ignore
                 fill="#FFFFFF" if is_active else "#666666",
                 font=("Segoe UI", max(9, size // 40), "bold"),
             )
-
-    def _on_map_inspect(self, event: Any) -> None:
-        """Open the map inspect window for detailed view, positioned near click."""
-        if self._current_map_info is None:
-            return
-        from launcher.gui.map_inspect import MapInspectWindow
-
-        # Position window near the mouse click
-        mouse_x = self.winfo_pointerx()
-        mouse_y = self.winfo_pointery()
-        MapInspectWindow(self, self._current_map_info, self._raw_preview, x=mouse_x, y=mouse_y)
 
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
@@ -723,7 +824,10 @@ class WopcApp(BaseApp):  # type: ignore
         self.map_canvas = tk.Canvas(map_frame, bg=COLOR_BG, highlightthickness=0, cursor="hand2")
         self.map_canvas.grid(row=0, column=0, padx=4, pady=4, sticky="nsew")
         self.map_canvas.bind("<Configure>", self._on_canvas_resize)
-        self.map_canvas.bind("<Button-1>", self._on_map_inspect)
+        self.map_canvas.bind("<MouseWheel>", self._on_canvas_scroll)
+        self.map_canvas.bind("<ButtonPress-1>", self._on_canvas_drag_start)
+        self.map_canvas.bind("<B1-Motion>", self._on_canvas_drag)
+        self.map_canvas.bind("<ButtonRelease-1>", self._on_canvas_click)
 
         self.map_preview_name = ctk.CTkLabel(
             map_frame,
