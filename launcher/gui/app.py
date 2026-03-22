@@ -320,22 +320,8 @@ class WopcApp(BaseApp):  # type: ignore
             py = oy + int(mz / mh * size)
             return px, py
 
-        # Mass points — small white dots
+        # Mass points — white dots
         for mx, mz in info.markers.mass:
-            px, py = _map_to_px(mx, mz)
-            r = max(2, size // 120)
-            canvas.create_oval(
-                px - r,
-                py - r,
-                px + r,
-                py + r,
-                fill="#FFFFFF",
-                outline="#808080",
-                width=1,
-            )
-
-        # Hydro points — green dots, slightly larger
-        for mx, mz in info.markers.hydro:
             px, py = _map_to_px(mx, mz)
             r = max(3, size // 80)
             canvas.create_oval(
@@ -343,15 +329,29 @@ class WopcApp(BaseApp):  # type: ignore
                 py - r,
                 px + r,
                 py + r,
+                fill="#FFFFFF",
+                outline="#808080",
+                width=max(1, size // 300),
+            )
+
+        # Hydro points — green dots, slightly larger
+        for mx, mz in info.markers.hydro:
+            px, py = _map_to_px(mx, mz)
+            r = max(4, size // 60)
+            canvas.create_oval(
+                px - r,
+                py - r,
+                px + r,
+                py + r,
                 fill="#00CC00",
                 outline="#006600",
-                width=1,
+                width=max(1, size // 250),
             )
 
         # Army spawn positions — numbered circles with player colors
         for i, (name, mx, mz) in enumerate(info.markers.armies):
             px, py = _map_to_px(mx, mz)
-            r = max(8, size // 40)
+            r = max(10, size // 30)
             color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0]
             canvas.create_oval(
                 px - r,
@@ -360,7 +360,7 @@ class WopcApp(BaseApp):  # type: ignore
                 py + r,
                 fill=color,
                 outline="#FFFFFF",
-                width=2,
+                width=max(2, size // 200),
             )
             num = name.split("_")[1] if "_" in name else str(i + 1)
             canvas.create_text(
@@ -368,7 +368,7 @@ class WopcApp(BaseApp):  # type: ignore
                 py,
                 text=num,
                 fill="#FFFFFF",
-                font=("Segoe UI", max(8, size // 50), "bold"),
+                font=("Segoe UI", max(9, size // 40), "bold"),
             )
 
     def _on_map_inspect(self, event: Any) -> None:
@@ -501,10 +501,8 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.mode_label.grid(row=10, column=0, padx=20, pady=(0, 6), sticky="w")
 
-        saved_mode = prefs.get_launch_mode()
-        # Map old host/join modes to multiplayer
-        display_mode = "MULTIPLAYER" if saved_mode in ("host", "join") else saved_mode.upper()
-        self.mode_var = ctk.StringVar(value=display_mode)
+        # Always start in SOLO mode for consistent startup
+        self.mode_var = ctk.StringVar(value="SOLO")
         self.mode_selector = ctk.CTkSegmentedButton(
             self.sidebar,
             values=["SOLO", "MULTIPLAYER"],
@@ -649,12 +647,12 @@ class WopcApp(BaseApp):  # type: ignore
         self.config_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         self.config_panel.grid(row=1, column=0, sticky="nsew")
         self.config_panel.grid_rowconfigure(1, weight=1)
-        self.config_panel.grid_columnconfigure(0, weight=3)  # preview column (hero)
-        self.config_panel.grid_columnconfigure(1, weight=1)  # map list column (compact)
+        self.config_panel.grid_columnconfigure(0, weight=5)  # preview column (hero)
+        self.config_panel.grid_columnconfigure(1, weight=1, minsize=200)  # map list (compact)
 
         # --- Map Preview Panel (LEFT column — hero element, fills space) ---
         self._preview_panel = ctk.CTkFrame(self.config_panel, fg_color=COLOR_PANEL, corner_radius=4)
-        self._preview_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=10, pady=10)
+        self._preview_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=6, pady=6)
         self._preview_panel.grid_columnconfigure(0, weight=1)
         self._preview_panel.grid_rowconfigure(0, weight=1)
 
@@ -665,7 +663,7 @@ class WopcApp(BaseApp):  # type: ignore
             highlightthickness=0,
             cursor="hand2",
         )
-        self.map_canvas.grid(row=0, column=0, padx=8, pady=8, sticky="nsew")
+        self.map_canvas.grid(row=0, column=0, padx=4, pady=4, sticky="nsew")
         self.map_canvas.bind("<Configure>", self._on_canvas_resize)
         self.map_canvas.bind("<Button-1>", self._on_map_inspect)
 
@@ -1220,10 +1218,13 @@ class WopcApp(BaseApp):  # type: ignore
         self.name_label.grid(row=7, column=0, padx=30, pady=(3, 0), sticky="w")
         self.name_entry = ctk.CTkEntry(self.mod_pane, width=160, placeholder_text="Player")
         saved_name = prefs.get_player_name()
-        if saved_name and saved_name != "Player":
-            self.name_entry.insert(0, saved_name)
+        self.name_entry.insert(0, saved_name)
         self.name_entry.bind(
             "<FocusOut>",
+            lambda e: prefs.set_player_name(self.name_entry.get()),
+        )
+        self.name_entry.bind(
+            "<Return>",
             lambda e: prefs.set_player_name(self.name_entry.get()),
         )
         self.name_entry.grid(row=8, column=0, padx=30, pady=(0, 5), sticky="w")

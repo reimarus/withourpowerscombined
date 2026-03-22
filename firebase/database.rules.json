@@ -1,8 +1,8 @@
 {
   "rules": {
     "games": {
+      ".read": true,
       "$game_id": {
-        ".read": true,
         ".write": true,
         ".validate": "newData.hasChildren(['host_name','map_name','player_count','max_players','lobby_port','host_ip','last_seen'])"
       }

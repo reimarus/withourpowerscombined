@@ -39,11 +39,11 @@ Items to tackle over time, roughly grouped by priority.
 
 > Based on side-by-side comparison with other SupCom launchers (2026-03-21 screenshots)
 
-36. **Map preview too small** — map needs to be 2-3x larger and dominate the left side of the config panel. Currently ~200px, should be ~40% of the dialog. The map is the most important visual element.
-37. **Map list should be narrower** — map list competes with preview for horizontal space. Make the list a compact sidebar on the right, give the map the lion's share.
+36. ~~**Map preview too small**~~ ✅ — enlarged preview with 5:1 column weight ratio, reduced padding, preview dominates left side
+37. ~~**Map list should be narrower**~~ ✅ — compact sidebar with minsize=200, map list no longer competes with preview
 38. **Game browser refresh button** — users need a manual "Refresh" to force re-poll for games. Currently only auto-polls every 5s, but first-time users need instant feedback.
 39. **SupCom-authentic UI chrome** — use metallic SupCom frames/borders. Our launcher feels like a generic app with a color theme. Extract and render actual game UI textures for borders, buttons, and panel backgrounds.
-40. **Marker visibility at small sizes** — mass/hydro/spawn markers are hard to distinguish at current preview size. Scale marker radius with canvas size and use thicker outlines.
+40. ~~**Marker visibility at small sizes**~~ ✅ — increased marker radii and outline widths with better scaling formulas
 41. **Map description panel** — show map description text below the preview. We stripped description to reduce clutter but should show it in the inspect window.
 
 ## Features
