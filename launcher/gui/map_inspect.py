@@ -76,6 +76,8 @@ class MapInspectWindow(tk.Toplevel):
         self._info = info
         self._raw_preview = raw_preview
         self._zoom = 1.0
+        self._pan_x = 0.0  # pan offset in canvas pixels (at zoom=1)
+        self._pan_y = 0.0
         self._tk_image: Any = None
         self._marker_icons: dict[str, Any] = {}
         self._marker_tk_cache: list[Any] = []
@@ -184,10 +186,28 @@ class MapInspectWindow(tk.Toplevel):
         self._redraw()
 
     def _on_scroll(self, event: Any) -> None:
+        old_zoom = self._zoom
         if event.delta > 0:
             self._zoom = min(4.0, self._zoom * 1.15)
         else:
             self._zoom = max(0.5, self._zoom / 1.15)
+
+        # Zoom toward mouse position
+        cw = self._canvas.winfo_width()
+        ch = self._canvas.winfo_height()
+        base_size = min(cw, ch)
+        # Mouse position relative to canvas center
+        mx_rel = event.x - cw / 2
+        my_rel = event.y - ch / 2
+        # Adjust pan so the point under the mouse stays fixed
+        scale = self._zoom / old_zoom
+        self._pan_x = mx_rel - scale * (mx_rel - self._pan_x)
+        self._pan_y = my_rel - scale * (my_rel - self._pan_y)
+        # Clamp pan to keep image partially visible
+        max_pan = base_size * self._zoom / 2
+        self._pan_x = max(-max_pan, min(max_pan, self._pan_x))
+        self._pan_y = max(-max_pan, min(max_pan, self._pan_y))
+
         self._zoom_label.configure(text=f"Zoom: {self._zoom:.1f}x  (scroll to zoom)")
         self._redraw()
 
@@ -202,8 +222,8 @@ class MapInspectWindow(tk.Toplevel):
 
         base_size = min(cw, ch)
         size = int(base_size * self._zoom)
-        ox = (cw - size) // 2
-        oy = (ch - size) // 2
+        ox = int((cw - size) / 2 + self._pan_x)
+        oy = int((ch - size) / 2 + self._pan_y)
 
         if self._raw_preview is not None and _PIL_AVAILABLE:
             resized = self._raw_preview.resize(

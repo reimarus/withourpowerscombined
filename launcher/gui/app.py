@@ -392,19 +392,23 @@ class WopcApp(BaseApp):  # type: ignore
                 )
 
         # Army spawn positions — commander icon with player color ring + number
+        # Active players = human + AI slots; spawns beyond that are greyed out
+        active_count = len(self.player_slots) if hasattr(self, "player_slots") else 0
         spawn_icon_size = max(20, size // 18)
         for i, (name, mx, mz) in enumerate(info.markers.armies):
             px, py = _map_to_px(mx, mz)
-            color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0]
+            is_active = i < active_count
+            color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0] if is_active else "#333333"
+            outline = "#FFFFFF" if is_active else "#555555"
             r = spawn_icon_size // 2 + 2
-            # Colored background circle
+            # Colored background circle (grey if unoccupied)
             canvas.create_oval(
                 px - r,
                 py - r,
                 px + r,
                 py + r,
                 fill=color,
-                outline="#FFFFFF",
+                outline=outline,
                 width=max(2, size // 200),
             )
             # Commander icon on top
@@ -416,7 +420,7 @@ class WopcApp(BaseApp):  # type: ignore
                 px + r,
                 py - r,
                 text=num,
-                fill="#FFFFFF",
+                fill="#FFFFFF" if is_active else "#666666",
                 font=("Segoe UI", max(9, size // 40), "bold"),
             )
 
@@ -676,8 +680,8 @@ class WopcApp(BaseApp):  # type: ignore
         """Construct the central matching routing/configuration area."""
         self.solo_screen = ctk.CTkFrame(self, fg_color="transparent")
         self.solo_screen.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
-        # Row 0: header, Row 1: config_panel (map), Row 2: players+options, Row 3: log
-        self.solo_screen.grid_rowconfigure(1, weight=3)
+        # Row 0: header, Row 1: config_panel (map hero), Row 2: players+options, Row 3: log
+        self.solo_screen.grid_rowconfigure(1, weight=6)
         self.solo_screen.grid_rowconfigure(2, weight=0)  # fixed height, no squishing
         self.solo_screen.grid_columnconfigure(0, weight=1)
 
@@ -692,22 +696,15 @@ class WopcApp(BaseApp):  # type: ignore
         header_div = self._make_divider(self.solo_screen)
         header_div.grid(row=0, column=0, sticky="ews", pady=(0, 0))
 
-        # --- Map Selector Panel ---
-        self.config_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
+        # --- Map Preview Panel (hero element, fills center) ---
+        self.config_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_PANEL, corner_radius=4)
         self.config_panel.grid(row=1, column=0, sticky="nsew")
-        self.config_panel.grid_rowconfigure(1, weight=1)
-        self.config_panel.grid_columnconfigure(0, weight=5)  # preview column (hero)
-        self.config_panel.grid_columnconfigure(1, weight=1, minsize=200)  # map list (compact)
-
-        # --- Map Preview Panel (LEFT column — hero element, fills space) ---
-        self._preview_panel = ctk.CTkFrame(self.config_panel, fg_color=COLOR_PANEL, corner_radius=4)
-        self._preview_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=6, pady=6)
-        self._preview_panel.grid_columnconfigure(0, weight=1)
-        self._preview_panel.grid_rowconfigure(0, weight=1)
+        self.config_panel.grid_columnconfigure(0, weight=1)
+        self.config_panel.grid_rowconfigure(0, weight=1)
 
         # Canvas-based map preview — click to inspect
         self.map_canvas = tk.Canvas(
-            self._preview_panel,
+            self.config_panel,
             bg=COLOR_BG,
             highlightthickness=0,
             cursor="hand2",
@@ -718,89 +715,24 @@ class WopcApp(BaseApp):  # type: ignore
 
         # Compact metadata — name and stats on one line below canvas
         self.map_preview_name = ctk.CTkLabel(
-            self._preview_panel,
+            self.config_panel,
             text="",
             text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=13, weight="bold"),
         )
         self.map_preview_name.grid(row=1, column=0, padx=10, pady=(0, 6), sticky="w")
 
-        # --- Map List (RIGHT column — compact, scrollable) ---
-        list_panel = ctk.CTkFrame(self.config_panel, fg_color="transparent")
-        list_panel.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(0, 10), pady=10)
-        list_panel.grid_rowconfigure(2, weight=1)
-        list_panel.grid_columnconfigure(0, weight=1)
-
-        list_header = ctk.CTkLabel(
-            list_panel,
-            text="MAP LIST",
-            text_color=COLOR_TEXT_GOLD,
-            font=ctk.CTkFont(size=12, weight="bold"),
-        )
-        list_header.grid(row=0, column=0, sticky="w", pady=(0, 5))
-
-        # Map Filters
-        self.filter_frame = ctk.CTkFrame(list_panel, fg_color="transparent")
-        self.filter_frame.grid(row=1, column=0, sticky="ew", pady=(0, 5))
-        self.filter_frame.grid_columnconfigure(0, weight=1)
-
-        self.search_var = ctk.StringVar()
-        self.search_var.trace_add("write", self._apply_map_filters)
-        self.search_entry = ctk.CTkEntry(
-            self.filter_frame,
-            textvariable=self.search_var,
-            placeholder_text="Search maps...",
-            height=28,
-        )
-        self.search_entry.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 4))
-
-        self.type_var = ctk.StringVar(value="All")
-        self.type_menu = ctk.CTkOptionMenu(
-            self.filter_frame,
-            values=["All", "Skirmish", "Campaign"],
-            variable=self.type_var,
-            command=self._apply_map_filters,
-            width=90,
-            height=26,
-        )
-        self.type_menu.grid(row=1, column=0, padx=(0, 4), sticky="ew")
-
-        # Player count and size dropdowns — populated dynamically after scan
-        self.players_var = ctk.StringVar(value="Any")
-        self.players_menu = ctk.CTkOptionMenu(
-            self.filter_frame,
-            values=["Any"],
-            variable=self.players_var,
-            command=self._apply_map_filters,
-            width=60,
-            height=26,
-        )
-        self.players_menu.grid(row=1, column=1, padx=(0, 4), sticky="ew")
-
-        self.size_var = ctk.StringVar(value="Any")
-        self.size_menu = ctk.CTkOptionMenu(
-            self.filter_frame,
-            values=["Any"],
-            variable=self.size_var,
-            command=self._apply_map_filters,
-            width=70,
-            height=26,
-        )
-        self.size_menu.grid(row=1, column=2, sticky="ew")
-
-        self.map_scroll = ctk.CTkScrollableFrame(list_panel, fg_color="transparent")
-        self.map_scroll.grid(row=2, column=0, sticky="nsew", pady=(4, 0))
-        self.map_buttons: list[Any] = []
-
-        # --- Player Slots + Game Options Panel ---
+        # --- Player Slots + Game Options + Settings Panel ---
         self.lower_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
         self.lower_panel.grid(row=2, column=0, sticky="nsew", pady=(10, 0))
         self.lower_panel.grid_columnconfigure(0, weight=1)
         self.lower_panel.grid_columnconfigure(1, weight=1)
+        self.lower_panel.grid_columnconfigure(2, weight=1)
         self.lower_panel.grid_rowconfigure(1, weight=1)
 
         self._build_player_slots()
         self._build_game_options()
+        self._build_settings_column()
 
         # --- Log / Chat Window ---
         self.log_chat_frame = ctk.CTkFrame(
@@ -1207,115 +1139,72 @@ class WopcApp(BaseApp):  # type: ignore
         self.lobby_launch_btn.grid(row=0, column=2, sticky="e")
 
     def _build_mod_pane(self) -> None:
-        """Construct the right-hand sidebar for Mod management."""
+        """Construct the right-hand sidebar — map list (full height)."""
         self.mod_pane = ctk.CTkFrame(self, fg_color=COLOR_BG, corner_radius=0)
         self.mod_pane.grid(row=0, column=2, sticky="nsew")
         self.mod_pane.grid_columnconfigure(0, weight=1)
-        self.mod_pane.grid_rowconfigure(1, weight=1)  # Content packs scroll
-        self.mod_pane.grid_rowconfigure(4, weight=1)  # User mods scroll
+        self.mod_pane.grid_rowconfigure(3, weight=1)  # Map list scroll (fills column)
 
-        # --- Content Packs Section ---
-        self.packs_header = ctk.CTkLabel(
+        # --- Map List Header ---
+        map_list_header = ctk.CTkLabel(
             self.mod_pane,
-            text="CONTENT PACKS",
+            text="MAP LIST",
             text_color=COLOR_TEXT_GOLD,
             font=ctk.CTkFont(size=11, weight="bold"),
         )
-        self.packs_header.grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
+        map_list_header.grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
 
-        self.packs_scroll = ctk.CTkScrollableFrame(self.mod_pane, fg_color="transparent")
-        self.packs_scroll.grid(row=1, column=0, sticky="nsew", padx=10)
-        self.pack_checkboxes: dict[str, Any] = {}
+        # Map Filters
+        self.filter_frame = ctk.CTkFrame(self.mod_pane, fg_color="transparent")
+        self.filter_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 2))
+        self.filter_frame.grid_columnconfigure(0, weight=1)
 
-        # Divider
-        packs_div = self._make_divider(self.mod_pane)
-        packs_div.grid(row=2, column=0, padx=16, pady=(8, 0), sticky="ew")
-
-        # --- User Mods Section ---
-        self.mod_header = ctk.CTkLabel(
-            self.mod_pane,
-            text="USER MODS",
-            text_color=COLOR_TEXT_GOLD,
-            font=ctk.CTkFont(size=11, weight="bold"),
+        self.search_var = ctk.StringVar()
+        self.search_var.trace_add("write", self._apply_map_filters)
+        self.search_entry = ctk.CTkEntry(
+            self.filter_frame,
+            textvariable=self.search_var,
+            placeholder_text="Search maps...",
+            height=26,
         )
-        self.mod_header.grid(row=3, column=0, padx=20, pady=(10, 5), sticky="w")
+        self.search_entry.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 3))
 
-        self.mods_scroll = ctk.CTkScrollableFrame(self.mod_pane, fg_color="transparent")
-        self.mods_scroll.grid(row=4, column=0, sticky="nsew", padx=10)
-        self.mod_checkboxes: dict[str, Any] = {}
+        self.type_var = ctk.StringVar(value="All")
+        self.type_menu = ctk.CTkOptionMenu(
+            self.filter_frame,
+            values=["All", "Skirmish", "Campaign"],
+            variable=self.type_var,
+            command=self._apply_map_filters,
+            width=70,
+            height=24,
+        )
+        self.type_menu.grid(row=1, column=0, padx=(0, 3), sticky="ew")
 
-        # Divider
-        mods_div = self._make_divider(self.mod_pane)
-        mods_div.grid(row=5, column=0, padx=16, pady=(8, 0), sticky="ew")
+        self.players_var = ctk.StringVar(value="Any")
+        self.players_menu = ctk.CTkOptionMenu(
+            self.filter_frame,
+            values=["Any"],
+            variable=self.players_var,
+            command=self._apply_map_filters,
+            width=50,
+            height=24,
+        )
+        self.players_menu.grid(row=1, column=1, padx=(0, 3), sticky="ew")
 
-        # --- Player Settings Section ---
-        self.settings_header = ctk.CTkLabel(
-            self.mod_pane,
-            text="PLAYER SETTINGS",
-            text_color=COLOR_TEXT_GOLD,
-            font=ctk.CTkFont(size=11, weight="bold"),
+        self.size_var = ctk.StringVar(value="Any")
+        self.size_menu = ctk.CTkOptionMenu(
+            self.filter_frame,
+            values=["Any"],
+            variable=self.size_var,
+            command=self._apply_map_filters,
+            width=50,
+            height=24,
         )
-        self.settings_header.grid(row=6, column=0, padx=20, pady=(10, 5), sticky="w")
+        self.size_menu.grid(row=1, column=2, sticky="ew")
 
-        # Player name
-        self.name_label = ctk.CTkLabel(
-            self.mod_pane,
-            text="Name:",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12),
-        )
-        self.name_label.grid(row=7, column=0, padx=30, pady=(3, 0), sticky="w")
-        self.name_entry = ctk.CTkEntry(self.mod_pane, width=160, placeholder_text="Player")
-        saved_name = prefs.get_player_name()
-        self.name_entry.insert(0, saved_name)
-        self.name_entry.bind(
-            "<FocusOut>",
-            lambda e: prefs.set_player_name(self.name_entry.get()),
-        )
-        self.name_entry.bind(
-            "<Return>",
-            lambda e: prefs.set_player_name(self.name_entry.get()),
-        )
-        self.name_entry.grid(row=8, column=0, padx=30, pady=(0, 5), sticky="w")
-
-        # Faction selector
-        saved_faction = prefs.get_player_faction()
-        display_faction = "UEF" if saved_faction == "uef" else saved_faction.capitalize()
-        self.faction_var = ctk.StringVar(value=display_faction)
-        self.faction_label = ctk.CTkLabel(
-            self.mod_pane,
-            text="Faction:",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12),
-        )
-        self.faction_label.grid(row=9, column=0, padx=30, pady=(3, 0), sticky="w")
-        self.faction_menu = ctk.CTkOptionMenu(
-            self.mod_pane,
-            values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
-            variable=self.faction_var,
-            command=self._on_faction_change,
-            width=160,
-        )
-        self.faction_menu.grid(row=10, column=0, padx=30, pady=(0, 5), sticky="w")
-
-        # Minimap toggle
-        self.minimap_var = ctk.BooleanVar(value=prefs.get_minimap_enabled())
-        self.minimap_cb = ctk.CTkCheckBox(
-            self.mod_pane,
-            text="Show minimap on launch",
-            command=self._on_minimap_toggle,
-            variable=self.minimap_var,
-        )
-        self.minimap_cb.grid(row=11, column=0, padx=30, pady=3, sticky="w")
-
-        # Summary Status
-        self.play_summary = ctk.CTkLabel(
-            self.mod_pane,
-            text="Enabled: 0",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12),
-        )
-        self.play_summary.grid(row=12, column=0, padx=20, pady=10, sticky="w")
+        self.map_scroll = ctk.CTkScrollableFrame(self.mod_pane, fg_color="transparent")
+        self.map_scroll.grid(row=3, column=0, sticky="nsew", padx=10, pady=(4, 10))
+        self.map_buttons: list[Any] = []
 
     # ------------------------------------------------------------------
     # Player Slots
@@ -1587,6 +1476,7 @@ class WopcApp(BaseApp):  # type: ignore
             }
         )
         self._broadcast_game_state()
+        self._redraw_canvas()
 
     def _remove_slot(self, index: int) -> None:
         """Remove a player slot and re-layout remaining slots."""
@@ -1605,6 +1495,7 @@ class WopcApp(BaseApp):  # type: ignore
             # Update slot number label
             s["widgets"][0].configure(text=str(i + 1))
         self._broadcast_game_state()
+        self._redraw_canvas()
 
     # ------------------------------------------------------------------
     # Lobby Player Slots (mirror of solo slots for the lobby screen)
@@ -1863,6 +1754,102 @@ class WopcApp(BaseApp):  # type: ignore
             self.solo_victory_desc.configure(text=desc)
 
         self.game_option_vars["Victory"].trace_add("write", _update_solo_victory_desc)
+
+    def _build_settings_column(self) -> None:
+        """Build the settings column (player settings + content packs + user mods)."""
+        col_frame = ctk.CTkFrame(self.lower_panel, fg_color="transparent")
+        col_frame.grid(row=0, column=2, rowspan=2, sticky="nsew", padx=(5, 10), pady=10)
+        col_frame.grid_columnconfigure(0, weight=1)
+        col_frame.grid_rowconfigure(3, weight=1)  # packs scroll
+        col_frame.grid_rowconfigure(6, weight=1)  # mods scroll
+
+        # --- Player Settings (compact) ---
+        ctk.CTkLabel(
+            col_frame,
+            text="PLAYER SETTINGS",
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=0, sticky="w", pady=(0, 3))
+
+        settings_row = ctk.CTkFrame(col_frame, fg_color="transparent")
+        settings_row.grid(row=1, column=0, sticky="ew")
+
+        ctk.CTkLabel(
+            settings_row,
+            text="Name:",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        ).grid(row=0, column=0, sticky="w", padx=(0, 5))
+        self.name_entry = ctk.CTkEntry(
+            settings_row, width=100, height=24, placeholder_text="Player"
+        )
+        saved_name = prefs.get_player_name()
+        self.name_entry.insert(0, saved_name)
+        self.name_entry.bind("<FocusOut>", lambda e: prefs.set_player_name(self.name_entry.get()))
+        self.name_entry.bind("<Return>", lambda e: prefs.set_player_name(self.name_entry.get()))
+        self.name_entry.grid(row=0, column=1, sticky="w")
+
+        ctk.CTkLabel(
+            settings_row,
+            text="Faction:",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        ).grid(row=1, column=0, sticky="w", padx=(0, 5), pady=(3, 0))
+        saved_faction = prefs.get_player_faction()
+        display_faction = "UEF" if saved_faction == "uef" else saved_faction.capitalize()
+        self.faction_var = ctk.StringVar(value=display_faction)
+        self.faction_menu = ctk.CTkOptionMenu(
+            settings_row,
+            values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
+            variable=self.faction_var,
+            command=self._on_faction_change,
+            width=100,
+            height=24,
+        )
+        self.faction_menu.grid(row=1, column=1, sticky="w", pady=(3, 0))
+
+        self.minimap_var = ctk.BooleanVar(value=prefs.get_minimap_enabled())
+        self.minimap_cb = ctk.CTkCheckBox(
+            col_frame,
+            text="Show minimap on launch",
+            command=self._on_minimap_toggle,
+            variable=self.minimap_var,
+            font=ctk.CTkFont(size=11),
+        )
+        self.minimap_cb.grid(row=2, column=0, sticky="w", pady=(3, 5))
+
+        # --- Content Packs ---
+        ctk.CTkLabel(
+            col_frame,
+            text="CONTENT PACKS",
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=3, column=0, sticky="nw", pady=(5, 3))
+
+        self.packs_scroll = ctk.CTkScrollableFrame(col_frame, fg_color="transparent", height=50)
+        self.packs_scroll.grid(row=4, column=0, sticky="nsew")
+        self.pack_checkboxes: dict[str, Any] = {}
+
+        # --- User Mods ---
+        ctk.CTkLabel(
+            col_frame,
+            text="USER MODS",
+            text_color=COLOR_TEXT_GOLD,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=5, column=0, sticky="nw", pady=(5, 3))
+
+        self.mods_scroll = ctk.CTkScrollableFrame(col_frame, fg_color="transparent", height=50)
+        self.mods_scroll.grid(row=6, column=0, sticky="nsew")
+        self.mod_checkboxes: dict[str, Any] = {}
+
+        # Active mods summary
+        self.play_summary = ctk.CTkLabel(
+            col_frame,
+            text="Active Mods: 0",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        )
+        self.play_summary.grid(row=7, column=0, sticky="w", pady=(3, 0))
 
     def _on_game_option_change(self, key: str) -> None:
         """Broadcast state when a game option changes (host only)."""
