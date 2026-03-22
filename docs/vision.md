@@ -5,15 +5,11 @@
 
 The **With Our Powers Combined (WOPC)** project is born out of a love for the game and a desire to see what is possible when we push the Moho Engine to its absolute limits, assisted by modern AI tools.
 
-## Phase 0-2: The Unification
-LOUD and FAF are two monumental achievements in the game's history:
-- **LOUD** fundamentally rewrote the AI and added hundreds of new gameplay elements, optimizing the Lua simulation for massive scale.
-- **FAF** reverse-engineered and patched the compiled C++ engine, yielding critical collision fixes, memory improvements, and a faster binary.
-
-Our first major hurdle is unification. By safely combining LOUD's massive content and Lua simulation with FAF's optimized engine patches, WOPC creates the definitive underlying platform for the future of the game.
+## Phase 0-2: The Foundation
+WOPC stands on the shoulders of the SupCom modding community. We inherited engine patches that fix critical bugs (collisions, memory, pathfinding) and a massive library of gameplay content (units, AI, maps). These are now maintained as part of WOPC — a standalone project, free to evolve independently.
 
 ## The Future Horizons
-Once LOUD and FAF feel like they belong together, WOPC will expand its scope into entirely new territories.
+With a solid standalone foundation, WOPC expands into entirely new territories.
 
 ### 1. The Advanced WOPC Launcher
 Currently, a command-line script, the WOPC Launcher will evolve into a proper interface allowing players to configure their game precisely:
@@ -28,7 +24,7 @@ Leveraging WOPC's control over the game's initialization and Lua mount order, we
 - A completely new way to experience Supreme Commander cooperatively with friends.
 
 ### 3. Deep C++ Refactoring
-FAF opened the door to patching the engine; we intend to blow it wide open. As an AI-assisted development team, we can tackle the most complex legacy C++ systems in the engine to squeeze out every drop of performance:
+The existing engine patches opened the door; we intend to blow it wide open. As an AI-assisted development team, we can tackle the most complex legacy C++ systems in the engine to squeeze out every drop of performance:
 - **Pathfinding:** Replacing the "stop and wait" A* logic with a multi-threaded Flowfield or advanced steering system.
 - **Memory & Rendering:** Identifying and patching legacy rendering bottlenecks.
 - **Sim Speed:** Pushing the simulation tick rate to remain stable even with 10,000+ units on the field.

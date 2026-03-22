@@ -3,8 +3,7 @@
 ## Prerequisites
 
 1. **Supreme Commander: Forged Alliance** installed via Steam
-2. **LOUD mod** installed (follow LOUD's installation guide first)
-3. **Python 3.12+** installed and on PATH (for development only — players just need the exe)
+2. **Python 3.12+** installed and on PATH (for development only — players just need the exe)
 
 ## For Players
 
@@ -35,7 +34,7 @@ This installs the `wopc` CLI command and all development dependencies (pytest, r
 wopc status
 ```
 
-This detects your Steam SCFA installation and LOUD mod and prints the paths it found. Verify they are correct.
+This detects your Steam SCFA installation and prints the paths it found. Verify they are correct.
 
 ### 4. Set up the WOPC game directory
 
@@ -80,10 +79,6 @@ set SCFA_STEAM=D:\SteamLibrary\steamapps\common\Supreme Commander Forged Allianc
 python wopc.py setup
 ```
 
-### "LOUD installation not found"
-
-LOUD must be installed at `<SCFA_ROOT>\LOUD\`. If you haven't installed LOUD yet, follow the LOUD installation guide first.
-
 ### Symlink errors on setup
 
 Creating symlinks on Windows may require administrator privileges. If you see "A required privilege is not held by the client", either:
@@ -101,7 +96,7 @@ Common issues:
 
 ## C++ Toolchain Setup (Binary Patching)
 
-To build FAF binary patches, you'll need the 32-bit C++ toolchain:
+To build binary patches, you'll need the 32-bit C++ toolchain:
 
 ```bash
 # Install MSYS2 (provides mingw-w64-i686-gcc for 32-bit compilation)

@@ -1,8 +1,9 @@
 # Binary Patching Guide
 
-WOPC integrates FAF (Forged Alliance Forever) C++ binary patches into the SCFA
-game executable. These patches fix pathfinding, collisions, memory limits,
-performance, and add new Lua API functions.
+WOPC integrates C++ binary patches into the SCFA game executable. These patches
+fix pathfinding, collisions, memory limits, performance, and add new Lua API
+functions. The patches originate from the FAF project and are maintained in our
+own fork.
 
 ## Architecture
 
@@ -89,8 +90,7 @@ one. If no patched exe exists, it falls back to the stock SCFA executable.
 ## Patch Selection
 
 The file `wopc_patches.toml` in the repo root controls which patches are
-included. By default, all FAF patches are included except those explicitly
-excluded:
+included. By default, all patches are included except those explicitly excluded:
 
 ```toml
 [build]
@@ -105,8 +105,8 @@ sections = ["gpg_net.cpp", "HashChecker.cpp"]
 
 | File | Reason |
 |------|--------|
-| `gpg_net.cpp` / `gpg_net.h` | FAF lobby networking protocol |
-| `HashChecker.cpp` | FAF client hash verification |
+| `gpg_net.cpp` / `gpg_net.h` | External lobby networking protocol (not used) |
+| `HashChecker.cpp` | External client hash verification (not used) |
 
 ### Key Patches Included
 

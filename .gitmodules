@@ -1,9 +1,9 @@
 [submodule "vendor/FA-Binary-Patches"]
 	path = vendor/FA-Binary-Patches
-	url = https://github.com/FAForever/FA-Binary-Patches.git
+	url = https://github.com/reimarus/FA-Binary-Patches.git
 [submodule "vendor/fa-python-binary-patcher"]
 	path = vendor/fa-python-binary-patcher
-	url = https://github.com/FAForever/fa-python-binary-patcher.git
+	url = https://github.com/reimarus/fa-python-binary-patcher.git
 [submodule "vendor/faf-ui"]
 	path = vendor/faf-ui
 	url = https://github.com/reimarus/fa.git

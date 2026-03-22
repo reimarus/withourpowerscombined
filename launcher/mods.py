@@ -97,10 +97,9 @@ def discover_all_mods() -> list[ModInfo]:
 # ---------------------------------------------------------------------------
 
 # Mods inside content pack SCDs that must NOT be extracted.
-# BlackopsACUs replaces vanilla ACUs with LOUD-specific units that depend on
-# LOUD's extended Unit base class (PlayCommanderWarpInEffect, etc.).  These
-# methods don't exist in FAF-only mode, causing cascading script errors that
-# make the commander invisible and unresponsive.
+# BlackopsACUs replaces vanilla ACUs with units that depend on extended base
+# classes (PlayCommanderWarpInEffect, etc.) not present in WOPC's game logic.
+# This causes cascading script errors that make the commander invisible.
 EXCLUDED_SCD_MODS: frozenset[str] = frozenset({"BlackopsACUs"})
 
 # SCDs that are always mounted and never toggleable.
@@ -112,15 +111,15 @@ FIXED_POSITION_SCDS = frozenset({"wopc_core.scd", "faf_ui.scd"})
 
 # Human-friendly names for content packs shown in the launcher UI.
 CONTENT_PACK_LABELS: dict[str, str] = {
-    "lua.scd": "LOUD Lua (required for LOUD packs)",
-    "loc_US.scd": "LOUD Localization",
+    "lua.scd": "Extended Lua (required for unit packs)",
+    "loc_US.scd": "Extended Localization",
     "4D-CompatibilityPack.scd": "4D Compatibility Pack",
     "blackops.scd": "BlackOps Units",
     "brewlan.scd": "BrewLAN Units",
     "civ_units.scd": "Civilian Units",
     "extra_env.scd": "Extra Environments",
-    "loud_misc.scd": "LOUD Miscellaneous",
-    "loud_units.scd": "LOUD Units",
+    "loud_misc.scd": "Miscellaneous Content",
+    "loud_units.scd": "Extended Units",
     "SC_Music.scd": "Supreme Commander Music",
     "TotalMayhem.scd": "Total Mayhem Units",
     "units.scd": "Core Units",
@@ -145,7 +144,7 @@ def get_enabled_packs() -> list[str]:
     """Return list of currently enabled content pack SCD names."""
     parser = prefs.load_prefs()
     if not parser.has_section("ContentPacks"):
-        return []  # FAF-only mode
+        return []  # no content packs enabled
     enabled = []
     for scd_name in get_toggleable_scds():
         if parser.getboolean("ContentPacks", scd_name, fallback=True):
@@ -175,7 +174,7 @@ def extract_mods_from_scd(scd_path: Path) -> list[str]:
     subtree so mount_mods() activates hooks and blueprints.
 
     Mods listed in :data:`EXCLUDED_SCD_MODS` are skipped (e.g.
-    BlackopsACUs which depends on LOUD base classes).
+    BlackopsACUs which depends on extended base classes).
 
     Returns the list of extracted mod directory names.
     """

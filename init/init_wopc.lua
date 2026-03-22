@@ -1,6 +1,6 @@
 -- =============================================================================
 -- init_wopc.lua — WOPC init file (STATIC FALLBACK)
--- With Our Powers Combined: Standalone gameplay + FAF engine patches
+-- With Our Powers Combined: Standalone SCFA gameplay
 --
 -- This file is copied by `wopc setup` and overwritten by the launcher's
 -- init_generator before each game launch.  It exists as a fallback if the

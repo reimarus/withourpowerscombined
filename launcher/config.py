@@ -1,4 +1,4 @@
-"""WOPC configuration - path constants and version info."""
+"""WOPC configuration — path constants and version info."""
 
 import os
 import sys
@@ -10,7 +10,7 @@ from launcher.__version__ import VERSION  # noqa: F401 — re-exported
 #
 # The launcher exe lives directly in the SCFA install folder.  When frozen
 # (PyInstaller exe), the parent directory of the exe *is* the SCFA root.
-# WOPC content is deployed to SCFA/WOPC/ (alongside LOUD's SCFA/LOUD/).
+# WOPC content is deployed to SCFA/WOPC/.
 
 
 def _resolve_paths() -> tuple[Path, Path]:
@@ -116,30 +116,21 @@ REPO_BUNDLED_USERMODS = REPO_BUNDLED / "usermods"
 # WOPC Overlay Content (consolidated into wopc_core.scd during build)
 REPO_WOPC_PATCHES = _REPO_ROOT / "gamedata" / "wopc_patches"
 
-# WOPC core SCD — merged FAF game logic + our patches + vanilla gap-fills
+# WOPC core SCD — merged game logic source + our patches + vanilla gap-fills
 REPO_WOPC_CORE_SRC = VENDOR_DIR / "faf-ui"
 WOPC_CORE_SCD = "wopc_core.scd"
 
-# FAF distributes a specific base exe that the binary patches are built against.
-# The Steam SupremeCommander.exe has different code addresses, so hooks would
-# target wrong locations.  We download FAF's exe once and cache it locally.
-FAF_BASE_EXE_URL = "https://content.faforever.com/build/ForgedAlliance_base.exe"
-FAF_BASE_EXE_CACHE = PATCH_BUILD_DIR / "ForgedAlliance_base.exe"
+# The binary patches are built against a specific base exe with known code
+# addresses.  The Steam SupremeCommander.exe has different layout, so hooks
+# would target wrong locations.  Downloaded once and cached locally.
+BASE_EXE_URL = "https://content.faforever.com/build/ForgedAlliance_base.exe"
+BASE_EXE_CACHE = PATCH_BUILD_DIR / "ForgedAlliance_base.exe"
 
-# --- LOUD installation paths (for sourcing content packs) ---
-
-LOUD_ROOT = SCFA_STEAM / "LOUD"
-LOUD_GAMEDATA = LOUD_ROOT / "gamedata"
-LOUD_SOUNDS = LOUD_ROOT / "sounds"
-LOUD_TEXTURES_SCD = LOUD_GAMEDATA / "textures.scd"
-
-# Auto-generated SCD containing unit icons extracted from LOUD's textures.scd.
-# This is rebuilt during `wopc setup` whenever content packs change.
+# Auto-generated SCD containing unit icons for content pack units.
 CONTENT_ICONS_SCD = "content_icons.scd"
 CONTENT_ICONS_URL = "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/content_icons.scd"
 
 # Content pack assets hosted on GitHub releases.
-# deploy.py tries local LOUD install first, then downloads from these URLs.
 CONTENT_PACK_ASSETS: dict[str, dict] = {
     "blackops.scd": {
         "url": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackops.scd",
@@ -166,8 +157,7 @@ CONTENT_PACK_ASSETS: dict[str, dict] = {
 }
 
 # --- Content version and core assets for standalone installer ---
-# When running from the frozen exe without the full repo or LOUD,
-# deploy.py downloads these from GitHub Releases.
+# deploy.py downloads these from GitHub Releases when not building from source.
 CONTENT_VERSION = "v2"
 
 _RELEASE_BASE = "https://github.com/reimarus/withourpowerscombined/releases/download"

@@ -28,7 +28,7 @@ from launcher.log import setup_logging
 
 HELP_TEXT = """
 WOPC Launcher - With Our Powers Combined
-Standalone Supreme Commander: Forged Alliance client replacing LOUD and FAF.
+Standalone Supreme Commander: Forged Alliance client.
 
 Usage:
     wopc gui          Launch the graphical UI (default)
@@ -37,7 +37,7 @@ Usage:
     wopc launch       Start the game
     wopc validate     Verify WOPC directory integrity (or pass manifest.json to check hashes)
     wopc manifest     Generate manifest.json of current WOPC installation hashes
-    wopc patch        Build patched exe from FAF binary patches
+    wopc patch        Build patched game executable
       --clean         Force rebuild from scratch
       --check         Verify toolchain without building
       --dry-run       Show what would be built
@@ -85,7 +85,7 @@ def cmd_status() -> int:
         mods = [d.name for d in WOPC_USERMODS.iterdir()] if WOPC_USERMODS.exists() else []
         logger.info("  User mods: %s", ", ".join(mods) if mods else "none")
 
-    # Check FAF patches
+    # Check binary patches
     patched_exe = PATCH_BUILD_DIR / "ForgedAlliance_exxt.exe"
     patches_available = FA_PATCHES_DIR.is_dir()
     logger.info("\nPatches:     %s", FA_PATCHES_DIR)
@@ -417,7 +417,7 @@ def cmd_manifest() -> int:
 
 
 def cmd_patch(args: list[str]) -> int:
-    """Build the patched game executable from FAF binary patches."""
+    """Build the patched game executable from binary patches."""
     clean = "--clean" in args
     check_only = "--check" in args
     dry_run = "--dry-run" in args

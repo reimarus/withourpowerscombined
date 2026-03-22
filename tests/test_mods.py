@@ -189,7 +189,7 @@ class TestContentPacks:
         assert result == sorted(result)
 
     def test_faf_only_default(self, gamedata_dir: Path) -> None:
-        """No ContentPacks section → empty list (FAF-only mode)."""
+        """No ContentPacks section → empty list (no packs enabled)."""
         parser = configparser.ConfigParser()
         with (
             patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
