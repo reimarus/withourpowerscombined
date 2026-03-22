@@ -306,6 +306,41 @@ class RelayClient:
         return games
 
     # ------------------------------------------------------------------
+    # Log upload for remote troubleshooting
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def upload_logs(log_lines: list[str], host_name: str = "") -> bool:
+        """Upload launcher log lines to Firebase ``/reports/`` node.
+
+        Returns True on success, False on any failure.
+        """
+        if not config.RELAY_URL:
+            return False
+        report_id = str(uuid.uuid4())
+        url = f"{config.RELAY_URL}/reports/{report_id}.json"
+        payload: dict[str, Any] = {
+            "timestamp": time.time(),
+            "host_name": host_name,
+            "log": "\n".join(log_lines[-500:]),  # cap at 500 lines
+            "version": config.VERSION,
+        }
+        try:
+            data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="PUT",
+            )
+            urllib.request.urlopen(req, timeout=10)
+            logger.info("Log report uploaded as %s", report_id)
+            return True
+        except (OSError, urllib.error.URLError) as exc:
+            logger.warning("Failed to upload log report: %s", exc)
+            return False
+
+    # ------------------------------------------------------------------
     # Firebase audit logging
     # ------------------------------------------------------------------
 

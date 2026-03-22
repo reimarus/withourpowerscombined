@@ -157,16 +157,16 @@ def build_maps_zip() -> Path:
             map_count += 1
             print(f"  Added map: {map_dir.name}")
 
-    # Also add SCFA stock maps
-    scfa_maps = config.SCFA_STEAM / "maps"
-    if scfa_maps.exists():
-        for map_dir in sorted(scfa_maps.iterdir()):
-            if map_dir.is_dir():
-                for file_path in map_dir.rglob("*"):
-                    if file_path.is_file():
-                        arcname = str(file_path.relative_to(scfa_maps)).replace("\\", "/")
-                        zf.write(file_path, arcname)
-                map_count += 1
+        # Also add SCFA stock maps
+        scfa_maps = config.SCFA_STEAM / "maps"
+        if scfa_maps.exists():
+            for map_dir in sorted(scfa_maps.iterdir()):
+                if map_dir.is_dir():
+                    for file_path in map_dir.rglob("*"):
+                        if file_path.is_file():
+                            arcname = str(file_path.relative_to(scfa_maps)).replace("\\", "/")
+                            zf.write(file_path, arcname)
+                    map_count += 1
 
     size_mb = dst.stat().st_size / 1e6
     print(f"  Output: {dst} ({size_mb:.1f} MB, {map_count} maps)")
