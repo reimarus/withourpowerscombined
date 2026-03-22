@@ -88,13 +88,10 @@ class WopcApp(BaseApp):  # type: ignore
     lobby_screen: Any
     header_label: Any
     config_panel: Any
-    selected_map_label: Any
     map_scroll: Any
     map_buttons: list[Any]
     map_canvas: Any
     map_preview_name: Any
-    map_preview_detail: Any
-    map_preview_desc: Any
     log_textbox: Any
     mod_pane: Any
     mod_header: Any
@@ -124,6 +121,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._canvas_tk_image: Any = None
         self._current_map_info: map_scanner.MapInfo | None = None
         self._raw_preview: Any = None
+        self._canvas_redraw_id: str | None = None
 
         self.title("WOPC - Match Lobby")
         self._restore_window_size()
@@ -214,27 +212,21 @@ class WopcApp(BaseApp):  # type: ignore
         if info is None:
             self._raw_preview = None
             self._redraw_canvas()
-            self.map_preview_name.configure(text="")
-            self.map_preview_detail.configure(text="")
-            self.map_preview_desc.configure(text="")
+            self.map_preview_name.configure(text="No map selected")
             if hasattr(self, "lobby_map_preview_label"):
                 self.lobby_map_preview_label.configure(image=None, text="No Preview")
                 self.lobby_map_label.configure(text="No map selected")
                 self.lobby_map_info.configure(text="")
             return
 
-        # Metadata labels
-        parts = []
+        # Compact metadata: "Syrtis Major — 4p, 20km"
+        parts = [info.display_name]
         if info.max_players:
-            parts.append(f"{info.max_players} players")
+            parts.append(f"{info.max_players}p")
         if info.size_label and info.size_label != "?":
             parts.append(info.size_label)
-        if info.is_campaign:
-            parts.append("Campaign")
-        detail_text = "  ·  ".join(parts) if parts else ""
-        self.map_preview_name.configure(text=info.display_name)
-        self.map_preview_detail.configure(text=detail_text)
-        self.map_preview_desc.configure(text=info.description or "")
+        label = f"{parts[0]} — {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
+        self.map_preview_name.configure(text=label)
 
         # Load raw preview image for canvas rendering
         self._raw_preview = None
@@ -262,11 +254,19 @@ class WopcApp(BaseApp):  # type: ignore
             else:
                 self.lobby_map_preview_label.configure(image=None, text="No Preview")
             self.lobby_map_label.configure(text=info.display_name)
-            self.lobby_map_info.configure(text=detail_text)
+            detail_parts = []
+            if info.max_players:
+                detail_parts.append(f"{info.max_players}p")
+            if info.size_label and info.size_label != "?":
+                detail_parts.append(info.size_label)
+            self.lobby_map_info.configure(text=", ".join(detail_parts))
 
     def _on_canvas_resize(self, event: Any) -> None:
-        """Redraw the map canvas when its size changes."""
-        self._redraw_canvas()
+        """Redraw the map canvas when its size changes (throttled)."""
+        # Cancel any pending redraw to avoid flickering during resize
+        if hasattr(self, "_canvas_redraw_id") and self._canvas_redraw_id is not None:
+            self.after_cancel(self._canvas_redraw_id)
+        self._canvas_redraw_id = self.after(50, self._redraw_canvas)
 
     def _redraw_canvas(self) -> None:
         """Redraw the map preview and marker overlays on the canvas."""
@@ -371,12 +371,15 @@ class WopcApp(BaseApp):  # type: ignore
             )
 
     def _on_map_inspect(self, event: Any) -> None:
-        """Open the map inspect window for detailed view."""
+        """Open the map inspect window for detailed view, positioned near click."""
         if self._current_map_info is None:
             return
         from launcher.gui.map_inspect import MapInspectWindow
 
-        MapInspectWindow(self, self._current_map_info, self._raw_preview)
+        # Position window near the mouse click
+        mouse_x = self.winfo_pointerx()
+        mouse_y = self.winfo_pointery()
+        MapInspectWindow(self, self._current_map_info, self._raw_preview, x=mouse_x, y=mouse_y)
 
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
@@ -610,8 +613,8 @@ class WopcApp(BaseApp):  # type: ignore
         self.solo_screen = ctk.CTkFrame(self, fg_color="transparent")
         self.solo_screen.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
         # Row 0: header, Row 1: config_panel (map), Row 2: players+options, Row 3: log
-        self.solo_screen.grid_rowconfigure(1, weight=2)
-        self.solo_screen.grid_rowconfigure(2, weight=1)
+        self.solo_screen.grid_rowconfigure(1, weight=3)
+        self.solo_screen.grid_rowconfigure(2, weight=0)  # fixed height, no squishing
         self.solo_screen.grid_columnconfigure(0, weight=1)
 
         self.header_label = ctk.CTkLabel(
@@ -633,71 +636,30 @@ class WopcApp(BaseApp):  # type: ignore
         self.config_panel.grid_columnconfigure(1, weight=1)  # map list column (compact)
 
         # --- Map Preview Panel (LEFT column — hero element, fills space) ---
-        preview_panel = ctk.CTkFrame(self.config_panel, fg_color=COLOR_PANEL, corner_radius=4)
-        preview_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=10, pady=10)
-        preview_panel.grid_columnconfigure(0, weight=1)
-        preview_panel.grid_rowconfigure(1, weight=1)
+        self._preview_panel = ctk.CTkFrame(self.config_panel, fg_color=COLOR_PANEL, corner_radius=4)
+        self._preview_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=10, pady=10)
+        self._preview_panel.grid_columnconfigure(0, weight=1)
+        self._preview_panel.grid_rowconfigure(0, weight=1)
 
-        self.selected_map_label = ctk.CTkLabel(
-            preview_panel,
-            text="Selected Map: None",
-            text_color=COLOR_ACCENT,
-            font=ctk.CTkFont(size=14, weight="bold"),
-        )
-        self.selected_map_label.grid(row=0, column=0, pady=(10, 5), padx=12, sticky="w")
-
-        # Canvas-based map preview — fills available space, supports overlays
+        # Canvas-based map preview — click to inspect
         self.map_canvas = tk.Canvas(
-            preview_panel,
+            self._preview_panel,
             bg=COLOR_BG,
             highlightthickness=0,
             cursor="hand2",
         )
-        self.map_canvas.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="nsew")
+        self.map_canvas.grid(row=0, column=0, padx=8, pady=8, sticky="nsew")
         self.map_canvas.bind("<Configure>", self._on_canvas_resize)
-        self.map_canvas.bind("<Double-Button-1>", self._on_map_inspect)
+        self.map_canvas.bind("<Button-1>", self._on_map_inspect)
 
-        # Metadata below canvas
+        # Compact metadata — name and stats on one line below canvas
         self.map_preview_name = ctk.CTkLabel(
-            preview_panel,
+            self._preview_panel,
             text="",
             text_color=COLOR_TEXT_GOLD,
-            font=ctk.CTkFont(size=15, weight="bold"),
-            wraplength=400,
-            justify="left",
+            font=ctk.CTkFont(size=13, weight="bold"),
         )
-        self.map_preview_name.grid(row=2, column=0, padx=12, pady=(0, 2), sticky="nw")
-
-        self.map_preview_detail = ctk.CTkLabel(
-            preview_panel,
-            text="",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12),
-        )
-        self.map_preview_detail.grid(row=3, column=0, padx=12, pady=(0, 4), sticky="nw")
-
-        self.map_preview_desc = ctk.CTkLabel(
-            preview_panel,
-            text="",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=11, slant="italic"),
-            wraplength=400,
-            justify="left",
-        )
-        self.map_preview_desc.grid(row=4, column=0, padx=12, pady=(0, 4), sticky="nw")
-
-        # Inspect button
-        self.inspect_btn = ctk.CTkButton(
-            preview_panel,
-            text="Inspect Map",
-            fg_color=COLOR_SURFACE,
-            hover_color=COLOR_BORDER,
-            text_color=COLOR_TEXT_PRIMARY,
-            height=28,
-            corner_radius=3,
-            command=lambda: self._on_map_inspect(None),
-        )
-        self.inspect_btn.grid(row=5, column=0, padx=12, pady=(0, 10), sticky="w")
+        self.map_preview_name.grid(row=1, column=0, padx=10, pady=(0, 6), sticky="w")
 
         # --- Map List (RIGHT column — compact, scrollable) ---
         list_panel = ctk.CTkFrame(self.config_panel, fg_color="transparent")
@@ -1982,7 +1944,7 @@ class WopcApp(BaseApp):  # type: ignore
                             text_color=COLOR_BG,
                             hover_color=COLOR_ACCENT_HOVER,
                         )
-                self.selected_map_label.configure(text=f"Selected Map: {disp}")
+                self.map_preview_name.configure(text=f"{disp}")
                 self._update_map_preview(_info)
                 self._broadcast_game_state()
 
@@ -2005,7 +1967,6 @@ class WopcApp(BaseApp):  # type: ignore
             self.map_buttons.append(btn)
 
             if is_active:
-                self.selected_map_label.configure(text=f"Selected Map: {info.display_name}")
                 self._update_map_preview(info)
                 preview_shown = True
 

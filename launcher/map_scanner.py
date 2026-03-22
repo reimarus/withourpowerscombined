@@ -128,7 +128,9 @@ def _extract_scmap_preview(map_dir: Path, folder_name: str) -> Path | None:
         return None
 
 
-_VECTOR3_RE = re.compile(r"VECTOR3\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)")
+_POSITION_RE = re.compile(
+    r"\['position'\]\s*=\s*VECTOR3\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)"
+)
 
 _MARKER_TYPE_RE = re.compile(r"\['type'\]\s*=\s*STRING\(\s*'([^']+)'\s*\)")
 
@@ -170,19 +172,22 @@ def parse_save_markers(save_path: Path) -> MapMarkers | None:
         return None
 
     armies: list[tuple[str, float, float]] = []
+    seen_armies: set[str] = set()
     mass: list[tuple[float, float]] = []
     hydro: list[tuple[float, float]] = []
 
     for name, body in _iter_marker_blocks(content):
-        pos_match = _VECTOR3_RE.search(body)
+        pos_match = _POSITION_RE.search(body)
         if not pos_match:
             continue
         x = float(pos_match.group(1))
         z = float(pos_match.group(3))  # z = vertical axis on 2D map
 
-        # Army spawn positions: key starts with ARMY_
+        # Army spawn positions: key starts with ARMY_, take first occurrence only
         if name.startswith("ARMY_"):
-            armies.append((name, x, z))
+            if name not in seen_armies:
+                armies.append((name, x, z))
+                seen_armies.add(name)
             continue
 
         # Check type field for Mass / Hydrocarbon
