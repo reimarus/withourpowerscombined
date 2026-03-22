@@ -129,6 +129,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._current_map_info: map_scanner.MapInfo | None = None
         self._raw_preview: Any = None
         self._canvas_redraw_id: str | None = None
+        self._scroll_redraw_id: str | None = None
         self._marker_icons: dict[str, Any] = {}  # raw PIL images
         self._marker_tk_cache: list[Any] = []  # keep refs alive for tk
         self._zoom: float = 1.0
@@ -305,7 +306,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._canvas_redraw_id = self.after(50, self._redraw_canvas)
 
     def _on_canvas_scroll(self, event: Any) -> None:
-        """Zoom the map canvas toward the mouse position."""
+        """Zoom the map canvas toward the mouse position (throttled)."""
         if not hasattr(self, "map_canvas"):
             return
         old_zoom = self._zoom
@@ -323,7 +324,10 @@ class WopcApp(BaseApp):  # type: ignore
         self._pan_x = mx_rel - scale * (mx_rel - self._pan_x)
         self._pan_y = my_rel - scale * (my_rel - self._pan_y)
         self._clamp_pan()
-        self._redraw_canvas()
+        # Throttle scroll redraws to avoid lag
+        if hasattr(self, "_scroll_redraw_id") and self._scroll_redraw_id is not None:
+            self.after_cancel(self._scroll_redraw_id)
+        self._scroll_redraw_id = self.after(16, self._redraw_canvas)
 
     def _on_canvas_drag_start(self, event: Any) -> None:
         """Start panning the map canvas."""
@@ -376,7 +380,7 @@ class WopcApp(BaseApp):  # type: ignore
         oy = int((ch - size) / 2 + self._pan_y)
         mw = info.map_width
         mh = info.map_height or mw
-        spawn_icon_size = max(20, size // 18)
+        spawn_icon_size = max(16, base_size // 22)
         hit_radius = spawn_icon_size // 2 + 4
         for i, (_name, map_x, map_z) in enumerate(info.markers.armies):
             px = ox + int(map_x / mw * size)
@@ -428,7 +432,7 @@ class WopcApp(BaseApp):  # type: ignore
             return None
         scaled = raw.resize(
             (icon_size, icon_size),
-            PilImage.LANCZOS,  # type: ignore[attr-defined]
+            PilImage.BILINEAR,  # type: ignore[attr-defined]
         )
         r_c = int(tint[1:3], 16)
         g_c = int(tint[3:5], 16)
@@ -464,10 +468,11 @@ class WopcApp(BaseApp):  # type: ignore
         if self._raw_preview is not None and _PIL_AVAILABLE:
             from PIL import ImageTk  # type: ignore[import-not-found]
 
-            resized = self._raw_preview.resize(
-                (size, size),
-                PilImage.LANCZOS,  # type: ignore[attr-defined]
+            # Use BILINEAR for fast zoom; LANCZOS only at 1x
+            resample = (
+                PilImage.LANCZOS if self._zoom == 1.0 else PilImage.BILINEAR  # type: ignore[attr-defined]
             )
+            resized = self._raw_preview.resize((size, size), resample)
             self._canvas_tk_image = ImageTk.PhotoImage(resized)
             self._canvas_image_id = canvas.create_image(
                 ox, oy, anchor="nw", image=self._canvas_tk_image
@@ -505,14 +510,14 @@ class WopcApp(BaseApp):  # type: ignore
             if raw is not None:
                 scaled = raw.resize(
                     (icon_size, icon_size),
-                    PilImage.LANCZOS,  # type: ignore[attr-defined]
+                    PilImage.BILINEAR,  # type: ignore[attr-defined]
                 )
                 tk_img = ImageTk.PhotoImage(scaled)
                 canvas.create_image(px, py, image=tk_img)
                 self._marker_tk_cache.append(tk_img)
 
-        # Mass points — strategic mass extractor icon
-        mass_icon_size = max(8, size // 40)
+        # Icon sizes based on base_size (screen-space constant, shrink when zooming)
+        mass_icon_size = max(6, base_size // 50)
         for mx, mz in info.markers.mass:
             px, py = _map_to_px(mx, mz)
             if "marker_mass" in self._marker_icons:
@@ -530,7 +535,7 @@ class WopcApp(BaseApp):  # type: ignore
                 )
 
         # Hydro points — strategic energy icon, slightly larger
-        hydro_icon_size = max(10, size // 32)
+        hydro_icon_size = max(8, base_size // 40)
         for mx, mz in info.markers.hydro:
             px, py = _map_to_px(mx, mz)
             if "marker_hydro" in self._marker_icons:
@@ -547,27 +552,48 @@ class WopcApp(BaseApp):  # type: ignore
                     width=max(1, size // 250),
                 )
 
-        # Army spawn positions — tinted commander icon + player number + hover halo
-        active_count = len(self.player_slots) if hasattr(self, "player_slots") else 0
-        spawn_icon_size = max(20, size // 18)
+        # Army spawn positions — tinted commander icon + hover halo + selection
+        slots = self.player_slots if hasattr(self, "player_slots") else []
+        active_count = len(slots)
+        spawn_icon_size = max(16, base_size // 22)
+
+        # Build spawn-to-slot mapping from start_spot assignments
+        spawn_occupied: dict[int, int] = {}  # spawn_index -> slot_index
+        for si, slot in enumerate(slots):
+            spot = slot.get("start_spot", si)  # default: slot index = spawn index
+            spawn_occupied[spot] = si
+
         for i, (name, mx, mz) in enumerate(info.markers.armies):
             px, py = _map_to_px(mx, mz)
-            is_active = i < active_count
-            color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0] if is_active else "#444444"
+            slot_idx = spawn_occupied.get(i)
+            is_occupied = slot_idx is not None and slot_idx < active_count
+            color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0] if is_occupied else "#444444"
             is_hovered = i == self._hover_spawn
 
-            # Hover halo — soft glow ring
+            # Hover halo — glow ring
             if is_hovered:
-                halo_r = spawn_icon_size // 2 + 6
+                halo_r = spawn_icon_size // 2 + 5
                 canvas.create_oval(
                     px - halo_r,
                     py - halo_r,
                     px + halo_r,
                     py + halo_r,
                     fill="",
-                    outline=color if is_active else "#888888",
-                    width=3,
-                    stipple="gray50",
+                    outline=color if is_occupied else "#AAAAAA",
+                    width=2,
+                )
+
+            # Selected spawn — bright ring
+            if is_occupied and slot_idx == 0:
+                sel_r = spawn_icon_size // 2 + 3
+                canvas.create_oval(
+                    px - sel_r,
+                    py - sel_r,
+                    px + sel_r,
+                    py + sel_r,
+                    fill="",
+                    outline="#FFFFFF",
+                    width=2,
                 )
 
             # Tinted commander icon (preserves black outline)
@@ -586,12 +612,13 @@ class WopcApp(BaseApp):  # type: ignore
             # Player number label
             num = name.split("_")[1] if "_" in name else str(i + 1)
             r = spawn_icon_size // 2 + 2
+            font_size = max(8, base_size // 50)
             canvas.create_text(
                 px + r,
                 py - r,
                 text=num,
-                fill="#FFFFFF" if is_active else "#666666",
-                font=("Segoe UI", max(9, size // 40), "bold"),
+                fill="#FFFFFF" if is_occupied else "#666666",
+                font=("Segoe UI", font_size, "bold"),
             )
 
     def _bind_hotkeys(self) -> None:
