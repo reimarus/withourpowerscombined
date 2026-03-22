@@ -292,6 +292,8 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _redraw_canvas(self) -> None:
         """Redraw the map preview and marker overlays on the canvas."""
+        if not hasattr(self, "map_canvas"):
+            return
         canvas = self.map_canvas
         canvas.delete("all")
 
