@@ -394,3 +394,179 @@ class TestScmapPreviewExtraction:
         assert info.preview_path is not None
         assert info.preview_path.name == "ScmapOnly_preview.png"
         assert info.preview_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# _save.lua marker parsing
+# ---------------------------------------------------------------------------
+
+_SAVE_LUA_CONTENT = """\
+Scenario = {
+    MasterChain = {
+        ['_MASTERCHAIN_'] = {
+            Markers = {
+                ['ARMY_1'] = {
+                    ['type'] = STRING( 'Blank Marker' ),
+                    ['position'] = VECTOR3( 100.5, 64.0, 200.5 ),
+                },
+                ['ARMY_2'] = {
+                    ['type'] = STRING( 'Blank Marker' ),
+                    ['position'] = VECTOR3( 900.5, 64.0, 800.5 ),
+                },
+                ['Mass 01'] = {
+                    ['size'] = FLOAT( 1.0 ),
+                    ['resource'] = BOOLEAN( true ),
+                    ['type'] = STRING( 'Mass' ),
+                    ['position'] = VECTOR3( 150.0, 64.0, 250.0 ),
+                },
+                ['Mass 02'] = {
+                    ['size'] = FLOAT( 1.0 ),
+                    ['resource'] = BOOLEAN( true ),
+                    ['type'] = STRING( 'Mass' ),
+                    ['position'] = VECTOR3( 850.0, 64.0, 750.0 ),
+                },
+                ['Hydrocarbon 01'] = {
+                    ['size'] = FLOAT( 3.0 ),
+                    ['resource'] = BOOLEAN( true ),
+                    ['type'] = STRING( 'Hydrocarbon' ),
+                    ['position'] = VECTOR3( 500.0, 64.0, 500.0 ),
+                },
+                ['LandPN01'] = {
+                    ['type'] = STRING( 'Land Path Node' ),
+                    ['position'] = VECTOR3( 300.0, 64.0, 300.0 ),
+                },
+            },
+        },
+    },
+}
+"""
+
+
+class TestParseSaveMarkers:
+    """Tests for parse_save_markers()."""
+
+    def test_extracts_armies_mass_hydro(self, tmp_path: Path) -> None:
+        save = tmp_path / "test_save.lua"
+        save.write_text(_SAVE_LUA_CONTENT, encoding="utf-8")
+
+        markers = map_scanner.parse_save_markers(save)
+
+        assert markers is not None
+        assert len(markers.armies) == 2
+        assert len(markers.mass) == 2
+        assert len(markers.hydro) == 1
+
+    def test_army_names_and_positions(self, tmp_path: Path) -> None:
+        save = tmp_path / "test_save.lua"
+        save.write_text(_SAVE_LUA_CONTENT, encoding="utf-8")
+
+        markers = map_scanner.parse_save_markers(save)
+        assert markers is not None
+
+        # Sorted by army number
+        assert markers.armies[0] == ("ARMY_1", 100.5, 200.5)
+        assert markers.armies[1] == ("ARMY_2", 900.5, 800.5)
+
+    def test_mass_positions(self, tmp_path: Path) -> None:
+        save = tmp_path / "test_save.lua"
+        save.write_text(_SAVE_LUA_CONTENT, encoding="utf-8")
+
+        markers = map_scanner.parse_save_markers(save)
+        assert markers is not None
+        assert (150.0, 250.0) in markers.mass
+        assert (850.0, 750.0) in markers.mass
+
+    def test_hydro_position(self, tmp_path: Path) -> None:
+        save = tmp_path / "test_save.lua"
+        save.write_text(_SAVE_LUA_CONTENT, encoding="utf-8")
+
+        markers = map_scanner.parse_save_markers(save)
+        assert markers is not None
+        assert markers.hydro[0] == (500.0, 500.0)
+
+    def test_ignores_path_nodes(self, tmp_path: Path) -> None:
+        save = tmp_path / "test_save.lua"
+        save.write_text(_SAVE_LUA_CONTENT, encoding="utf-8")
+
+        markers = map_scanner.parse_save_markers(save)
+        assert markers is not None
+        # LandPN01 should not appear in any list
+        all_positions = markers.mass + markers.hydro
+        assert (300.0, 300.0) not in all_positions
+
+    def test_returns_none_for_empty_save(self, tmp_path: Path) -> None:
+        save = tmp_path / "test_save.lua"
+        save.write_text("Scenario = {}", encoding="utf-8")
+
+        markers = map_scanner.parse_save_markers(save)
+        assert markers is None
+
+    def test_returns_none_for_missing_file(self, tmp_path: Path) -> None:
+        markers = map_scanner.parse_save_markers(tmp_path / "nonexistent.lua")
+        assert markers is None
+
+    def test_armies_sorted_by_number(self, tmp_path: Path) -> None:
+        content = """\
+Scenario = { MasterChain = { ['_MASTERCHAIN_'] = { Markers = {
+    ['ARMY_3'] = { ['position'] = VECTOR3( 300.0, 0.0, 300.0 ) },
+    ['ARMY_1'] = { ['position'] = VECTOR3( 100.0, 0.0, 100.0 ) },
+    ['ARMY_2'] = { ['position'] = VECTOR3( 200.0, 0.0, 200.0 ) },
+} } } }
+"""
+        save = tmp_path / "sort_save.lua"
+        save.write_text(content, encoding="utf-8")
+
+        markers = map_scanner.parse_save_markers(save)
+        assert markers is not None
+        names = [a[0] for a in markers.armies]
+        assert names == ["ARMY_1", "ARMY_2", "ARMY_3"]
+
+
+class TestMapInfoMarkers:
+    """Tests that parse_scenario integrates marker parsing."""
+
+    def test_scenario_includes_markers(self, tmp_path: Path) -> None:
+        map_dir = tmp_path / "TestMap"
+        map_dir.mkdir()
+        (map_dir / "TestMap_scenario.lua").write_text(
+            "ScenarioInfo = { name = 'Test', size = {512, 512},"
+            " Configurations = { ['standard'] = { teams = {"
+            " { armies = {'ARMY_1','ARMY_2'} } } } } }",
+            encoding="utf-8",
+        )
+        (map_dir / "TestMap_save.lua").write_text(_SAVE_LUA_CONTENT, encoding="utf-8")
+
+        info = map_scanner.parse_scenario(map_dir / "TestMap_scenario.lua")
+        assert info is not None
+        assert info.markers is not None
+        assert len(info.markers.armies) == 2
+        assert info.map_width == 512
+        assert info.map_height == 512
+
+    def test_scenario_without_save_has_no_markers(self, tmp_path: Path) -> None:
+        map_dir = tmp_path / "NoSave"
+        map_dir.mkdir()
+        (map_dir / "NoSave_scenario.lua").write_text(
+            "ScenarioInfo = { name = 'No Save' }",
+            encoding="utf-8",
+        )
+
+        info = map_scanner.parse_scenario(map_dir / "NoSave_scenario.lua")
+        assert info is not None
+        assert info.markers is None
+
+
+class TestSizeLabels160km:
+    """Test that 4096 maps get the 160km label."""
+
+    def test_4096_maps_labeled_160km(self, tmp_path: Path) -> None:
+        map_dir = tmp_path / "BigMap"
+        map_dir.mkdir()
+        (map_dir / "BigMap_scenario.lua").write_text(
+            "ScenarioInfo = { name = 'Big Map', size = {4096, 4096} }",
+            encoding="utf-8",
+        )
+
+        info = map_scanner.parse_scenario(map_dir / "BigMap_scenario.lua")
+        assert info is not None
+        assert info.size_label == "160km"
