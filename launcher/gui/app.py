@@ -137,6 +137,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._pan_y: float = 0.0
         self._drag_start: tuple[int, int] | None = None
         self._drag_moved: bool = False
+        self._drag_spawn_src: int = -1  # spawn being dragged
         self._hover_spawn: int = -1  # index of spawn under cursor
         self._tinted_icon_cache: dict[tuple[str, int, str], Any] = {}
         self._load_marker_icons()
@@ -330,9 +331,10 @@ class WopcApp(BaseApp):  # type: ignore
         self._scroll_redraw_id = self.after(16, self._redraw_canvas)
 
     def _on_canvas_drag_start(self, event: Any) -> None:
-        """Start panning the map canvas."""
+        """Start panning the map canvas (or spawn drag if clicking a spawn)."""
         self._drag_start = (event.x, event.y)
         self._drag_moved = False
+        self._drag_spawn_src = self._hit_test_spawn(event.x, event.y)
 
     def _on_canvas_drag(self, event: Any) -> None:
         """Pan the map canvas by dragging."""
@@ -349,11 +351,18 @@ class WopcApp(BaseApp):  # type: ignore
         self._redraw_canvas()
 
     def _on_canvas_release(self, event: Any) -> None:
-        """Handle mouse release — click (spawn select) or end drag."""
+        """Handle mouse release — click (spawn select), spawn drag-drop, or end pan."""
+        src = getattr(self, "_drag_spawn_src", -1)
         if not self._drag_moved:
             self._on_canvas_click(event)
+        elif src >= 0:
+            # Dragged from a spawn — check if dropped on another spawn
+            dst = self._hit_test_spawn(event.x, event.y)
+            if dst >= 0 and dst != src:
+                self._swap_spawns(src, dst)
         self._drag_start = None
         self._drag_moved = False
+        self._drag_spawn_src = -1
 
     def _on_canvas_motion(self, event: Any) -> None:
         """Track mouse hover over spawn positions for halo effect."""
@@ -407,6 +416,27 @@ class WopcApp(BaseApp):  # type: ignore
         # Store the selected spawn index on slot 0 (human player)
         self.player_slots[0]["start_spot"] = spawn_index
         logger.info("Player start spot set to %d", spawn_index + 1)
+        self._redraw_canvas()
+
+    def _swap_spawns(self, src_spawn: int, dst_spawn: int) -> None:
+        """Swap the slot assignments between two spawn positions."""
+        if not hasattr(self, "player_slots"):
+            return
+        # Build current spawn→slot mapping
+        spawn_to_slot: dict[int, int] = {}
+        for si, slot in enumerate(self.player_slots):
+            spawn_to_slot[slot.get("start_spot", si)] = si
+
+        src_slot = spawn_to_slot.get(src_spawn)
+        dst_slot = spawn_to_slot.get(dst_spawn)
+
+        # Swap start_spot values on the slot dicts
+        if src_slot is not None:
+            self.player_slots[src_slot]["start_spot"] = dst_spawn
+        if dst_slot is not None:
+            self.player_slots[dst_slot]["start_spot"] = src_spawn
+
+        logger.info("Swapped spawn %d ↔ %d", src_spawn + 1, dst_spawn + 1)
         self._redraw_canvas()
 
     def _clamp_pan(self) -> None:
@@ -627,7 +657,7 @@ class WopcApp(BaseApp):  # type: ignore
                 canvas.create_text(
                     px + r,
                     py - r,
-                    text=f"T{team_num}",
+                    text=team_num,
                     fill="#FFFFFF",
                     font=("Segoe UI", font_size, "bold"),
                 )
@@ -1652,12 +1682,15 @@ class WopcApp(BaseApp):  # type: ignore
             parent,
             width=swatch_size,
             height=swatch_size,
-            highlightthickness=1,
+            highlightthickness=2,
             highlightbackground=COLOR_TEXT_MUTED,
+            bg=COLOR_PANEL,
             cursor="hand2",
         )
         hex_color = self._color_name_to_hex(color_var.get())
-        swatch.create_rectangle(0, 0, swatch_size, swatch_size, fill=hex_color, outline="")
+        swatch.create_rectangle(
+            2, 2, swatch_size - 1, swatch_size - 1, fill=hex_color, outline="#333333"
+        )
         swatch.grid(row=row, column=col, padx=5, pady=2)
 
         def _on_swatch_click(event: Any) -> None:
@@ -1792,10 +1825,29 @@ class WopcApp(BaseApp):  # type: ignore
             {"type": "human", "team_var": team_var, "color_var": color_var, "widgets": widgets}
         )
 
+    def _first_free_spawn(self) -> int:
+        """Return the first unoccupied spawn index, or -1 if all taken."""
+        info = self._current_map_info
+        if info is None or info.markers is None:
+            return -1
+        n_armies = len(info.markers.armies)
+        occupied: set[int] = set()
+        for si, slot in enumerate(self.player_slots):
+            occupied.add(slot.get("start_spot", si))
+        for i in range(n_armies):
+            if i not in occupied:
+                return i
+        return -1
+
     def _add_ai_slot(self) -> None:
         """Add an AI opponent slot row."""
-        if len(self.player_slots) >= self.MAX_SLOTS:
+        info = self._current_map_info
+        max_armies = len(info.markers.armies) if info and info.markers else self.MAX_SLOTS
+        if len(self.player_slots) >= min(self.MAX_SLOTS, max_armies):
             return
+
+        # Find first unoccupied spawn for the new slot
+        free_spawn = self._first_free_spawn()
 
         row = len(self.player_slots)
         slot_num = row + 1
@@ -1852,11 +1904,24 @@ class WopcApp(BaseApp):  # type: ignore
         swatch = self._create_color_swatch(self.slots_scroll, color_var, row, 4)
         widgets.append(swatch)
 
-        # Remove button
-        slot_index = row  # capture for closure
+        slot_dict: dict[str, Any] = {
+            "type": "ai",
+            "ai_var": ai_var,
+            "faction_var": faction_var,
+            "team_var": team_var,
+            "color_var": color_var,
+            "widgets": widgets,
+        }
+        if free_spawn >= 0:
+            slot_dict["start_spot"] = free_spawn
 
-        def remove_this() -> None:
-            self._remove_slot(slot_index)
+        # Remove button — reference the slot dict, not a stale index
+        def remove_this(sd: dict[str, Any] = slot_dict) -> None:
+            try:
+                idx = self.player_slots.index(sd)
+            except ValueError:
+                return
+            self._remove_slot(idx)
 
         remove_btn = ctk.CTkButton(
             self.slots_scroll,
@@ -1871,16 +1936,7 @@ class WopcApp(BaseApp):  # type: ignore
         remove_btn.grid(row=row, column=5, pady=2)
         widgets.append(remove_btn)
 
-        self.player_slots.append(
-            {
-                "type": "ai",
-                "ai_var": ai_var,
-                "faction_var": faction_var,
-                "team_var": team_var,
-                "color_var": color_var,
-                "widgets": widgets,
-            }
-        )
+        self.player_slots.append(slot_dict)
         self._broadcast_game_state()
         self._redraw_canvas()
 
@@ -1909,7 +1965,9 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _add_lobby_ai_slot(self) -> None:
         """Add an AI opponent slot row in the lobby screen."""
-        if len(self.lobby_player_slots) >= self.MAX_SLOTS:
+        info = self._current_map_info
+        max_armies = len(info.markers.armies) if info and info.markers else self.MAX_SLOTS
+        if len(self.lobby_player_slots) >= min(self.MAX_SLOTS, max_armies):
             return
 
         row = len(self.lobby_player_slots)
@@ -1975,11 +2033,22 @@ class WopcApp(BaseApp):  # type: ignore
         color_menu.grid(row=row, column=4, padx=5, pady=2)
         widgets.append(color_menu)
 
-        # Remove button
-        slot_index = row  # capture for closure
+        lobby_slot_dict: dict[str, Any] = {
+            "type": "ai",
+            "ai_var": ai_var,
+            "faction_var": faction_var,
+            "team_var": team_var,
+            "color_var": color_var,
+            "widgets": widgets,
+        }
 
-        def remove_this() -> None:
-            self._remove_lobby_slot(slot_index)
+        # Remove button — reference the slot dict, not a stale index
+        def remove_this(sd: dict[str, Any] = lobby_slot_dict) -> None:
+            try:
+                idx = self.lobby_player_slots.index(sd)
+            except ValueError:
+                return
+            self._remove_lobby_slot(idx)
 
         remove_btn = ctk.CTkButton(
             self.lobby_slots_scroll,
@@ -1994,16 +2063,7 @@ class WopcApp(BaseApp):  # type: ignore
         remove_btn.grid(row=row, column=5, pady=2)
         widgets.append(remove_btn)
 
-        self.lobby_player_slots.append(
-            {
-                "type": "ai",
-                "ai_var": ai_var,
-                "faction_var": faction_var,
-                "team_var": team_var,
-                "color_var": color_var,
-                "widgets": widgets,
-            }
-        )
+        self.lobby_player_slots.append(lobby_slot_dict)
         self._broadcast_game_state()
 
     def _remove_lobby_slot(self, index: int) -> None:
