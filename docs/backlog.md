@@ -45,9 +45,10 @@ Items to tackle over time, roughly grouped by priority.
 39. **SupCom-authentic UI chrome** — use metallic SupCom frames/borders. Chrome PNGs extracted to `launcher/gui/icons/frame_*.png` (9-slice pattern from UEF lobby textures). Need to implement 9-slice rendering in CustomTkinter panels.
 40. ~~**Marker visibility at small sizes**~~ ✅ — increased marker radii and outline widths with better scaling formulas
 41. ~~**Map description panel**~~ ✅ — description shown in inspect window header (map_inspect.py lines 102-112)
-44. **Icon-based map markers** — replace colored circles with actual game strategic icons (mass extractor, hydro, commander). PNGs extracted to `launcher/gui/icons/marker_*.png`. Spawns should be clickable for location selection.
-45. **Unify lobby map UI with solo** — lobby uses inferior static preview + modal map picker. Should match solo layout: canvas with markers, inline searchable map list, map as hero element.
+44. ~~**Icon-based map markers**~~ ✅ — tinted commander icons with preserved outlines, hover halo, click-to-select spawn. Mass/hydro use strategic icons from `launcher/gui/icons/marker_*.png`.
+45. ~~**Unify lobby map UI with solo**~~ ✅ — unified 4-column layout with inline map canvas, zoom/pan, searchable map list. Map inspect window removed.
 46. **Design asset library** — `launcher/gui/icons/ASSETS.md` indexes all available game textures. Faction icons (`faction_*.png`), strategic icons, chrome borders all pre-converted. Expand as new UI features need assets.
+47. **Show player name in slot** — player slots should display the player/AI name occupying the slot instead of "(see Player Settings)" text.
 
 ## Features
 

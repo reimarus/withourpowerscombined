@@ -135,6 +135,9 @@ class WopcApp(BaseApp):  # type: ignore
         self._pan_x: float = 0.0
         self._pan_y: float = 0.0
         self._drag_start: tuple[int, int] | None = None
+        self._drag_moved: bool = False
+        self._hover_spawn: int = -1  # index of spawn under cursor
+        self._tinted_icon_cache: dict[tuple[str, int, str], Any] = {}
         self._load_marker_icons()
 
         self.title("WOPC - Match Lobby")
@@ -254,10 +257,12 @@ class WopcApp(BaseApp):  # type: ignore
         label = f"{parts[0]} — {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
         self.map_preview_name.configure(text=label)
 
-        # Reset zoom/pan when map changes
+        # Reset zoom/pan/cache when map changes
         self._zoom = 1.0
         self._pan_x = 0.0
         self._pan_y = 0.0
+        self._tinted_icon_cache.clear()
+        self._hover_spawn = -1
 
         # Load raw preview image for canvas rendering
         self._raw_preview = None
@@ -312,7 +317,6 @@ class WopcApp(BaseApp):  # type: ignore
         canvas = self.map_canvas
         cw = canvas.winfo_width()
         ch = canvas.winfo_height()
-        # Zoom toward mouse position
         mx_rel = event.x - cw / 2
         my_rel = event.y - ch / 2
         scale = self._zoom / old_zoom
@@ -324,6 +328,7 @@ class WopcApp(BaseApp):  # type: ignore
     def _on_canvas_drag_start(self, event: Any) -> None:
         """Start panning the map canvas."""
         self._drag_start = (event.x, event.y)
+        self._drag_moved = False
 
     def _on_canvas_drag(self, event: Any) -> None:
         """Pan the map canvas by dragging."""
@@ -331,23 +336,37 @@ class WopcApp(BaseApp):  # type: ignore
             return
         dx = event.x - self._drag_start[0]
         dy = event.y - self._drag_start[1]
+        if abs(dx) > 3 or abs(dy) > 3:
+            self._drag_moved = True
         self._drag_start = (event.x, event.y)
         self._pan_x += dx
         self._pan_y += dy
         self._clamp_pan()
         self._redraw_canvas()
 
-    def _on_canvas_drag_end(self, event: Any) -> None:
-        """End panning the map canvas."""
+    def _on_canvas_release(self, event: Any) -> None:
+        """Handle mouse release — click (spawn select) or end drag."""
+        if not self._drag_moved:
+            self._on_canvas_click(event)
         self._drag_start = None
+        self._drag_moved = False
 
-    def _on_canvas_click(self, event: Any) -> None:
-        """Handle click on map canvas — select spawn position."""
+    def _on_canvas_motion(self, event: Any) -> None:
+        """Track mouse hover over spawn positions for halo effect."""
+        hit = self._hit_test_spawn(event.x, event.y)
+        if hit != self._hover_spawn:
+            self._hover_spawn = hit
+            canvas = self.map_canvas
+            canvas.configure(cursor="hand2" if hit >= 0 else "")
+            self._redraw_canvas()
+
+    def _hit_test_spawn(self, mx: int, my: int) -> int:
+        """Return spawn index under (mx, my), or -1 if none."""
         if not hasattr(self, "map_canvas") or self._current_map_info is None:
-            return
+            return -1
         info = self._current_map_info
         if info.markers is None or info.map_width == 0:
-            return
+            return -1
         canvas = self.map_canvas
         cw = canvas.winfo_width()
         ch = canvas.winfo_height()
@@ -359,17 +378,32 @@ class WopcApp(BaseApp):  # type: ignore
         mh = info.map_height or mw
         spawn_icon_size = max(20, size // 18)
         hit_radius = spawn_icon_size // 2 + 4
-        for i, (_name, mx, mz) in enumerate(info.markers.armies):
-            px = ox + int(mx / mw * size)
-            py = oy + int(mz / mh * size)
-            if abs(event.x - px) <= hit_radius and abs(event.y - py) <= hit_radius:
-                self._select_spawn(i)
-                return
+        for i, (_name, map_x, map_z) in enumerate(info.markers.armies):
+            px = ox + int(map_x / mw * size)
+            py = oy + int(map_z / mh * size)
+            if (mx - px) ** 2 + (my - py) ** 2 <= hit_radius**2:
+                return i
+        return -1
+
+    def _on_canvas_click(self, event: Any) -> None:
+        """Handle click on map canvas — select spawn position."""
+        hit = self._hit_test_spawn(event.x, event.y)
+        if hit >= 0:
+            self._select_spawn(hit)
 
     def _select_spawn(self, spawn_index: int) -> None:
-        """Select a spawn position for the human player."""
-        # For now, log the selection — spawn assignment integration comes next
-        logger.info("Spawn %d selected", spawn_index + 1)
+        """Select a spawn position for the human player (slot 0)."""
+        if not hasattr(self, "player_slots") or not self.player_slots:
+            return
+        info = self._current_map_info
+        if info is None or info.markers is None:
+            return
+        if spawn_index >= len(info.markers.armies):
+            return
+        # Store the selected spawn index on slot 0 (human player)
+        self.player_slots[0]["start_spot"] = spawn_index
+        logger.info("Player start spot set to %d", spawn_index + 1)
+        self._redraw_canvas()
 
     def _clamp_pan(self) -> None:
         """Clamp pan offset to keep the map visible."""
@@ -382,6 +416,32 @@ class WopcApp(BaseApp):  # type: ignore
         max_pan = base_size * self._zoom / 2
         self._pan_x = max(-max_pan, min(max_pan, self._pan_x))
         self._pan_y = max(-max_pan, min(max_pan, self._pan_y))
+
+    def _get_tinted_icon(self, icon_key: str, icon_size: int, tint: str) -> Any:
+        """Get a tinted icon from cache, or create and cache it."""
+        cache_key = (icon_key, icon_size, tint)
+        cached = self._tinted_icon_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        raw = self._marker_icons.get(icon_key)
+        if raw is None:
+            return None
+        scaled = raw.resize(
+            (icon_size, icon_size),
+            PilImage.LANCZOS,  # type: ignore[attr-defined]
+        )
+        r_c = int(tint[1:3], 16)
+        g_c = int(tint[3:5], 16)
+        b_c = int(tint[5:7], 16)
+        # Tint only bright pixels (interior), preserve dark pixels (outline)
+        pixels = scaled.load()
+        for yi in range(icon_size):
+            for xi in range(icon_size):
+                r, g, b, a = pixels[xi, yi]
+                if a > 0 and (r + g + b) > 180:
+                    pixels[xi, yi] = (r_c, g_c, b_c, a)
+        self._tinted_icon_cache[cache_key] = scaled
+        return scaled
 
     def _redraw_canvas(self) -> None:
         """Redraw the map preview and marker overlays on the canvas."""
@@ -451,30 +511,6 @@ class WopcApp(BaseApp):  # type: ignore
                 canvas.create_image(px, py, image=tk_img)
                 self._marker_tk_cache.append(tk_img)
 
-        def _draw_tinted_icon(icon_key: str, px: int, py: int, icon_size: int, tint: str) -> None:
-            """Draw an icon tinted with a color (colorize the opaque pixels)."""
-            raw = self._marker_icons.get(icon_key)
-            if raw is None:
-                return
-            scaled = raw.resize(
-                (icon_size, icon_size),
-                PilImage.LANCZOS,  # type: ignore[attr-defined]
-            )
-            # Parse hex color to RGB
-            r_c = int(tint[1:3], 16)
-            g_c = int(tint[3:5], 16)
-            b_c = int(tint[5:7], 16)
-            # Tint: replace RGB of opaque pixels, keep alpha
-            pixels = scaled.load()
-            for yi in range(icon_size):
-                for xi in range(icon_size):
-                    _r, _g, _b, a = pixels[xi, yi]
-                    if a > 0:
-                        pixels[xi, yi] = (r_c, g_c, b_c, a)
-            tk_img = ImageTk.PhotoImage(scaled)
-            canvas.create_image(px, py, image=tk_img)
-            self._marker_tk_cache.append(tk_img)
-
         # Mass points — strategic mass extractor icon
         mass_icon_size = max(8, size // 40)
         for mx, mz in info.markers.mass:
@@ -511,20 +547,43 @@ class WopcApp(BaseApp):  # type: ignore
                     width=max(1, size // 250),
                 )
 
-        # Army spawn positions — tinted commander icon + player number
+        # Army spawn positions — tinted commander icon + player number + hover halo
         active_count = len(self.player_slots) if hasattr(self, "player_slots") else 0
         spawn_icon_size = max(20, size // 18)
         for i, (name, mx, mz) in enumerate(info.markers.armies):
             px, py = _map_to_px(mx, mz)
             is_active = i < active_count
-            color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0] if is_active else "#333333"
-            # Tinted commander icon (no background circle)
+            color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0] if is_active else "#444444"
+            is_hovered = i == self._hover_spawn
+
+            # Hover halo — soft glow ring
+            if is_hovered:
+                halo_r = spawn_icon_size // 2 + 6
+                canvas.create_oval(
+                    px - halo_r,
+                    py - halo_r,
+                    px + halo_r,
+                    py + halo_r,
+                    fill="",
+                    outline=color if is_active else "#888888",
+                    width=3,
+                    stipple="gray50",
+                )
+
+            # Tinted commander icon (preserves black outline)
             if "marker_commander" in self._marker_icons:
-                _draw_tinted_icon("marker_commander", px, py, spawn_icon_size, color)
+                tinted = self._get_tinted_icon("marker_commander", spawn_icon_size, color)
+                if tinted is not None:
+                    tk_img = ImageTk.PhotoImage(tinted)
+                    canvas.create_image(px, py, image=tk_img)
+                    self._marker_tk_cache.append(tk_img)
             else:
                 r = spawn_icon_size // 2
-                canvas.create_oval(px - r, py - r, px + r, py + r, fill=color, outline="")
-            # Player number
+                canvas.create_oval(
+                    px - r, py - r, px + r, py + r, fill=color, outline="#000000", width=2
+                )
+
+            # Player number label
             num = name.split("_")[1] if "_" in name else str(i + 1)
             r = spawn_icon_size // 2 + 2
             canvas.create_text(
@@ -827,7 +886,8 @@ class WopcApp(BaseApp):  # type: ignore
         self.map_canvas.bind("<MouseWheel>", self._on_canvas_scroll)
         self.map_canvas.bind("<ButtonPress-1>", self._on_canvas_drag_start)
         self.map_canvas.bind("<B1-Motion>", self._on_canvas_drag)
-        self.map_canvas.bind("<ButtonRelease-1>", self._on_canvas_click)
+        self.map_canvas.bind("<ButtonRelease-1>", self._on_canvas_release)
+        self.map_canvas.bind("<Motion>", self._on_canvas_motion)
 
         self.map_preview_name = ctk.CTkLabel(
             map_frame,
