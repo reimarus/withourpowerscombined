@@ -4,19 +4,19 @@
       ".read": true,
       "$game_id": {
         ".write": true,
-        ".validate": "newData.hasChildren(['host_name','map_name','player_count','max_players','lobby_port','host_ip','last_seen'])"
+        ".validate": "newData.hasChildren(['game_name','host_name','map_name','player_count','max_players','lobby_port','host_ip','last_seen'])"
       }
     },
     "reports": {
+      ".read": true,
       "$report_id": {
-        ".read": false,
         ".write": true,
         ".validate": "newData.hasChildren(['timestamp','host_name','log','version'])"
       }
     },
     "logs": {
+      ".read": true,
       "$log_id": {
-        ".read": false,
         ".write": true,
         ".validate": "newData.hasChildren(['event','timestamp'])"
       }
