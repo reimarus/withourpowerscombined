@@ -107,6 +107,7 @@ class RelayClient:
         max_players: int,
         lobby_port: int,
         public_ip: str,
+        game_name: str = "",
     ) -> bool:
         """Write a new game record to Firebase.  Returns True on success.
 
@@ -120,6 +121,7 @@ class RelayClient:
         url = f"{config.RELAY_URL}/games/{game_id}.json"
         payload: dict[str, Any] = {
             "host_name": host_name,
+            "game_name": game_name,
             "map_name": map_name,
             "player_count": player_count,
             "max_players": max_players,
@@ -132,6 +134,17 @@ class RelayClient:
             with self._lock:
                 self._game_id = game_id
             logger.info("Registered on relay as game %s", game_id)
+            self._log_event(
+                "game_created",
+                {
+                    "game_id": game_id,
+                    "host_name": host_name,
+                    "game_name": game_name,
+                    "map_name": map_name,
+                    "max_players": max_players,
+                    "host_ip": public_ip,
+                },
+            )
             return True
         except (OSError, urllib.error.URLError) as exc:
             logger.warning("Relay registration failed: %s", exc)
@@ -143,6 +156,7 @@ class RelayClient:
         map_name: str,
         player_count: int,
         max_players: int,
+        game_name: str = "",
     ) -> None:
         """PATCH mutable fields and refresh ``last_seen``.
 
@@ -155,6 +169,7 @@ class RelayClient:
         url = f"{config.RELAY_URL}/games/{game_id}.json"
         payload: dict[str, Any] = {
             "host_name": host_name,
+            "game_name": game_name,
             "map_name": map_name,
             "player_count": player_count,
             "max_players": max_players,
@@ -181,6 +196,7 @@ class RelayClient:
         try:
             self._http("DELETE", url)
             logger.info("Deregistered game %s from relay", game_id)
+            self._log_event("game_closed", {"game_id": game_id})
         except (OSError, urllib.error.URLError) as exc:
             logger.warning("Relay deregister failed (will expire): %s", exc)
 
@@ -223,6 +239,7 @@ class RelayClient:
                     map_name=state.get("map_name", ""),
                     player_count=int(state.get("player_count", 1)),
                     max_players=int(state.get("max_players", 2)),
+                    game_name=state.get("game_name", ""),
                 )
                 deadline = time.monotonic() + self._heartbeat_interval
             time.sleep(min(0.5, self._heartbeat_interval / 4))
@@ -277,6 +294,7 @@ class RelayClient:
                         max_players=int(record["max_players"]),
                         lobby_port=int(record["lobby_port"]),
                         host_ip=str(record["host_ip"]),
+                        game_name=str(record.get("game_name", "")),
                         last_seen=time.monotonic(),
                         source="internet",
                     )
@@ -286,6 +304,39 @@ class RelayClient:
 
         logger.debug("Relay: %d active game(s) fetched", len(games))
         return games
+
+    # ------------------------------------------------------------------
+    # Firebase audit logging
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _log_event(event_type: str, data: dict[str, Any]) -> None:
+        """Write an audit log entry to Firebase ``/logs/`` node.
+
+        Fire-and-forget: failures are silently logged but never raised.
+        This provides a persistent troubleshooting trail in Firebase.
+        """
+        if not config.RELAY_URL:
+            return
+        log_id = str(uuid.uuid4())
+        url = f"{config.RELAY_URL}/logs/{log_id}.json"
+        payload: dict[str, Any] = {
+            "event": event_type,
+            "timestamp": time.time(),
+            **data,
+        }
+        try:
+            body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="PUT",
+            )
+            urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT)
+            logger.debug("Logged event %s to relay", event_type)
+        except (OSError, urllib.error.URLError) as exc:
+            logger.debug("Failed to log event %s to relay: %s", event_type, exc)
 
     # ------------------------------------------------------------------
     # Internal HTTP helper

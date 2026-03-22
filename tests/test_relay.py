@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.error
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -154,7 +155,8 @@ class TestRegister:
         ):
             mock_cfg.RELAY_URL = "https://example.firebaseio.com"
             client.register("Alice", "Theta", 1, 4, 15000, "1.2.3.4")
-            url_arg = mock_req.call_args[0][0]
+            # First call is the register PUT to /games/, second is the audit log
+            url_arg = mock_req.call_args_list[0][0][0]
         assert "/games/" in url_arg
         assert url_arg.endswith(".json")
 
@@ -221,7 +223,8 @@ class TestDeregister:
         ):
             mock_cfg.RELAY_URL = "https://example.firebaseio.com"
             client.deregister()
-            method = mock_req.call_args[1].get("method")
+            # First call is the DELETE to /games/, second is the audit log
+            method = mock_req.call_args_list[0][1].get("method")
         assert method == "DELETE"
         assert client._game_id is None
 
@@ -428,3 +431,114 @@ class TestHeartbeatThread:
             client.stop_heartbeat()
         assert client._heartbeat_thread is None
         assert not client._running
+
+
+# ---------------------------------------------------------------------------
+# Game name support
+# ---------------------------------------------------------------------------
+
+
+class TestGameName:
+    def test_register_sends_game_name(self) -> None:
+        client = RelayClient()
+        with (
+            patch("launcher.relay.urllib.request.urlopen", return_value=_make_response(b"{}")),
+            patch("launcher.relay.urllib.request.Request") as mock_req,
+            patch("launcher.relay.config") as mock_cfg,
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            client.register("Alice", "Theta", 1, 4, 15000, "1.2.3.4", game_name="Friday Night")
+            # First call is register PUT
+            sent_data = json.loads(mock_req.call_args_list[0][1]["data"])
+        assert sent_data["game_name"] == "Friday Night"
+
+    def test_fetch_games_includes_game_name(self) -> None:
+        record = _game_record(host_name="Bob", host_ip="5.6.7.8")
+        record["game_name"] = "Pro Match"
+        payload = {"g1": record}
+        client = RelayClient()
+        with (
+            patch(
+                "launcher.relay.urllib.request.urlopen",
+                return_value=_make_response(json.dumps(payload).encode()),
+            ),
+            patch("launcher.relay.config") as mock_cfg,
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            games = client.fetch_games()
+        assert len(games) == 1
+        assert games[0].game_name == "Pro Match"
+
+    def test_fetch_games_handles_missing_game_name(self) -> None:
+        """Older records without game_name field should default to empty string."""
+        payload = {"g1": _game_record(host_name="Old", host_ip="1.1.1.1")}
+        client = RelayClient()
+        with (
+            patch(
+                "launcher.relay.urllib.request.urlopen",
+                return_value=_make_response(json.dumps(payload).encode()),
+            ),
+            patch("launcher.relay.config") as mock_cfg,
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            games = client.fetch_games()
+        assert len(games) == 1
+        assert games[0].game_name == ""
+
+
+# ---------------------------------------------------------------------------
+# Firebase audit logging
+# ---------------------------------------------------------------------------
+
+
+class TestAuditLogging:
+    def test_register_writes_audit_log(self) -> None:
+        client = RelayClient()
+        with (
+            patch("launcher.relay.urllib.request.urlopen", return_value=_make_response(b"{}")),
+            patch("launcher.relay.urllib.request.Request") as mock_req,
+            patch("launcher.relay.config") as mock_cfg,
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            client.register("Alice", "Theta", 1, 4, 15000, "1.2.3.4")
+            # Second call should be the audit log PUT to /logs/
+            assert mock_req.call_count == 2
+            log_url = mock_req.call_args_list[1][0][0]
+            assert "/logs/" in log_url
+            log_data = json.loads(mock_req.call_args_list[1][1]["data"])
+            assert log_data["event"] == "game_created"
+            assert log_data["host_name"] == "Alice"
+
+    def test_deregister_writes_audit_log(self) -> None:
+        client = RelayClient()
+        client._game_id = "test-game-id"
+        with (
+            patch("launcher.relay.urllib.request.urlopen", return_value=_make_response(b"null")),
+            patch("launcher.relay.urllib.request.Request") as mock_req,
+            patch("launcher.relay.config") as mock_cfg,
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            client.deregister()
+            assert mock_req.call_count == 2
+            log_url = mock_req.call_args_list[1][0][0]
+            assert "/logs/" in log_url
+            log_data = json.loads(mock_req.call_args_list[1][1]["data"])
+            assert log_data["event"] == "game_closed"
+
+    def test_log_event_failure_does_not_raise(self) -> None:
+        """Audit log failures should be silent — never crash the caller."""
+        client = RelayClient()
+        responses = [_make_response(b"{}")]  # register succeeds
+
+        def side_effect(*_a: object, **_kw: object) -> Any:
+            if responses:
+                return responses.pop(0)
+            raise OSError("log write failed")
+
+        with (
+            patch("launcher.relay.urllib.request.urlopen", side_effect=side_effect),
+            patch("launcher.relay.config") as mock_cfg,
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            result = client.register("Alice", "Theta", 1, 4, 15000, "1.2.3.4")
+        assert result is True  # register succeeded even though log failed
