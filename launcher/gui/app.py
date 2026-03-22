@@ -563,11 +563,22 @@ class WopcApp(BaseApp):  # type: ignore
             spot = slot.get("start_spot", si)  # default: slot index = spawn index
             spawn_occupied[spot] = si
 
-        for i, (name, mx, mz) in enumerate(info.markers.armies):
+        for i, (_name, mx, mz) in enumerate(info.markers.armies):
             px, py = _map_to_px(mx, mz)
             slot_idx = spawn_occupied.get(i)
             is_occupied = slot_idx is not None and slot_idx < active_count
-            color = PLAYER_COLORS[i % len(PLAYER_COLORS)][0] if is_occupied else "#444444"
+
+            # Use the player's chosen color from their color_var
+            if is_occupied and slot_idx is not None:
+                slot = slots[slot_idx]
+                cvar = slot.get("color_var")
+                color = self._color_name_to_hex(cvar.get()) if cvar else "#444444"
+                team = slot.get("team_var")
+                team_num = team.get() if team and hasattr(team, "get") else "?"
+            else:
+                color = "#444444"
+                team_num = ""
+
             is_hovered = i == self._hover_spawn
 
             # Hover halo — glow ring
@@ -583,7 +594,7 @@ class WopcApp(BaseApp):  # type: ignore
                     width=2,
                 )
 
-            # Selected spawn — bright ring
+            # Selected spawn — bright ring (human player)
             if is_occupied and slot_idx == 0:
                 sel_r = spawn_icon_size // 2 + 3
                 canvas.create_oval(
@@ -609,17 +620,17 @@ class WopcApp(BaseApp):  # type: ignore
                     px - r, py - r, px + r, py + r, fill=color, outline="#000000", width=2
                 )
 
-            # Player number label
-            num = name.split("_")[1] if "_" in name else str(i + 1)
-            r = spawn_icon_size // 2 + 2
-            font_size = max(8, base_size // 50)
-            canvas.create_text(
-                px + r,
-                py - r,
-                text=num,
-                fill="#FFFFFF" if is_occupied else "#666666",
-                font=("Segoe UI", font_size, "bold"),
-            )
+            # Team number label (instead of slot number)
+            if team_num:
+                r = spawn_icon_size // 2 + 2
+                font_size = max(8, base_size // 50)
+                canvas.create_text(
+                    px + r,
+                    py - r,
+                    text=f"T{team_num}",
+                    fill="#FFFFFF",
+                    font=("Segoe UI", font_size, "bold"),
+                )
 
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
@@ -1621,8 +1632,89 @@ class WopcApp(BaseApp):  # type: ignore
         return PLAYER_COLORS[0][1]
 
     def _on_color_change(self, _val: str) -> None:
-        """Broadcast state when a color changes."""
+        """Broadcast state and redraw map when a color changes."""
+        self._tinted_icon_cache.clear()
         self._broadcast_game_state()
+        self._redraw_canvas()
+
+    @staticmethod
+    def _color_name_to_hex(name: str) -> str:
+        """Convert a color display name to its hex value."""
+        for hex_val, cname in PLAYER_COLORS:
+            if cname == name:
+                return hex_val
+        return PLAYER_COLORS[0][0]
+
+    def _create_color_swatch(self, parent: Any, color_var: Any, row: int, col: int) -> Any:
+        """Create a clickable color swatch button that opens a color picker popup."""
+        swatch_size = 22
+        swatch = tk.Canvas(
+            parent,
+            width=swatch_size,
+            height=swatch_size,
+            highlightthickness=1,
+            highlightbackground=COLOR_TEXT_MUTED,
+            cursor="hand2",
+        )
+        hex_color = self._color_name_to_hex(color_var.get())
+        swatch.create_rectangle(0, 0, swatch_size, swatch_size, fill=hex_color, outline="")
+        swatch.grid(row=row, column=col, padx=5, pady=2)
+
+        def _on_swatch_click(event: Any) -> None:
+            self._show_color_popup(swatch, color_var)
+
+        swatch.bind("<Button-1>", _on_swatch_click)
+
+        # Store swatch ref on color_var for updates
+        color_var._swatch = swatch  # type: ignore[attr-defined]
+        color_var._swatch_size = swatch_size  # type: ignore[attr-defined]
+        return swatch
+
+    def _show_color_popup(self, anchor: Any, color_var: Any) -> None:
+        """Show a popup grid of color swatches for selection."""
+        popup = tk.Toplevel(self)
+        popup.overrideredirect(True)
+        popup.configure(bg=COLOR_PANEL)
+
+        # Position near the anchor widget
+        x = anchor.winfo_rootx()
+        y = anchor.winfo_rooty() + anchor.winfo_height() + 2
+        popup.geometry(f"+{x}+{y}")
+
+        swatch_sz = 28
+        cols = 4
+        for idx, (hex_val, name) in enumerate(PLAYER_COLORS):
+            r, c = divmod(idx, cols)
+            btn = tk.Canvas(
+                popup,
+                width=swatch_sz,
+                height=swatch_sz,
+                highlightthickness=1,
+                highlightbackground=COLOR_BG,
+                cursor="hand2",
+            )
+            btn.create_rectangle(0, 0, swatch_sz, swatch_sz, fill=hex_val, outline="")
+            # Highlight current selection
+            if name == color_var.get():
+                btn.configure(highlightbackground="#FFFFFF", highlightthickness=2)
+            btn.grid(row=r, column=c, padx=2, pady=2)
+
+            def _select(n: str = name, h: str = hex_val) -> None:
+                color_var.set(n)
+                # Update the anchor swatch color
+                swatch_ref = getattr(color_var, "_swatch", None)
+                if swatch_ref:
+                    sz = getattr(color_var, "_swatch_size", 22)
+                    swatch_ref.delete("all")
+                    swatch_ref.create_rectangle(0, 0, sz, sz, fill=h, outline="")
+                self._on_color_change(n)
+                popup.destroy()
+
+            btn.bind("<Button-1>", lambda e, sel=_select: sel())  # type: ignore[misc]
+
+        # Close popup when clicking elsewhere
+        popup.bind("<FocusOut>", lambda e: popup.destroy())
+        popup.focus_set()
 
     def _next_team(self, slots: list[dict[str, Any]]) -> str:
         """Return the team number string with the fewest players for auto-balance.
@@ -1686,18 +1778,10 @@ class WopcApp(BaseApp):  # type: ignore
         team_menu.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(team_menu)
 
-        # Color selector
+        # Color swatch picker
         color_var = ctk.StringVar(value=self._next_free_color())
-        color_menu = ctk.CTkOptionMenu(
-            self.slots_scroll,
-            values=self._get_color_names(),
-            variable=color_var,
-            command=self._on_color_change,
-            width=70,
-            height=24,
-        )
-        color_menu.grid(row=row, column=4, padx=5, pady=2)
-        widgets.append(color_menu)
+        swatch = self._create_color_swatch(self.slots_scroll, color_var, row, 4)
+        widgets.append(swatch)
 
         # No remove button for human
         spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
@@ -1763,18 +1847,10 @@ class WopcApp(BaseApp):  # type: ignore
         team_menu.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(team_menu)
 
-        # Color selector
+        # Color swatch picker
         color_var = ctk.StringVar(value=self._next_free_color())
-        color_menu = ctk.CTkOptionMenu(
-            self.slots_scroll,
-            values=self._get_color_names(),
-            variable=color_var,
-            command=self._on_color_change,
-            width=70,
-            height=24,
-        )
-        color_menu.grid(row=row, column=4, padx=5, pady=2)
-        widgets.append(color_menu)
+        swatch = self._create_color_swatch(self.slots_scroll, color_var, row, 4)
+        widgets.append(swatch)
 
         # Remove button
         slot_index = row  # capture for closure
