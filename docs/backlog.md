@@ -11,6 +11,8 @@ Items to tackle over time, roughly grouped by priority.
 5. ~~**Map preview not working (solo)**~~ ✅ — Pillow bundled in exe (PR #26)
 6. ~~**Map preview not working (multiplayer)**~~ ✅ — lobby preview image widget added (PR #26)
 7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
+42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers at lines 194, 303, 317, 398 in `deploy.py` don't check the return value. The immediate crash (`FileNotFoundError` at line 522) is fixed (PR #42), but other download calls still fail silently. Also: the `content-v2` GitHub Release doesn't exist yet — must create it with `wopc_core.scd.zip`, `wopc-maps.zip`, and strategic icons so first-time setup works for new users.
+43. **"Send Logs" button** — one-click button in the launcher that uploads the launcher log (`WOPC.log` or Python log) to Firebase `/reports/` node. Lets us diagnose remote issues (setup crashes, multiplayer failures) without asking users to copy-paste logs.
 
 ## High Priority — Player Experience
 

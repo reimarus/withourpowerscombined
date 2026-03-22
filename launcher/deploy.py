@@ -518,7 +518,11 @@ def run_setup(
                 logger.info("  downloading %s", config.WOPC_CORE_SCD)
                 asset_info = config.CORE_CONTENT_ASSETS["wopc_core.scd.zip"]
                 zip_dst = config.WOPC_GAMEDATA / "wopc_core.scd.zip"
-                _download_file(str(asset_info["url"]), zip_dst)
+                if not _download_file(str(asset_info["url"]), zip_dst):
+                    raise RuntimeError(
+                        f"Failed to download {config.WOPC_CORE_SCD} — "
+                        "check your internet connection and try again."
+                    )
                 with zipfile.ZipFile(zip_dst, "r") as zf:
                     zf.extractall(config.WOPC_GAMEDATA)
                 zip_dst.unlink()
