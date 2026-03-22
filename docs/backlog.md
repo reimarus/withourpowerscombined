@@ -31,6 +31,7 @@ Items to tackle over time, roughly grouped by priority.
 16. ~~**Solo ↔ multiplayer UI consistency**~~ ✅ — lobby options now reuse `GAME_OPTION_DEFS`, matching labels/values/defaults; headers and button styles unified
 17. ~~**UI polish**~~ ✅ — FAF/SupCom visual redesign (gold + navy palette, dividers, warm cream text)
 18. ~~**Map preview in launcher**~~ ✅ — preview image, player count, size, description shown on map selection
+18b. ~~**Interactive map preview**~~ ✅ — canvas-based hero preview with mass/hydro/spawn overlays, click-to-inspect zoom window, DDS extraction from .scmap, dynamic filters, stable layout
 
 ## Features
 

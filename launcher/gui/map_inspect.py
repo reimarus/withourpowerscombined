@@ -46,11 +46,21 @@ class MapInspectWindow(tk.Toplevel):
         parent: Any,
         info: map_scanner.MapInfo,
         raw_preview: Any,
+        x: int = 0,
+        y: int = 0,
     ) -> None:
         super().__init__(parent)
         self.title(f"Map: {info.display_name}")
         self.configure(bg=COLOR_BG)
-        self.geometry("700x750")
+
+        # Position near click, offset so window doesn't cover cursor
+        win_w, win_h = 700, 750
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        # Clamp to screen bounds
+        pos_x = min(max(0, x - win_w // 2), screen_w - win_w)
+        pos_y = min(max(0, y - win_h // 2), screen_h - win_h)
+        self.geometry(f"{win_w}x{win_h}+{pos_x}+{pos_y}")
         self.minsize(400, 450)
 
         self._info = info

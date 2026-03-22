@@ -1,24 +1,19 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-20
+> Last updated: 2026-03-21
 > If session runs out of tokens, a new session can pick up from here.
 
 ## Current State: Phase 6 — Modern Multiplayer UX (in progress)
 
 ### What works now:
 1. **Solo mode** (quickstart bypass): GUI → select map/players/options → PLAY MATCH → game enters sim
-2. **Multiplayer mode** (quickstart bypass): GUI → MULTIPLAYER → game browser (LAN discovery) or Create Game → lobby room (map, players, options, chat) → LAUNCH → all players enter sim via quickstart
-3. **Content packs**: TotalMayhem (62 FAF-compatible units) toggleable in launcher
+2. **Multiplayer mode** (quickstart bypass): GUI → MULTIPLAYER → game browser (LAN + internet discovery) or Create Game → lobby room (map, players, options, chat) → LAUNCH → all players enter sim via quickstart
+3. **Content packs**: TotalMayhem + BlackOps units toggleable in launcher
 4. **Content icons**: Auto-extracted from LOUD's textures.scd during deploy
+5. **Internet game discovery**: Firebase relay (wopc-75b65) for finding games worldwide
+6. **Interactive map preview**: Canvas-based with mass/hydro/spawn overlays, click-to-inspect window with zoom
 
 ### CRITICAL ARCHITECTURE NOTE:
 **Our launcher IS the lobby.** ALL launch modes (solo, host, join) use `/wopcquickstart`. The FAF in-game lobby UI is NEVER shown. All multiplayer coordination (player list, game options, map selection, chat, ready state, file transfer) happens in the Python launcher over TCP. The engine just receives the final config and starts the match.
-
-### IMPORTANT: Rebuilding the exe
-After ANY code changes to `launcher/`, `init/`, or `gamedata/`:
-```
-python build_exe.py    # rebuilds dist/WOPC-Launcher.exe
-```
-The exe bundles Python + assets at build time. Stale exe = old code!
 
 ### Launch modes (implemented in wopc.py):
 | Mode | Engine args | Behaviour |
@@ -30,53 +25,32 @@ The exe bundles Python + assets at build time. Stale exe = old code!
 ### GUI screens (Phase 6 — three-screen layout):
 | Screen | When shown | Key widgets |
 |--------|-----------|-------------|
-| **Solo** | SOLO mode selected | Map selector, player slots, game options, PLAY MATCH button |
-| **Browser** | MULTIPLAYER selected | LAN game list (auto-discovered via UDP beacons), CREATE GAME, Direct Connect (collapsed) |
+| **Solo** | SOLO mode selected | Map selector (canvas preview with markers), player slots, game options, PLAY MATCH button |
+| **Browser** | MULTIPLAYER selected | LAN + internet game list, CREATE GAME, Direct Connect (collapsed) |
 | **Lobby** | After creating/joining game | 2×2 grid: map panel, player list, game options, chat + action bar (LEAVE / LAUNCH) |
 
 ### Key modules:
 - `launcher/discovery.py` — UDP LAN game discovery (BeaconBroadcaster + BeaconListener)
+- `launcher/relay.py` — Firebase REST API for internet game registration/discovery
 - `launcher/lobby.py` — TCP lobby server/client, JSON-line protocol
 - `launcher/file_transfer.py` — map auto-download over TCP
+- `launcher/map_scanner.py` — scenario + save file parsing, DDS extraction, marker extraction
 - `launcher/gui/app.py` — all three screens, beacon lifecycle, flow methods
+- `launcher/gui/map_inspect.py` — zoomable map inspect window with marker overlays
 
-### Multiplayer features (all complete):
-- TCP lobby server/client — JSON-line protocol, heartbeat, disconnect detection
-- Live game state sync — host broadcasts map, options, AI slots, teams, colors, content packs
-- Full state snapshot sent to new joiners on connect
-- Player color selector (8 SCFA colors, duplicate prevention)
-- Team assignment per slot (1-4)
-- Victory condition normalization (display names → engine values)
-- Map auto-download — joiner detects missing map, host streams files over TCP
-- Content pack mismatch warnings
-- Lobby chat, kick player, ready/unready toggle
-- Pre-launch validation (all ready, no duplicate colors, map exists)
-- LAN game discovery via UDP beacons (port 15001)
+### Map preview system:
+- `parse_scenario()` extracts name, size, player count from `_scenario.lua`
+- `parse_save_markers()` extracts ARMY positions, Mass deposits, Hydrocarbon markers from `_save.lua`
+- `_extract_scmap_preview()` pulls embedded DDS 256×256 preview from `.scmap` binary
+- Canvas renders preview image + markers (mass=white dots, hydro=green, spawns=numbered colored circles)
+- Click opens `MapInspectWindow` with zoom (mouse wheel, 0.5x-4.0x)
+- Coordinate mapping: `px = marker_x / map_width * canvas_size`
+- **Gotcha**: `_save.lua` has both `['orientation']` and `['position']` VECTOR3 fields — must match `['position']` specifically
 
-### What's broken / stubbed (Phase 6 follow-up — see `docs/backlog.md` for full list):
-- "Add AI" button in multiplayer lobby — not wired
-- "Change Map" button in multiplayer lobby — not wired
-- Remove players from solo screen — no remove button
-- Victory type tooltips — no descriptions
-- UI is basic — needs polish pass
-- Solo ↔ multiplayer UI inconsistency
+### Branch: `main` — Latest release: v2.01.0009. No active feature branch.
 
-### Test results: 231 tests pass (fast), ~61% coverage floor (lobby.py tests marked slow)
-
-### Branch: `main` — Latest release: v2.01.0005. No active feature branch.
-
-### Recent fixes (v2.01.0005):
-- `multilobby.lua:BuildGameInfo()` — OwnerID now uses real peer IDs instead of synthetic sequential indices ("0","1","2"...). Engine was waiting for phantom peers that never connect.
-- `multilobby.lua:HostGame()` → `HostGame(false)` — missing `friendsOnly` arg (same fix as quickstart.lua in v2.01.0003)
-- `prefs.py:get/set_expected_humans()` — clamping changed from `max(2,...)` to `max(1,...)`, default changed from 2 to 1. Previously impossible to set expected_humans=1, forcing all launches through multilobby path.
-- `.claude/utils/read_game_log.py` — fixed stale path (was pointing to old `C:\ProgramData\WOPC\` after directory relocation)
-
-### Recent fixes (v2.01.0004):
-- `quickstart.lua` — OwnerID must use host's real peer ID, not sequential index
-
-### Recent fixes (v2.01.0003):
-- `comm:HostGame()` → `comm:HostGame(false)` — missing `friendsOnly` arg caused black screen
-- Auto-select first map on fresh install (empty `active_map` pref)
-- Block solo launch when no map selected
-- Launch mode normalization (invalid pref values default to `"solo"`)
-- Renamed `faf_ui.scd` → `wopc_core.scd` throughout codebase
+### Recent releases:
+- **v2.01.0009**: Interactive map preview with markers, inspect window, hero layout, filter fixes
+- **v2.01.0008**: DDS preview extraction from .scmap binary files
+- **v2.01.0007**: Internet game discovery via Firebase relay (Phase A)
+- **v2.01.0006**: Black screen fix (HostGame/JoinGame arg mismatch)
