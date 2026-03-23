@@ -4,7 +4,7 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
 try:
     from PIL import Image as PilImage  # type: ignore[import-not-found]
@@ -31,6 +31,31 @@ else:
         BaseApp = object  # type: ignore[misc, no-redef]
 
 from launcher import config, file_transfer, prefs, updater
+from launcher.gui.constants import (
+    AI_DISPLAY_NAMES as _AI_NAMES,
+)
+from launcher.gui.constants import (
+    DRAG_THRESHOLD,
+    LOBBY_PREVIEW_SIZE,
+    PLAY_LABELS,
+    PLAYER_COLORS,
+    PREVIEW_MIN,
+    color_hex_to_index,
+    color_name_to_hex,
+    game_options_to_engine,
+)
+from launcher.gui.constants import (
+    FACTION_NAMES as _FACTIONS,
+)
+from launcher.gui.constants import (
+    GAME_OPTION_DEFS as _GAME_OPT_DEFS,
+)
+from launcher.gui.constants import (
+    MAX_SLOTS as _MAX_SLOTS,
+)
+from launcher.gui.constants import (
+    VICTORY_DESCRIPTIONS as _VICTORY_DESCS,
+)
 from launcher.gui.worker import SetupWorker
 from launcher.wopc import cmd_launch
 
@@ -59,17 +84,7 @@ COLOR_TEXT_PRIMARY = "#E8E4D4"  # Warm cream (not cold white)
 COLOR_TEXT_MUTED = "#4A5A70"  # Muted navy-grey
 COLOR_TEXT_GOLD = "#C8A84B"  # Gold text (headers, section labels)
 
-# SCFA player colors (index 1-8 match engine's color system)
-PLAYER_COLORS: list[tuple[str, str]] = [
-    ("#FF0000", "Red"),
-    ("#0000FF", "Blue"),
-    ("#18DAE8", "Teal"),
-    ("#DFBF00", "Yellow"),
-    ("#FF6600", "Orange"),
-    ("#9161FF", "Purple"),
-    ("#FF88FF", "Pink"),
-    ("#00FF00", "Green"),
-]
+# PLAYER_COLORS imported from launcher.gui.constants
 
 
 def _icons_dir() -> Path:
@@ -233,8 +248,8 @@ class WopcApp(BaseApp):  # type: ignore
         """Return a thin 1-pixel accent line for use as a section separator."""
         return ctk.CTkFrame(parent, fg_color=color, height=1, corner_radius=0)
 
-    _PREVIEW_MIN: ClassVar[int] = 320
-    _LOBBY_PREVIEW_SIZE: ClassVar[int] = 280
+    _PREVIEW_MIN = PREVIEW_MIN
+    _LOBBY_PREVIEW_SIZE = LOBBY_PREVIEW_SIZE
 
     def _update_map_preview(self, info: "map_scanner.MapInfo | None") -> None:
         """Load and display the map preview image and metadata."""
@@ -337,7 +352,7 @@ class WopcApp(BaseApp):  # type: ignore
         self._drag_spawn_src = self._hit_test_spawn(event.x, event.y)
 
     # Minimum pixel distance before a click becomes a drag
-    _DRAG_THRESHOLD: ClassVar[int] = 8
+    _DRAG_THRESHOLD = DRAG_THRESHOLD
 
     def _on_canvas_drag(self, event: Any) -> None:
         """Pan the map canvas by dragging, or drag a spawn to swap positions."""
@@ -1667,23 +1682,11 @@ class WopcApp(BaseApp):  # type: ignore
     # Player Slots
     # ------------------------------------------------------------------
 
-    FACTION_NAMES: ClassVar[list[str]] = ["Random", "UEF", "Aeon", "Cybran", "Seraphim"]
-    AI_DISPLAY_NAMES: ClassVar[list[str]] = [
-        "Easy",
-        "Medium",
-        "Adaptive",
-        "Rush",
-        "Turtle",
-        "Tech",
-        "Random",
-    ]
-    MAX_SLOTS: ClassVar[int] = 16
-    VICTORY_DESCRIPTIONS: ClassVar[dict[str, str]] = {
-        "Demoralization": "Destroy 70% of an enemy's units to eliminate them",
-        "Supremacy": "Destroy all enemy structures and engineers to win",
-        "Assassination": "Kill the enemy Commander (ACU) to eliminate them",
-        "Sandbox": "No victory condition \u2014 play until you quit",
-    }
+    # Constants imported from launcher.gui.constants
+    FACTION_NAMES = _FACTIONS
+    AI_DISPLAY_NAMES = _AI_NAMES
+    MAX_SLOTS = _MAX_SLOTS
+    VICTORY_DESCRIPTIONS = _VICTORY_DESCS
 
     def _build_player_slots_in(self, parent: Any, grid_row: int = 0) -> None:
         """Build the player slots inside the given parent frame."""
@@ -1769,12 +1772,7 @@ class WopcApp(BaseApp):  # type: ignore
     @staticmethod
     def _color_name_to_hex(name: str) -> str:
         """Convert a color name or hex value to its hex value."""
-        if name.startswith("#"):
-            return name
-        for hex_val, cname in PLAYER_COLORS:
-            if cname == name:
-                return hex_val
-        return PLAYER_COLORS[0][0]
+        return color_name_to_hex(name)
 
     def _create_color_swatch(self, parent: Any, color_var: Any, row: int, col: int) -> Any:
         """Create a clickable color swatch button that opens a color picker popup."""
@@ -2349,25 +2347,7 @@ class WopcApp(BaseApp):  # type: ignore
     @staticmethod
     def _color_name_to_index(val: str) -> int:
         """Convert a color name or hex to the nearest 1-based SCFA engine color index."""
-        # Direct name match
-        for i, (hex_val, cname) in enumerate(PLAYER_COLORS):
-            if cname == val or hex_val == val:
-                return i + 1
-        # Nearest color by RGB distance for arbitrary hex values
-        if val.startswith("#") and len(val) == 7:
-            r = int(val[1:3], 16)
-            g = int(val[3:5], 16)
-            b = int(val[5:7], 16)
-            best_i, best_d = 0, float("inf")
-            for i, (hex_val, _) in enumerate(PLAYER_COLORS):
-                pr = int(hex_val[1:3], 16)
-                pg = int(hex_val[3:5], 16)
-                pb = int(hex_val[5:7], 16)
-                d = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2
-                if d < best_d:
-                    best_i, best_d = i, d
-            return best_i + 1
-        return 1
+        return color_hex_to_index(val)
 
     def get_human_color_index(self) -> int:
         """Return the human player's selected color index (1-based)."""
@@ -2419,19 +2399,7 @@ class WopcApp(BaseApp):  # type: ignore
     # Game Options
     # ------------------------------------------------------------------
 
-    # Option definitions: (key, label, values, default)
-    GAME_OPTION_DEFS: ClassVar[list[tuple[str, str, list[str], str]]] = [
-        (
-            "Victory",
-            "Victory",
-            ["Demoralization", "Supremacy", "Assassination", "Sandbox"],
-            "Demoralization",
-        ),
-        ("UnitCap", "Unit Cap", ["500", "1000", "1500", "2000", "4000"], "1500"),
-        ("FogOfWar", "Fog of War", ["Explored", "Unexplored", "None"], "Explored"),
-        ("GameSpeed", "Game Speed", ["Normal", "Fast", "Adjustable"], "Normal"),
-        ("Share", "Share", ["FullShare", "ShareUntilDeath"], "FullShare"),
-    ]
+    GAME_OPTION_DEFS = _GAME_OPT_DEFS
 
     # _build_game_options and _build_settings_column removed — consolidated
     # into _build_options_column and _build_players_column above.
@@ -2442,25 +2410,10 @@ class WopcApp(BaseApp):  # type: ignore
 
     def get_game_options(self) -> dict[str, str]:
         """Collect game options from the UI for game_config.py."""
-        opts: dict[str, str] = {}
+        raw: dict[str, str] = {}
         for key, var in self.game_option_vars.items():
-            val = var.get()
-            # Normalize display names to engine values
-            if key == "FogOfWar":
-                val = {"Explored": "explored", "Unexplored": "unexplored", "None": "none"}.get(
-                    val, val.lower()
-                )
-            elif key == "Victory":
-                val = {
-                    "Demoralization": "demoralization",
-                    "Supremacy": "domination",
-                    "Assassination": "eradication",
-                    "Sandbox": "sandbox",
-                }.get(val, val.lower())
-            elif key == "GameSpeed":
-                val = val.lower()
-            opts[key] = val
-        return opts
+            raw[key] = var.get()
+        return game_options_to_engine(raw)
 
     def _refresh_mods_list(self) -> None:
         """Read available mods and content packs from disk and update the UI."""
@@ -2662,10 +2615,7 @@ class WopcApp(BaseApp):  # type: ignore
     # Launch mode helpers
     # ------------------------------------------------------------------
 
-    _PLAY_LABELS: ClassVar[dict[str, str]] = {
-        "SOLO": "PLAY MATCH",
-        "MULTIPLAYER": "PLAY MATCH",
-    }
+    _PLAY_LABELS = PLAY_LABELS
 
     def _on_expected_humans_change(self, value: str) -> None:
         """Persist expected humans preference when dropdown changes."""

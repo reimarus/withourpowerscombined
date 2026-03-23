@@ -61,7 +61,12 @@ See `.claude/plans/gentle-enchanting-bengio.md` for the full plan:
 - Auto-updater map list not loading after self-restart
 - Civilian filler armies — investigate idle commander spawns
 
-### Branch: `main` — Latest release: v2.01.0032. No active feature branch.
+### Branch: `refactor/extract-constants-and-models` — Phase 2 of solo launcher refactor in progress.
+- Created `launcher/gui/constants.py` — all lookup tables, color conversions, game option mappings
+- Created `launcher/gui/models.py` — `PlayerSlot` dataclass + `PlayerSlotManager` (pure logic, no widgets)
+- Created `tests/test_constants.py` (27 tests) + `tests/test_models.py` (36 tests) — 63 new tests, all pass
+- Updated `app.py` — imports from constants/models, removed duplicate definitions
+- Latest release: v2.01.0032
 
 ### Recent releases:
 - **v2.01.0032**: Spawn position fix — Players array gap-filling with civilian entries
