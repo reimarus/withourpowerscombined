@@ -61,19 +61,26 @@ See `.claude/plans/gentle-enchanting-bengio.md` for the full plan:
 - Auto-updater map list not loading after self-restart
 - Civilian filler armies — investigate idle commander spawns
 
-### Branch: `refactor/extract-constants-and-models` — Phases 2-3-5 complete, PR #63 open.
+### Branch: `fix/multiplayer-join` — multiplayer join fix (6 bugs)
+- Fixed GameState silently dropped during Welcome wait (TCP coalescing bug in `lobby.py`)
+- Fixed `_build_game_state()` thread safety — now uses cached snapshot readable from any thread
+- Fixed joiner launch config — uses received GameState instead of solo-screen widgets
+- Fixed joiner map sync — `prefs.set_active_map()` called when GameState arrives
+- Fixed `_all_maps` empty causing false map-missing detection — filesystem fallback added
+- Fixed joiner `expected_humans` — calculated from host's player count
+- 4 new tests in `test_lobby.py` for GameState buffering
+- Diagnostic logging added to handshake pipeline
+- Latest release: v2.01.0033
+
+### Completed refactor (PR #63, merged):
 - `launcher/gui/constants.py` — lookup tables, color conversions, game option mappings (171 lines)
 - `launcher/gui/models.py` — `PlayerSlot` + `PlayerSlotManager`, zero widget deps (226 lines)
 - `launcher/gui/map_canvas.py` — canvas rendering, zoom/pan, markers, spawn interaction (531 lines)
-- `tests/test_constants.py` (27) + `tests/test_models.py` (36) + integration tests in `test_game_config.py` (2)
-- `test_gui.py` cleaned: 44 duplicated tests removed, replaced with re-export checks
-- `app.py`: 4,320 → 3,865 lines (455 extracted). Phase 4 (slot widget unification) is next.
-- Latest release: v2.01.0032
+- `app.py`: 4,320 → 3,784 lines (536 extracted)
 
 ### Recent releases:
+- **v2.01.0033**: Refactor — extracted constants, models, map_canvas from app.py
 - **v2.01.0032**: Spawn position fix — Players array gap-filling with civilian entries
 - **v2.01.0031**: Diagnostic spawn logging, team offset fix (+1 for engine)
 - **v2.01.0030**: Player color persistence in prefs, spawn swap logic, filter reset fix
 - **v2.01.0029**: Auto-updater fix (subprocess + os._exit on Windows)
-- **v2.01.0028**: Player slot improvements (remove button, color picker, team changes)
-- **v2.01.0027**: Icon-based map markers, HSV color picker, unified solo/lobby layout, player name in slots
