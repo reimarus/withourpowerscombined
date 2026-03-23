@@ -285,6 +285,101 @@ class TestPlayerColors:
         assert "Victory = 'domination'" in lua
 
 
+class TestArmyPositionMapping:
+    """Test that Players array index == StartSpot for correct ARMY_N assignment."""
+
+    def test_contiguous_positions_no_fillers(self, config_dir: Path) -> None:
+        """No civilian fillers when positions are 1, 2, 3 (contiguous)."""
+        ais = [
+            {"name": "AI 1", "faction": "random", "ai": "medium", "team": 2, "start_spot": 2},
+            {"name": "AI 2", "faction": "random", "ai": "medium", "team": 2, "start_spot": 3},
+        ]
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/test/test_scenario.lua",
+                player_start_spot=1,
+                ai_opponents=ais,
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        assert "Civilian = true" not in lua
+        assert lua.count("Human = true") == 1
+        assert lua.count("Human = false") == 2
+
+    def test_gap_filled_with_civilian(self, config_dir: Path) -> None:
+        """Gap at position 3 gets a civilian filler when players are at 1, 2, 4."""
+        ais = [
+            {"name": "AI 1", "faction": "aeon", "ai": "medium", "team": 2, "start_spot": 2},
+        ]
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/test/test_scenario.lua",
+                player_start_spot=4,
+                ai_opponents=ais,
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        # Should have 4 entries: AI at 2, civilian at 1 and 3, human at 4
+        # Wait — human at 4, AI at 2. Positions 1 and 3 are gaps.
+        assert lua.count("Civilian = true") == 2  # positions 1 and 3
+        assert "Human = true" in lua
+
+    def test_human_at_position_4_is_fourth_in_array(self, config_dir: Path) -> None:
+        """Human at StartSpot 4 must be the 4th entry so engine assigns ARMY_4."""
+        ais = [
+            {"name": "AI 1", "faction": "uef", "ai": "easy", "team": 2, "start_spot": 1},
+            {"name": "AI 2", "faction": "aeon", "ai": "medium", "team": 3, "start_spot": 2},
+        ]
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/test/test_scenario.lua",
+                player_name="TestHuman",
+                player_start_spot=4,
+                ai_opponents=ais,
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        # Parse the Players block to verify ordering
+        lines = lua.split("\n")
+        player_blocks: list[str] = []
+        current_block: list[str] = []
+        in_players = False
+        for line in lines:
+            if "Players = {" in line:
+                in_players = True
+                continue
+            if in_players:
+                if line.strip() == "},":
+                    if current_block:
+                        player_blocks.append("\n".join(current_block))
+                        current_block = []
+                    # Check if this is the end of Players
+                    continue
+                if line.strip() == "{":
+                    current_block = []
+                current_block.append(line)
+
+        # Block 0 = position 1 (AI 1), Block 1 = position 2 (AI 2),
+        # Block 2 = position 3 (civilian filler), Block 3 = position 4 (human)
+        assert len(player_blocks) >= 4
+        assert "AI 1" in player_blocks[0]
+        assert "AI 2" in player_blocks[1]
+        assert "Civilian = true" in player_blocks[2]
+        assert "TestHuman" in player_blocks[3]
+
+    def test_single_player_high_position(self, config_dir: Path) -> None:
+        """Solo human at position 5 creates 4 civilian fillers before them."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/test/test_scenario.lua",
+                player_start_spot=5,
+                ai_opponents=[],
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        assert lua.count("Civilian = true") == 4  # positions 1-4
+
+
 class TestMultiplayerConfig:
     """Test multiplayer fields (ExpectedHumans, IsHost)."""
 

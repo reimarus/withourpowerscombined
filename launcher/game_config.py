@@ -78,10 +78,17 @@ def write_game_config(
 
     player_faction_num = FACTIONS.get(player_faction.lower(), 5)
 
-    players_lua = []
+    # CRITICAL: SCFA's engine creates ARMY_N for Players[N] in this array.
+    # Each army spawns at the map's ARMY_N marker (see simInit.lua →
+    # InitializeStartLocation → GetMarker("ARMY_N")).  The StartSpot field
+    # is lobby metadata only — it does NOT control spawn position.
+    # Therefore Players[N] MUST contain the player who wants to spawn at
+    # the ARMY_N map position.  Any gaps between 1 and max(StartSpot) are
+    # filled with inert civilian entries so the Lua array stays contiguous.
+    player_entries: dict[int, str] = {}
 
-    # Slot 1: human player
-    players_lua.append(
+    # Human player — keyed by their chosen map position
+    player_entries[player_start_spot] = (
         "        {\n"
         "            Human = true,\n"
         f"            PlayerName = '{_escape_lua(player_name)}',\n"
@@ -93,7 +100,7 @@ def write_game_config(
         "        }"
     )
 
-    # AI slots
+    # AI slots — keyed by their chosen map position
     for idx, ai in enumerate(ai_opponents, start=2):
         ai_name = ai.get("name", f"AI {idx}")
         ai_faction = FACTIONS.get(ai.get("faction", "random").lower(), 5)
@@ -102,7 +109,7 @@ def write_game_config(
         ai_color = ai.get("color", idx)
         ai_start = ai.get("start_spot", idx)
 
-        players_lua.append(
+        player_entries[ai_start] = (
             "        {\n"
             "            Human = false,\n"
             f"            PlayerName = '{_escape_lua(ai_name)}',\n"
@@ -114,6 +121,27 @@ def write_game_config(
             "        }"
         )
 
+    # Build contiguous Players array from 1..max(StartSpot).
+    # Gaps are filled with inert civilian entries — the engine creates
+    # the army but assigns no AI brain (Civilian=true, empty AIPersonality).
+    max_spot = max(player_entries.keys())
+    players_lua: list[str] = []
+    for spot in range(1, max_spot + 1):
+        if spot in player_entries:
+            players_lua.append(player_entries[spot])
+        else:
+            players_lua.append(
+                "        {\n"
+                "            Human = false,\n"
+                "            Civilian = true,\n"
+                "            PlayerName = '',\n"
+                "            Faction = 1,\n"
+                "            Team = 1,\n"
+                f"            PlayerColor = {spot},\n"
+                f"            StartSpot = {spot},\n"
+                "            AIPersonality = '',\n"
+                "        }"
+            )
     players_block = ",\n".join(players_lua)
 
     # Game options overrides
