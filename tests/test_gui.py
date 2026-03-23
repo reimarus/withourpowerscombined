@@ -201,6 +201,53 @@ class TestSpawnMapping:
 
 
 # ---------------------------------------------------------------------------
+# Spawn select swap tests (pure logic)
+# ---------------------------------------------------------------------------
+
+
+class TestSpawnSelectSwap:
+    """When the human clicks a spawn occupied by an AI, they should swap."""
+
+    @staticmethod
+    def _select_spawn(slots: list[dict], spawn_index: int) -> None:
+        """Simulate _select_spawn swap logic."""
+        old_spawn = slots[0].get("start_spot", 0)
+        if old_spawn != spawn_index:
+            for si, slot in enumerate(slots):
+                if si == 0:
+                    continue
+                if slot.get("start_spot", si) == spawn_index:
+                    slot["start_spot"] = old_spawn
+                    break
+        slots[0]["start_spot"] = spawn_index
+
+    def test_swap_human_with_ai(self) -> None:
+        slots = [
+            {"type": "human", "start_spot": 0},
+            {"type": "ai", "start_spot": 2},
+        ]
+        self._select_spawn(slots, 2)
+        assert slots[0]["start_spot"] == 2
+        assert slots[1]["start_spot"] == 0
+
+    def test_move_to_empty_spawn(self) -> None:
+        slots = [
+            {"type": "human", "start_spot": 0},
+            {"type": "ai", "start_spot": 1},
+        ]
+        self._select_spawn(slots, 3)
+        assert slots[0]["start_spot"] == 3
+        assert slots[1]["start_spot"] == 1  # unchanged
+
+    def test_click_same_spawn_noop(self) -> None:
+        slots = [
+            {"type": "human", "start_spot": 2},
+        ]
+        self._select_spawn(slots, 2)
+        assert slots[0]["start_spot"] == 2
+
+
+# ---------------------------------------------------------------------------
 # Next team auto-balance tests (pure logic)
 # ---------------------------------------------------------------------------
 

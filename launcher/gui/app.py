@@ -465,7 +465,11 @@ class WopcApp(BaseApp):  # type: ignore
             self._select_spawn(hit)
 
     def _select_spawn(self, spawn_index: int) -> None:
-        """Select a spawn position for the human player (slot 0)."""
+        """Select a spawn position for the human player (slot 0).
+
+        If another player already occupies the target spawn, swap them
+        to the human's previous position so no two players share a spawn.
+        """
         if not hasattr(self, "player_slots") or not self.player_slots:
             return
         info = self._current_map_info
@@ -473,7 +477,17 @@ class WopcApp(BaseApp):  # type: ignore
             return
         if spawn_index >= len(info.markers.armies):
             return
-        # Store the selected spawn index on slot 0 (human player)
+        # Find old human spawn and swap with whoever is at the target
+        old_spawn = self.player_slots[0].get("start_spot", 0)
+        if old_spawn != spawn_index:
+            # Check if another slot occupies the target spawn
+            for si, slot in enumerate(self.player_slots):
+                if si == 0:
+                    continue
+                if slot.get("start_spot", si) == spawn_index:
+                    slot["start_spot"] = old_spawn
+                    logger.info("Swapped slot %d to spawn %d", si + 1, old_spawn + 1)
+                    break
         self.player_slots[0]["start_spot"] = spawn_index
         logger.info("Player start spot set to %d", spawn_index + 1)
         self._redraw_canvas()
@@ -1558,6 +1572,18 @@ class WopcApp(BaseApp):  # type: ignore
         )
         self.faction_menu.grid(row=1, column=1, sticky="w", pady=(3, 0))
 
+        # Player color — persisted in prefs
+        ctk.CTkLabel(
+            settings,
+            text="Color:",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        ).grid(row=2, column=0, sticky="w", padx=(0, 5), pady=(3, 0))
+        saved_color = prefs.get_player_color()
+        initial_color = saved_color if saved_color else PLAYER_COLORS[0][0]
+        self.player_color_var = ctk.StringVar(value=initial_color)
+        self.player_color_swatch = self._create_color_swatch(settings, self.player_color_var, 2, 1)
+
         self.minimap_var = ctk.BooleanVar(value=prefs.get_minimap_enabled())
         self.minimap_cb = ctk.CTkCheckBox(
             col,
@@ -1725,8 +1751,13 @@ class WopcApp(BaseApp):  # type: ignore
         """Broadcast state and redraw map when a color changes."""
         self._tinted_icon_cache.clear()
         # Persist human player's color to prefs so it survives restarts
-        if self.player_slots and self.player_slots[0].get("color_var"):
-            prefs.set_player_color(self.player_slots[0]["color_var"].get())
+        if hasattr(self, "player_color_var"):
+            hex_color = self.player_color_var.get()
+            prefs.set_player_color(hex_color)
+            # Update the read-only indicator in the human slot row
+            indicator = getattr(self, "_human_color_indicator", None)
+            if indicator:
+                indicator.configure(bg=hex_color)
         self._broadcast_game_state()
         self._redraw_canvas()
 
@@ -1998,12 +2029,19 @@ class WopcApp(BaseApp):  # type: ignore
         team_menu.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(team_menu)
 
-        # Color swatch picker — load saved color from prefs, fall back to auto-pick
-        saved_color = prefs.get_player_color()
-        initial_color = saved_color if saved_color else self._next_free_color()
-        color_var = ctk.StringVar(value=initial_color)
-        swatch = self._create_color_swatch(self.slots_scroll, color_var, row, 4)
-        widgets.append(swatch)
+        # Human color is managed by the Player Settings color picker above
+        # Show a small indicator swatch (read-only, matches player_color_var)
+        color_indicator = tk.Canvas(
+            self.slots_scroll,
+            width=22,
+            height=22,
+            highlightthickness=1,
+            highlightbackground=COLOR_TEXT_MUTED,
+            bg=self.player_color_var.get(),
+        )
+        color_indicator.grid(row=row, column=4, padx=5, pady=2)
+        widgets.append(color_indicator)
+        self._human_color_indicator = color_indicator
 
         # No remove button for human
         spacer = ctk.CTkLabel(self.slots_scroll, text="", width=24)
@@ -2011,7 +2049,12 @@ class WopcApp(BaseApp):  # type: ignore
         widgets.append(spacer)
 
         self.player_slots.append(
-            {"type": "human", "team_var": team_var, "color_var": color_var, "widgets": widgets}
+            {
+                "type": "human",
+                "team_var": team_var,
+                "color_var": self.player_color_var,
+                "widgets": widgets,
+            }
         )
 
     def _first_free_spawn(self) -> int:
