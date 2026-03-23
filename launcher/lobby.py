@@ -546,6 +546,7 @@ class LobbyClient:
         self._player_id: int | None = None
         self._slot: int | None = None
         self._recv_buf = bytearray()
+        self._pending_messages: list[dict[str, Any]] = []
 
     # -- public API ----------------------------------------------------------
 
@@ -652,6 +653,16 @@ class LobbyClient:
             if self._cb.on_connected:
                 self._cb.on_connected()
 
+            # Replay messages buffered during the Welcome wait (e.g. GameState)
+            if self._pending_messages:
+                logger.info(
+                    "Replaying %d message(s) buffered during handshake",
+                    len(self._pending_messages),
+                )
+                for pending in self._pending_messages:
+                    self._handle_message(pending)
+                self._pending_messages.clear()
+
             # Main loop
             last_heartbeat = time.monotonic()
             while self._running and self._sock:
@@ -685,7 +696,12 @@ class LobbyClient:
             self._cb.on_disconnected("Connection closed")
 
     def _wait_for_welcome(self) -> bool:
-        """Block until Welcome is received (up to 10s)."""
+        """Block until Welcome is received (up to 10s).
+
+        Non-Welcome messages that arrive during this window (e.g. GameState
+        sent back-to-back with Welcome) are buffered in ``_pending_messages``
+        and replayed after the main loop starts.
+        """
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline and self._running and self._sock:
             try:
@@ -701,6 +717,9 @@ class LobbyClient:
                             self._slot,
                         )
                         return True
+                    # Buffer any non-Welcome messages (e.g. GameState)
+                    # so they aren't lost when TCP coalesces writes.
+                    self._pending_messages.append(msg)
             except (OSError, json.JSONDecodeError):
                 pass
             time.sleep(0.1)
