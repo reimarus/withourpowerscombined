@@ -2540,7 +2540,7 @@ class WopcApp(BaseApp):  # type: ignore
                 map_display = m.display_name
                 break
 
-        return {
+        state = {
             "map_folder": active_map,
             "map_name": map_display,
             "game_options": self.get_game_options(),
@@ -2552,6 +2552,13 @@ class WopcApp(BaseApp):  # type: ignore
             "players": self._lobby_server.connected_players if self._lobby_server else [],
             "content_packs": mods.get_enabled_packs(),
         }
+        logger.debug(
+            "Built game state: map=%s, players=%d, ai=%d",
+            active_map,
+            len(state["players"]),
+            len(state["ai_slots"]),
+        )
+        return state
 
     def _refresh_cached_game_state(self) -> None:
         """Rebuild the cached game state snapshot (GUI thread only).

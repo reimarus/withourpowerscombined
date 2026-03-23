@@ -348,11 +348,16 @@ class LobbyServer:
                 for line in lines:
                     msg = json.loads(line)
                     if msg.get("type") == "Hello":
+                        logger.info(
+                            "Hello received from %s",
+                            msg.get("player_name", "?"),
+                        )
                         # Switch to non-blocking for selector-based polling
                         sock.setblocking(False)
                         self._accept_player(sock, msg)
                         return
             # No Hello received in time
+            logger.warning("No Hello received within 5s — closing connection")
             sock.close()
         except (OSError, json.JSONDecodeError):
             with contextlib.suppress(OSError):
@@ -399,11 +404,21 @@ class LobbyServer:
                 state = self._game_state_provider()
                 if state:
                     _send_msg(sock, {"type": "GameState", "state": state})
+                    logger.info(
+                        "Sent GameState to %s (pid=%d): map=%s",
+                        name,
+                        pid,
+                        state.get("map_folder", "?"),
+                    )
+                else:
+                    logger.warning("GameState provider returned None for %s (pid=%d)", name, pid)
             sock.setblocking(False)
         except OSError:
+            logger.error("Failed to send Welcome/GameState to %s (pid=%d)", name, pid)
             self._remove_player(pid)
             return
 
+        logger.info("Accepted player %s: pid=%d, slot=%d", name, pid, slot)
         # Notify GUI
         if self._cb.on_player_joined:
             self._cb.on_player_joined(pid, name, faction, slot)
