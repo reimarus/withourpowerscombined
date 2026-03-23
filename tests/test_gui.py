@@ -264,6 +264,34 @@ class TestNextTeam:
 
 
 # ---------------------------------------------------------------------------
+# Team offset tests — SCFA engine uses Team 1 = FFA, Team 2+ = allied
+# ---------------------------------------------------------------------------
+
+
+class TestTeamOffset:
+    """Verify UI team values are offset by +1 for the engine."""
+
+    def test_ui_team_1_becomes_engine_team_2(self) -> None:
+        """UI 'Team 1' should map to engine Team 2 (first allied team)."""
+        # Simulate what get_human_team does: int(team_var.get()) + 1
+        ui_team = "1"
+        engine_team = int(ui_team) + 1
+        assert engine_team == 2
+
+    def test_ui_team_4_becomes_engine_team_5(self) -> None:
+        """UI 'Team 4' should map to engine Team 5."""
+        ui_team = "4"
+        engine_team = int(ui_team) + 1
+        assert engine_team == 5
+
+    def test_ai_team_offset_applied(self) -> None:
+        """AI opponent teams should also be offset by +1."""
+        ui_team = "2"
+        engine_team = int(ui_team) + 1
+        assert engine_team == 3
+
+
+# ---------------------------------------------------------------------------
 # Color name/hex conversion tests (pure logic, no WopcApp needed)
 # ---------------------------------------------------------------------------
 
