@@ -51,7 +51,13 @@ Items to tackle over time, roughly grouped by priority.
 47. ~~**Show player name in slot**~~ ✅ — human slot shows player name from prefs, updates on name change (v2.01.0027)
 
 48. **Rearrange Player Settings layout** — Name inline with Faction (same row), Color inline with minimap preference (same row). Reduces vertical space and groups related settings logically.
-49. **Spawn position bug** ✅ — Players array index must match ARMY_N for correct spawn. Gap-filling with civilian entries ensures contiguous array. (v2.01.0032)
+49. ~~**Spawn position bug**~~ ✅ — Players array index must match ARMY_N for correct spawn. Gap-filling with civilian entries ensures contiguous array. (v2.01.0032)
+50. **Map black screen after ready check** — map preview doesn't auto-load after WOPC ready check completes or after auto-update/patch. User sees empty black area where the map should be; requires manual restart.
+51. **"Send Logs" failure after auto-update** — "failed to send logs, check your connection" after auto-update applies. May be Firebase URL issue or stale `sys.executable` path after the exe rename dance.
+52. **Player color mismatch in-game** — launcher shows correct colors but game shows wrong ones. Root cause: `PLAYER_COLORS` index ordering in `app.py` may not match SCFA engine's internal `armycolors` palette. HSV custom color picker's nearest-match may also misalign.
+53. **Auto-updater map list not loading after restart** — after auto-update downloads and restarts the launcher, the map list doesn't populate. User must close and reopen manually.
+54. **Civilian filler armies investigation** — gap-filling in `game_config.py` creates `Civilian=true` entries for unused ARMY positions. Investigate whether the engine spawns idle commanders for these entries (gameplay impact).
+55. **Refactor app.py monolith** — 4,320 lines / 105 methods in one class. Extract `models.py` (PlayerSlotManager), `constants.py` (lookup tables), `map_canvas.py` (renderer), `slot_widget.py` (unified slot UI). See `.claude/plans/gentle-enchanting-bengio.md`.
 
 ## Features
 

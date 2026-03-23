@@ -12,7 +12,7 @@
 
 ## Completed: Phase 6 — Modern Multiplayer UX
 
-**PRs:** #17 (core), #19 (tech debt), #20 (lobby buttons), #21 (auto-assign + consistency)
+**PRs:** #17 (core), #19 (tech debt), #20 (lobby buttons), #21 (auto-assign + consistency), #57-#61 (solo polish + bug fixes)
 
 All Phase 6 items are complete:
 - ✅ LAN discovery via UDP beacons
@@ -21,7 +21,30 @@ All Phase 6 items are complete:
 - ✅ Add AI / Change Map buttons wired
 - ✅ Victory tooltips, team auto-assignment
 - ✅ Solo ↔ multiplayer UI consistency
+- ✅ Icon-based map markers (tinted commander icons, strategic icons)
+- ✅ Spawn position selection on minimap
+- ✅ Player color persistence + HSV picker
+- ✅ Spawn position → ARMY_N mapping fix (gap-filling)
+- ✅ Team numbering offset fix (UI→engine +1)
 
-## No active plan
+---
 
-See [docs/backlog.md](backlog.md) for remaining items (player ratings, UI polish, map library, etc.).
+## Active: Solo Launcher Refactor — Testing, Maintainability, Stability
+
+**Full plan:** `.claude/plans/gentle-enchanting-bengio.md`
+
+`app.py` has grown to 4,320 lines / 105 methods. Refactoring to improve testability, eliminate duplication, and fix 3 new bugs.
+
+### Steps (7 commits):
+1. ⬜ Doc updates + backlog (Phase 1)
+2. ⬜ Extract `launcher/gui/constants.py` — lookup tables + color mappings
+3. ⬜ Extract `launcher/gui/models.py` — PlayerSlotManager (pure data, no widgets)
+4. ⬜ Extract `launcher/gui/map_canvas.py` — canvas rendering, zoom/pan, spawn clicks
+5. ⬜ Unify solo/multiplayer slot code → `launcher/gui/slot_widget.py`
+6. ⬜ Bug fixes: map black screen, send logs, color palette mismatch
+7. ⬜ Test coverage improvements (target 80%+ on extracted modules)
+
+### Bug fixes included:
+- Map black screen after ready check / auto-update
+- "Send Logs" failure after auto-update
+- Player color mismatch (PLAYER_COLORS vs SCFA engine palette)
