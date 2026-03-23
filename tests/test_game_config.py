@@ -417,3 +417,68 @@ class TestMultiplayerConfig:
         lua = path.read_text(encoding="utf-8")
         assert "ExpectedHumans = 2" in lua
         assert "IsHost = false" in lua
+
+
+class TestSlotManagerIntegration:
+    """Integration: PlayerSlotManager → write_game_config → valid Lua.
+
+    Verifies the full pipeline from the extracted models module
+    through to the config file generator.
+    """
+
+    def test_2v2_from_slot_manager(self, config_dir: Path) -> None:
+        """Build a 2v2 setup using PlayerSlotManager, feed to write_game_config."""
+        from launcher.gui.models import PlayerSlotManager
+
+        mgr = PlayerSlotManager(max_positions=8)
+        mgr.add_human(name="Player", team=1, color_hex="#FF0000", start_spot=0)
+        mgr.add_ai(team=1, color_hex="#DFBF00", start_spot=2, ai_key="medium")
+        mgr.add_ai(team=2, color_hex="#0000FF", start_spot=1, ai_key="adaptive")
+        mgr.add_ai(team=2, color_hex="#18DAE8", start_spot=3, ai_key="rush")
+
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/test/test_scenario.lua",
+                player_name="Player",
+                player_start_spot=mgr.get_human_start_spot_engine(),
+                player_color=mgr.get_human_color_index(),
+                player_team=mgr.get_human_team_engine(),
+                ai_opponents=mgr.to_ai_opponents(),
+            )
+
+        lua = path.read_text(encoding="utf-8")
+
+        # Human at position 1 (start_spot=0 → engine 1)
+        assert "Human = true" in lua
+        # 3 AIs
+        assert lua.count("Human = false") == 3
+        # Team offsets applied
+        assert "Team = 2" in lua  # UI team 1 → engine 2
+        assert "Team = 3" in lua  # UI team 2 → engine 3
+        # Player color
+        assert "PlayerColor = 1" in lua  # Red = index 1
+
+    def test_slot_manager_spawn_ordering(self, config_dir: Path) -> None:
+        """Human at spawn 3 must be the 3rd entry in the Players array."""
+        from launcher.gui.models import PlayerSlotManager
+
+        mgr = PlayerSlotManager(max_positions=8)
+        mgr.add_human(name="Test", team=1, color_hex="#FF0000", start_spot=2)
+        mgr.add_ai(team=2, color_hex="#0000FF", start_spot=0, ai_key="easy")
+
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/test/test_scenario.lua",
+                player_name="Test",
+                player_start_spot=mgr.get_human_start_spot_engine(),
+                player_color=mgr.get_human_color_index(),
+                player_team=mgr.get_human_team_engine(),
+                ai_opponents=mgr.to_ai_opponents(),
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        # AI at position 1, civilian filler at 2, human at 3
+        lines = lua.split("\n")
+        human_idx = next(i for i, ln in enumerate(lines) if "Human = true" in ln)
+        ai_idx = next(i for i, ln in enumerate(lines) if "Human = false" in ln)
+        assert ai_idx < human_idx  # AI first (position 1) then human (position 3)
