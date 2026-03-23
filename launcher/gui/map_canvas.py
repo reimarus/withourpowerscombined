@@ -82,7 +82,7 @@ class DictSlotAccessor(SlotAccessor):
         return len(self._slots)
 
     def slot_start_spot(self, index: int) -> int:
-        return self._slots[index].get("start_spot", index)
+        return int(self._slots[index].get("start_spot", index))
 
     def slot_color_hex(self, index: int) -> str:
         cvar = self._slots[index].get("color_var")
@@ -93,7 +93,7 @@ class DictSlotAccessor(SlotAccessor):
     def slot_team_label(self, index: int) -> str:
         team = self._slots[index].get("team_var")
         if team and hasattr(team, "get"):
-            return team.get()
+            return str(team.get())
         return ""
 
 
