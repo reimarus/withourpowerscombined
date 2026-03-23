@@ -35,7 +35,12 @@ from launcher.gui.constants import (
     AI_DISPLAY_NAMES as _AI_NAMES,
 )
 from launcher.gui.constants import (
-    DRAG_THRESHOLD,
+    FACTION_NAMES as _FACTIONS,
+)
+from launcher.gui.constants import (
+    GAME_OPTION_DEFS as _GAME_OPT_DEFS,
+)
+from launcher.gui.constants import (
     LOBBY_PREVIEW_SIZE,
     PLAY_LABELS,
     PLAYER_COLORS,
@@ -43,12 +48,6 @@ from launcher.gui.constants import (
     color_hex_to_index,
     color_name_to_hex,
     game_options_to_engine,
-)
-from launcher.gui.constants import (
-    FACTION_NAMES as _FACTIONS,
-)
-from launcher.gui.constants import (
-    GAME_OPTION_DEFS as _GAME_OPT_DEFS,
 )
 from launcher.gui.constants import (
     MAX_SLOTS as _MAX_SLOTS,
@@ -84,11 +83,6 @@ COLOR_DANGER = "#E84855"  # Red — LEAVE / destructive actions
 COLOR_TEXT_PRIMARY = "#E8E4D4"  # Warm cream (not cold white)
 COLOR_TEXT_MUTED = "#4A5A70"  # Muted navy-grey
 COLOR_TEXT_GOLD = "#C8A84B"  # Gold text (headers, section labels)
-
-# PLAYER_COLORS imported from launcher.gui.constants
-
-
-# _icons_dir() moved to launcher.gui.map_canvas
 
 
 class WopcApp(BaseApp):  # type: ignore
@@ -164,8 +158,6 @@ class WopcApp(BaseApp):  # type: ignore
         updater.cleanup_old_exe()
         self._pending_update: updater.UpdateInfo | None = None
         threading.Thread(target=self._check_for_update, daemon=True).start()
-
-    # _load_marker_icons → moved to MapCanvas
 
     def _set_window_icon(self) -> None:
         """Set the application window icon if it exists."""
@@ -278,16 +270,6 @@ class WopcApp(BaseApp):  # type: ignore
                 detail_parts.append(info.size_label)
             self.lobby_map_info.configure(text=", ".join(detail_parts))
 
-    # Canvas event handlers, rendering, hit-testing, drag/zoom/pan, and icon
-    # tinting have been extracted to launcher.gui.map_canvas.MapCanvas.
-    # The following thin wrappers delegate to the MapCanvas instance.
-
-    _DRAG_THRESHOLD = DRAG_THRESHOLD
-
-    # _on_canvas_release, _on_canvas_motion, _draw_drag_ghost,
-    # _clear_drag_ghost, _hit_test_spawn, _on_canvas_click
-    # → all moved to MapCanvas
-
     def _select_spawn(self, spawn_index: int) -> None:
         """Select a spawn position for the human player (slot 0).
 
@@ -331,8 +313,6 @@ class WopcApp(BaseApp):  # type: ignore
             self.player_slots[dst_slot]["start_spot"] = src_spawn
         logger.info("Swapped spawn %d ↔ %d", src_spawn + 1, dst_spawn + 1)
         self._redraw_canvas()
-
-    # _clamp_pan, _get_tinted_icon → moved to MapCanvas
 
     def _redraw_canvas(self) -> None:
         """Delegate map canvas redraw to the MapCanvas widget."""
