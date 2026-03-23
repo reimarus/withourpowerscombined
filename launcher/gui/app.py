@@ -2233,8 +2233,21 @@ class WopcApp(BaseApp):  # type: ignore
 
         def _delayed_launch() -> None:
             time.sleep(2)
-            ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
-            game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
+            # Prefer the game state received from the host over local widgets
+            rs = self._received_game_state
+            if rs:
+                logger.info("Joiner launching with host config (map=%s)", rs.get("map_folder"))
+                ai_opponents = rs.get("ai_slots") or []
+                game_options = rs.get("game_options")
+                # Set expected_humans: host + all human players in the state
+                n_humans = 1 + len(rs.get("players", []))
+                prefs.set_expected_humans(n_humans)
+            else:
+                logger.warning("Joiner launching WITHOUT host config — using local defaults")
+                ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
+                game_options = (
+                    self.get_game_options() if hasattr(self, "game_option_vars") else None
+                )
             color = self.get_human_color_index()
             start_spot = self.get_human_start_spot() if hasattr(self, "player_slots") else 1
             team = self.get_human_team() if hasattr(self, "player_slots") else 1
@@ -2441,6 +2454,16 @@ class WopcApp(BaseApp):  # type: ignore
         if "player_update" in state:
             return  # For now, we only care about full state updates
 
+        # Store the received state for use at launch time
+        self._received_game_state = state
+        logger.info(
+            "Received game state: map=%s, options=%d, ai=%d, players=%d",
+            state.get("map_folder", "?"),
+            len(state.get("game_options", {})),
+            len(state.get("ai_slots", [])),
+            len(state.get("players", [])),
+        )
+
         # Update map display and check if joiner has the map
         if "map_name" in state:
             map_name = state["map_name"]
@@ -2449,9 +2472,18 @@ class WopcApp(BaseApp):  # type: ignore
                 self.header_label.configure(text=f"Map: {map_name}")
             if hasattr(self, "lobby_map_label"):
                 self.lobby_map_label.configure(text=map_name)
+            # Persist host's map so cmd_launch() picks it up
+            if map_folder:
+                prefs.set_active_map(map_folder)
             # Check if joiner has this map — auto-download if missing
             if map_folder:
+                # Check _all_maps cache first, then fall back to filesystem
                 has_map = any(m.folder_name == map_folder for m in getattr(self, "_all_maps", []))
+                if not has_map:
+                    # Filesystem fallback: check both maps/ and usermaps/
+                    has_map = (config.WOPC_MAPS / map_folder).is_dir() or (
+                        config.WOPC_USERMAPS / map_folder
+                    ).is_dir()
                 if not has_map:
                     self.log(f"Map '{map_name}' not found locally — requesting from host...")
                     if self._lobby_client:
