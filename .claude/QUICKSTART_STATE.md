@@ -61,11 +61,13 @@ See `.claude/plans/gentle-enchanting-bengio.md` for the full plan:
 - Auto-updater map list not loading after self-restart
 - Civilian filler armies — investigate idle commander spawns
 
-### Branch: `refactor/extract-constants-and-models` — Phase 2 of solo launcher refactor in progress.
-- Created `launcher/gui/constants.py` — all lookup tables, color conversions, game option mappings
-- Created `launcher/gui/models.py` — `PlayerSlot` dataclass + `PlayerSlotManager` (pure logic, no widgets)
-- Created `tests/test_constants.py` (27 tests) + `tests/test_models.py` (36 tests) — 63 new tests, all pass
-- Updated `app.py` — imports from constants/models, removed duplicate definitions
+### Branch: `refactor/extract-constants-and-models` — Phases 2-3-5 complete, PR #63 open.
+- `launcher/gui/constants.py` — lookup tables, color conversions, game option mappings (171 lines)
+- `launcher/gui/models.py` — `PlayerSlot` + `PlayerSlotManager`, zero widget deps (226 lines)
+- `launcher/gui/map_canvas.py` — canvas rendering, zoom/pan, markers, spawn interaction (531 lines)
+- `tests/test_constants.py` (27) + `tests/test_models.py` (36) + integration tests in `test_game_config.py` (2)
+- `test_gui.py` cleaned: 44 duplicated tests removed, replaced with re-export checks
+- `app.py`: 4,320 → 3,865 lines (455 extracted). Phase 4 (slot widget unification) is next.
 - Latest release: v2.01.0032
 
 ### Recent releases:
