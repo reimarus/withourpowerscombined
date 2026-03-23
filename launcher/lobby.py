@@ -348,11 +348,16 @@ class LobbyServer:
                 for line in lines:
                     msg = json.loads(line)
                     if msg.get("type") == "Hello":
+                        logger.info(
+                            "Hello received from %s",
+                            msg.get("player_name", "?"),
+                        )
                         # Switch to non-blocking for selector-based polling
                         sock.setblocking(False)
                         self._accept_player(sock, msg)
                         return
             # No Hello received in time
+            logger.warning("No Hello received within 5s — closing connection")
             sock.close()
         except (OSError, json.JSONDecodeError):
             with contextlib.suppress(OSError):
@@ -399,11 +404,21 @@ class LobbyServer:
                 state = self._game_state_provider()
                 if state:
                     _send_msg(sock, {"type": "GameState", "state": state})
+                    logger.info(
+                        "Sent GameState to %s (pid=%d): map=%s",
+                        name,
+                        pid,
+                        state.get("map_folder", "?"),
+                    )
+                else:
+                    logger.warning("GameState provider returned None for %s (pid=%d)", name, pid)
             sock.setblocking(False)
         except OSError:
+            logger.error("Failed to send Welcome/GameState to %s (pid=%d)", name, pid)
             self._remove_player(pid)
             return
 
+        logger.info("Accepted player %s: pid=%d, slot=%d", name, pid, slot)
         # Notify GUI
         if self._cb.on_player_joined:
             self._cb.on_player_joined(pid, name, faction, slot)
@@ -546,6 +561,7 @@ class LobbyClient:
         self._player_id: int | None = None
         self._slot: int | None = None
         self._recv_buf = bytearray()
+        self._pending_messages: list[dict[str, Any]] = []
 
     # -- public API ----------------------------------------------------------
 
@@ -652,6 +668,16 @@ class LobbyClient:
             if self._cb.on_connected:
                 self._cb.on_connected()
 
+            # Replay messages buffered during the Welcome wait (e.g. GameState)
+            if self._pending_messages:
+                logger.info(
+                    "Replaying %d message(s) buffered during handshake",
+                    len(self._pending_messages),
+                )
+                for pending in self._pending_messages:
+                    self._handle_message(pending)
+                self._pending_messages.clear()
+
             # Main loop
             last_heartbeat = time.monotonic()
             while self._running and self._sock:
@@ -685,7 +711,12 @@ class LobbyClient:
             self._cb.on_disconnected("Connection closed")
 
     def _wait_for_welcome(self) -> bool:
-        """Block until Welcome is received (up to 10s)."""
+        """Block until Welcome is received (up to 10s).
+
+        Non-Welcome messages that arrive during this window (e.g. GameState
+        sent back-to-back with Welcome) are buffered in ``_pending_messages``
+        and replayed after the main loop starts.
+        """
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline and self._running and self._sock:
             try:
@@ -701,6 +732,9 @@ class LobbyClient:
                             self._slot,
                         )
                         return True
+                    # Buffer any non-Welcome messages (e.g. GameState)
+                    # so they aren't lost when TCP coalesces writes.
+                    self._pending_messages.append(msg)
             except (OSError, json.JSONDecodeError):
                 pass
             time.sleep(0.1)

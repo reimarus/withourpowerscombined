@@ -58,7 +58,7 @@ Items to tackle over time, roughly grouped by priority.
 53. **Auto-updater map list not loading after restart** — after auto-update downloads and restarts the launcher, the map list doesn't populate. User must close and reopen manually.
 54. **Civilian filler armies investigation** — gap-filling in `game_config.py` creates `Civilian=true` entries for unused ARMY positions. Investigate whether the engine spawns idle commanders for these entries (gameplay impact).
 55. **Refactor app.py monolith** — ~~4,320 lines~~ → 3,865 (Phase 2-3 done). Extracted `constants.py`, `models.py`, `map_canvas.py`. Remaining: `slot_widget.py` (unified slot UI). See `.claude/plans/gentle-enchanting-bengio.md`.
-56. **Multiplayer join broken** — friend could see game in browser and click join, but host didn't see them enter the lobby, and joiner had wrong map loaded. TCP lobby handshake, map sync, and player list broadcast need investigation. This is a prerequisite for real multiplayer testing.
+56. ~~**Multiplayer join broken**~~ ✅ — Six bugs fixed: (1) GameState silently dropped during Welcome wait (TCP coalescing), (2) `_build_game_state()` called from network thread (thread safety), (3) joiner launch reading solo-screen widgets instead of host config, (4) joiner map never written to prefs, (5) `_all_maps` empty causing false map-missing, (6) joiner `expected_humans` never set. See PR for details.
 
 ## Features
 

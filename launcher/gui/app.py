@@ -129,6 +129,12 @@ class WopcApp(BaseApp):  # type: ignore
         self._current_screen: str = "solo"
         self._log_lines: list[str] = []
 
+        # Thread-safe game state cache — network thread reads snapshot only
+        self._cached_game_state: dict[str, Any] | None = None
+        self._game_state_lock = threading.Lock()
+        # Joiner stores the last GameState received from the host
+        self._received_game_state: dict[str, Any] | None = None
+
         # Map preview state (canvas rendering is in MapCanvas)
         self._current_map_info: map_scanner.MapInfo | None = None
 
@@ -2187,6 +2193,7 @@ class WopcApp(BaseApp):  # type: ignore
             return
         self._add_remote_human_slot(player_id, name, faction, slot)
         self._update_host_button_text()
+        self._refresh_cached_game_state()
         self.log(f"Player joined: {name} (slot {slot})")
 
     def _on_player_left(self, player_id: int) -> None:
@@ -2196,6 +2203,7 @@ class WopcApp(BaseApp):  # type: ignore
             for w in info.get("widgets", []):
                 w.destroy()
             self._update_host_button_text()
+            self._refresh_cached_game_state()
             self.log(f"Player left: {info.get('name', '?')}")
 
     def _on_ready_changed(self, player_id: int, ready: bool) -> None:
@@ -2225,8 +2233,21 @@ class WopcApp(BaseApp):  # type: ignore
 
         def _delayed_launch() -> None:
             time.sleep(2)
-            ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
-            game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
+            # Prefer the game state received from the host over local widgets
+            rs = self._received_game_state
+            if rs:
+                logger.info("Joiner launching with host config (map=%s)", rs.get("map_folder"))
+                ai_opponents = rs.get("ai_slots") or []
+                game_options = rs.get("game_options")
+                # Set expected_humans: host + all human players in the state
+                n_humans = 1 + len(rs.get("players", []))
+                prefs.set_expected_humans(n_humans)
+            else:
+                logger.warning("Joiner launching WITHOUT host config — using local defaults")
+                ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
+                game_options = (
+                    self.get_game_options() if hasattr(self, "game_option_vars") else None
+                )
             color = self.get_human_color_index()
             start_spot = self.get_human_start_spot() if hasattr(self, "player_slots") else 1
             team = self.get_human_team() if hasattr(self, "player_slots") else 1
@@ -2433,6 +2454,16 @@ class WopcApp(BaseApp):  # type: ignore
         if "player_update" in state:
             return  # For now, we only care about full state updates
 
+        # Store the received state for use at launch time
+        self._received_game_state = state
+        logger.info(
+            "Received game state: map=%s, options=%d, ai=%d, players=%d",
+            state.get("map_folder", "?"),
+            len(state.get("game_options", {})),
+            len(state.get("ai_slots", [])),
+            len(state.get("players", [])),
+        )
+
         # Update map display and check if joiner has the map
         if "map_name" in state:
             map_name = state["map_name"]
@@ -2441,9 +2472,18 @@ class WopcApp(BaseApp):  # type: ignore
                 self.header_label.configure(text=f"Map: {map_name}")
             if hasattr(self, "lobby_map_label"):
                 self.lobby_map_label.configure(text=map_name)
+            # Persist host's map so cmd_launch() picks it up
+            if map_folder:
+                prefs.set_active_map(map_folder)
             # Check if joiner has this map — auto-download if missing
             if map_folder:
+                # Check _all_maps cache first, then fall back to filesystem
                 has_map = any(m.folder_name == map_folder for m in getattr(self, "_all_maps", []))
+                if not has_map:
+                    # Filesystem fallback: check both maps/ and usermaps/
+                    has_map = (config.WOPC_MAPS / map_folder).is_dir() or (
+                        config.WOPC_USERMAPS / map_folder
+                    ).is_dir()
                 if not has_map:
                     self.log(f"Map '{map_name}' not found locally — requesting from host...")
                     if self._lobby_client:
@@ -2500,7 +2540,7 @@ class WopcApp(BaseApp):  # type: ignore
                 map_display = m.display_name
                 break
 
-        return {
+        state = {
             "map_folder": active_map,
             "map_name": map_display,
             "game_options": self.get_game_options(),
@@ -2512,6 +2552,28 @@ class WopcApp(BaseApp):  # type: ignore
             "players": self._lobby_server.connected_players if self._lobby_server else [],
             "content_packs": mods.get_enabled_packs(),
         }
+        logger.debug(
+            "Built game state: map=%s, players=%d, ai=%d",
+            active_map,
+            len(state["players"]),
+            len(state["ai_slots"]),
+        )
+        return state
+
+    def _refresh_cached_game_state(self) -> None:
+        """Rebuild the cached game state snapshot (GUI thread only).
+
+        The network thread calls ``_get_cached_game_state()`` to read the
+        snapshot without touching any tkinter widgets.
+        """
+        state = self._build_game_state()
+        with self._game_state_lock:
+            self._cached_game_state = state
+
+    def _get_cached_game_state(self) -> dict[str, Any] | None:
+        """Return the last cached game state (thread-safe, any thread)."""
+        with self._game_state_lock:
+            return self._cached_game_state
 
     def _validate_before_launch(self) -> list[str]:
         """Check pre-launch conditions. Returns list of error strings (empty = OK)."""
@@ -2546,9 +2608,10 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _broadcast_game_state(self) -> None:
         """Send the current game state to all connected joiners."""
+        self._refresh_cached_game_state()
         if not self._lobby_server or not self._lobby_server.is_running:
             return
-        state = self._build_game_state()
+        state = self._get_cached_game_state()
         if state:
             self._lobby_server.broadcast_state(state)
 
@@ -2766,9 +2829,10 @@ class WopcApp(BaseApp):  # type: ignore
             return
         port = int(self.port_entry.get() or "15000")
         prefs.set_host_port(str(port))
+        self._refresh_cached_game_state()
         callbacks = self._make_lobby_callbacks(is_host=True)
         self._lobby_server = LobbyServer(
-            port, callbacks, game_state_provider=self._build_game_state
+            port, callbacks, game_state_provider=self._get_cached_game_state
         )
         try:
             self._lobby_server.start()
@@ -3250,10 +3314,11 @@ class WopcApp(BaseApp):  # type: ignore
     def _on_create_game(self) -> None:
         """Handle CREATE GAME click on browser screen."""
         self._is_hosting = True
+        self._refresh_cached_game_state()
         port = int(prefs.get_host_port() or "15000")
         callbacks = self._make_lobby_callbacks(is_host=True)
         self._lobby_server = LobbyServer(
-            port, callbacks, game_state_provider=self._build_game_state
+            port, callbacks, game_state_provider=self._get_cached_game_state
         )
         try:
             self._lobby_server.start()
