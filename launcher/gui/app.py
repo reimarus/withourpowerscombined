@@ -1663,21 +1663,57 @@ class WopcApp(BaseApp):  # type: ignore
         return -1
 
     def _add_ai_slot(self) -> None:
-        """Add an AI opponent slot row."""
+        """Add an AI opponent slot row (solo mode)."""
+        self._add_ai_slot_to(
+            parent=self.slots_scroll,
+            slot_list=self.player_slots,
+            use_swatch=True,
+            track_spawn=True,
+        )
+
+    def _add_lobby_ai_slot(self) -> None:
+        """Add an AI opponent slot row (lobby mode)."""
+        self._add_ai_slot_to(
+            parent=self.lobby_slots_scroll,
+            slot_list=self.lobby_player_slots,
+            use_swatch=False,
+            track_spawn=False,
+        )
+
+    def _add_ai_slot_to(
+        self,
+        parent: Any,
+        slot_list: list[dict[str, Any]],
+        *,
+        use_swatch: bool = True,
+        track_spawn: bool = False,
+    ) -> None:
+        """Unified AI slot builder for both solo and lobby screens.
+
+        Parameters
+        ----------
+        parent : widget
+            The scrollable frame to place widgets in.
+        slot_list : list
+            The slot list to append to (player_slots or lobby_player_slots).
+        use_swatch : bool
+            True → HSV color swatch picker (solo). False → dropdown (lobby).
+        track_spawn : bool
+            True → assign start_spot and redraw canvas (solo only).
+        """
         info = self._current_map_info
         max_armies = len(info.markers.armies) if info and info.markers else self.MAX_SLOTS
-        if len(self.player_slots) >= min(self.MAX_SLOTS, max_armies):
+        if len(slot_list) >= min(self.MAX_SLOTS, max_armies):
             return
 
-        # Find first unoccupied spawn for the new slot
-        free_spawn = self._first_free_spawn()
+        free_spawn = self._first_free_spawn() if track_spawn else -1
 
-        row = len(self.player_slots)
+        row = len(slot_list)
         slot_num = row + 1
         widgets: list[Any] = []
 
         lbl = ctk.CTkLabel(
-            self.slots_scroll,
+            parent,
             text=str(slot_num),
             width=20,
             text_color=COLOR_TEXT_MUTED,
@@ -1689,7 +1725,7 @@ class WopcApp(BaseApp):  # type: ignore
         # AI difficulty
         ai_var = ctk.StringVar(value="Medium")
         ai_menu = ctk.CTkOptionMenu(
-            self.slots_scroll,
+            parent,
             values=self.AI_DISPLAY_NAMES,
             variable=ai_var,
             width=90,
@@ -1701,7 +1737,7 @@ class WopcApp(BaseApp):  # type: ignore
         # Faction
         faction_var = ctk.StringVar(value="Random")
         faction_menu = ctk.CTkOptionMenu(
-            self.slots_scroll,
+            parent,
             values=self.FACTION_NAMES,
             variable=faction_var,
             width=90,
@@ -1711,9 +1747,9 @@ class WopcApp(BaseApp):  # type: ignore
         widgets.append(faction_menu)
 
         # Team (auto-balanced)
-        team_var = ctk.StringVar(value=self._next_team(self.player_slots))
+        team_var = ctk.StringVar(value=self._next_team(slot_list))
         team_menu = ctk.CTkOptionMenu(
-            self.slots_scroll,
+            parent,
             values=["1", "2", "3", "4"],
             variable=team_var,
             command=self._on_team_change,
@@ -1723,10 +1759,21 @@ class WopcApp(BaseApp):  # type: ignore
         team_menu.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(team_menu)
 
-        # Color swatch picker
+        # Color — swatch picker (solo) or dropdown (lobby)
         color_var = ctk.StringVar(value=self._next_free_color())
-        swatch = self._create_color_swatch(self.slots_scroll, color_var, row, 4)
-        widgets.append(swatch)
+        if use_swatch:
+            color_widget = self._create_color_swatch(parent, color_var, row, 4)
+        else:
+            color_widget = ctk.CTkOptionMenu(
+                parent,
+                values=self._get_color_names(),
+                variable=color_var,
+                command=self._on_color_change,
+                width=70,
+                height=24,
+            )
+            color_widget.grid(row=row, column=4, padx=5, pady=2)
+        widgets.append(color_widget)
 
         slot_dict: dict[str, Any] = {
             "type": "ai",
@@ -1736,19 +1783,23 @@ class WopcApp(BaseApp):  # type: ignore
             "color_var": color_var,
             "widgets": widgets,
         }
-        if free_spawn >= 0:
+        if track_spawn and free_spawn >= 0:
             slot_dict["start_spot"] = free_spawn
 
         # Remove button — reference the slot dict, not a stale index
-        def remove_this(sd: dict[str, Any] = slot_dict) -> None:
+        def remove_this(
+            sd: dict[str, Any] = slot_dict,
+            sl: list[dict[str, Any]] = slot_list,
+            redraw: bool = track_spawn,
+        ) -> None:
             try:
-                idx = self.player_slots.index(sd)
+                idx = sl.index(sd)
             except ValueError:
                 return
-            self._remove_slot(idx)
+            self._remove_slot_from(sl, idx, redraw=redraw)
 
         remove_btn = ctk.CTkButton(
-            self.slots_scroll,
+            parent,
             text="✕",
             width=24,
             height=24,
@@ -1760,175 +1811,47 @@ class WopcApp(BaseApp):  # type: ignore
         remove_btn.grid(row=row, column=5, pady=2)
         widgets.append(remove_btn)
 
-        self.player_slots.append(slot_dict)
+        slot_list.append(slot_dict)
         self._broadcast_game_state()
-        self._redraw_canvas()
+        if track_spawn:
+            self._redraw_canvas()
 
     def _remove_slot(self, index: int) -> None:
-        """Remove a player slot and re-layout remaining slots."""
-        if index < 1 or index >= len(self.player_slots):
+        """Remove a solo player slot."""
+        if index < 1:
             return  # Can't remove human slot (index 0)
-
-        # Destroy widgets for the removed slot
-        slot = self.player_slots.pop(index)
-        for w in slot["widgets"]:
-            w.destroy()
-
-        # Re-layout all remaining slots
-        for i, s in enumerate(self.player_slots):
-            for w in s["widgets"]:
-                w.grid_configure(row=i)
-            # Update slot number label
-            s["widgets"][0].configure(text=str(i + 1))
-        self._broadcast_game_state()
-        self._redraw_canvas()
-
-    # ------------------------------------------------------------------
-    # Lobby Player Slots (mirror of solo slots for the lobby screen)
-    # ------------------------------------------------------------------
-
-    def _add_lobby_ai_slot(self) -> None:
-        """Add an AI opponent slot row in the lobby screen."""
-        info = self._current_map_info
-        max_armies = len(info.markers.armies) if info and info.markers else self.MAX_SLOTS
-        if len(self.lobby_player_slots) >= min(self.MAX_SLOTS, max_armies):
-            return
-
-        row = len(self.lobby_player_slots)
-        slot_num = row + 1
-        widgets: list[Any] = []
-
-        lbl = ctk.CTkLabel(
-            self.lobby_slots_scroll,
-            text=str(slot_num),
-            width=20,
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12),
-        )
-        lbl.grid(row=row, column=0, padx=(0, 5), pady=2)
-        widgets.append(lbl)
-
-        # AI difficulty
-        ai_var = ctk.StringVar(value="Medium")
-        ai_menu = ctk.CTkOptionMenu(
-            self.lobby_slots_scroll,
-            values=self.AI_DISPLAY_NAMES,
-            variable=ai_var,
-            width=90,
-            height=24,
-        )
-        ai_menu.grid(row=row, column=1, sticky="w", pady=2)
-        widgets.append(ai_menu)
-
-        # Faction
-        faction_var = ctk.StringVar(value="Random")
-        faction_menu = ctk.CTkOptionMenu(
-            self.lobby_slots_scroll,
-            values=self.FACTION_NAMES,
-            variable=faction_var,
-            width=90,
-            height=24,
-        )
-        faction_menu.grid(row=row, column=2, padx=5, pady=2)
-        widgets.append(faction_menu)
-
-        # Team (auto-balanced)
-        team_var = ctk.StringVar(value=self._next_team(self.lobby_player_slots))
-        team_menu = ctk.CTkOptionMenu(
-            self.lobby_slots_scroll,
-            values=["1", "2", "3", "4"],
-            variable=team_var,
-            width=50,
-            height=24,
-        )
-        team_menu.grid(row=row, column=3, padx=5, pady=2)
-        widgets.append(team_menu)
-
-        # Color selector
-        color_var = ctk.StringVar(value=self._next_free_color())
-        color_menu = ctk.CTkOptionMenu(
-            self.lobby_slots_scroll,
-            values=self._get_color_names(),
-            variable=color_var,
-            command=self._on_color_change,
-            width=70,
-            height=24,
-        )
-        color_menu.grid(row=row, column=4, padx=5, pady=2)
-        widgets.append(color_menu)
-
-        lobby_slot_dict: dict[str, Any] = {
-            "type": "ai",
-            "ai_var": ai_var,
-            "faction_var": faction_var,
-            "team_var": team_var,
-            "color_var": color_var,
-            "widgets": widgets,
-        }
-
-        # Remove button — reference the slot dict, not a stale index
-        def remove_this(sd: dict[str, Any] = lobby_slot_dict) -> None:
-            try:
-                idx = self.lobby_player_slots.index(sd)
-            except ValueError:
-                return
-            self._remove_lobby_slot(idx)
-
-        remove_btn = ctk.CTkButton(
-            self.lobby_slots_scroll,
-            text="\u2715",
-            width=24,
-            height=24,
-            fg_color="transparent",
-            hover_color=COLOR_DANGER,
-            text_color=COLOR_TEXT_MUTED,
-            command=remove_this,
-        )
-        remove_btn.grid(row=row, column=5, pady=2)
-        widgets.append(remove_btn)
-
-        self.lobby_player_slots.append(lobby_slot_dict)
-        self._broadcast_game_state()
+        self._remove_slot_from(self.player_slots, index, redraw=True)
 
     def _remove_lobby_slot(self, index: int) -> None:
-        """Remove a player slot from the lobby screen and re-layout remaining slots."""
-        if index < 0 or index >= len(self.lobby_player_slots):
+        """Remove a lobby player slot."""
+        self._remove_slot_from(self.lobby_player_slots, index, redraw=False)
+
+    def _remove_slot_from(
+        self, slot_list: list[dict[str, Any]], index: int, *, redraw: bool = False
+    ) -> None:
+        """Unified slot removal for both solo and lobby screens."""
+        if index < 0 or index >= len(slot_list):
+            return
+        # Don't remove human slot (always index 0 in solo)
+        if slot_list is self.player_slots and index < 1:
             return
 
-        # Destroy widgets for the removed slot
-        slot = self.lobby_player_slots.pop(index)
+        slot = slot_list.pop(index)
         for w in slot["widgets"]:
             w.destroy()
 
-        # Re-layout all remaining slots
-        for i, s in enumerate(self.lobby_player_slots):
+        # Re-layout remaining slots
+        for i, s in enumerate(slot_list):
             for w in s["widgets"]:
                 w.grid_configure(row=i)
-            # Update slot number label
             s["widgets"][0].configure(text=str(i + 1))
         self._broadcast_game_state()
+        if redraw:
+            self._redraw_canvas()
 
     def _get_lobby_ai_opponents(self) -> list[dict[str, Any]]:
         """Collect AI opponent config from the lobby slot UI."""
-        opponents: list[dict[str, Any]] = []
-        for slot in self.lobby_player_slots:
-            if slot.get("type") != "ai":
-                continue
-            ai_display = slot["ai_var"].get()
-            ai_key = ai_display.lower()
-            faction = slot["faction_var"].get().lower()
-            team = int(slot["team_var"].get())
-            color = self._color_name_to_index(slot["color_var"].get())
-            opponents.append(
-                {
-                    "name": f"AI {len(opponents) + 1}: {ai_display}",
-                    "faction": faction,
-                    "ai": ai_key,
-                    "team": team,
-                    "color": color,
-                }
-            )
-        return opponents
+        return self._get_ai_opponents_from(self.lobby_player_slots)
 
     def _clear_lobby_player_slots(self) -> None:
         """Destroy all lobby player slot widgets and clear the list."""
@@ -1965,27 +1888,44 @@ class WopcApp(BaseApp):  # type: ignore
         return 2
 
     def get_ai_opponents(self) -> list[dict[str, Any]]:
-        """Collect AI opponent config from the slot UI for game_config.py."""
+        """Collect AI opponent config from the solo slot UI for game_config.py."""
+        return self._get_ai_opponents_from(self.player_slots, engine_offset=True)
+
+    def _get_ai_opponents_from(
+        self,
+        slot_list: list[dict[str, Any]],
+        *,
+        engine_offset: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Unified AI opponent extraction from any slot list.
+
+        Parameters
+        ----------
+        engine_offset : bool
+            True → add +1 to team (UI→engine) and include start_spot.
+            False → raw UI values (lobby mode).
+        """
         opponents: list[dict[str, Any]] = []
-        for si, slot in enumerate(self.player_slots):
-            if slot["type"] != "ai":
+        for si, slot in enumerate(slot_list):
+            if slot.get("type") != "ai":
                 continue
             ai_display = slot["ai_var"].get()
             ai_key = ai_display.lower()
             faction = slot["faction_var"].get().lower()
-            team = int(slot["team_var"].get()) + 1  # UI 1-4 → engine 2-5
+            team = int(slot["team_var"].get())
+            if engine_offset:
+                team += 1  # UI 1-4 → engine 2-5
             color = self._color_name_to_index(slot["color_var"].get())
-            start_spot = slot.get("start_spot", si) + 1  # 1-based for engine
-            opponents.append(
-                {
-                    "name": f"AI {len(opponents) + 1}: {ai_display}",
-                    "faction": faction,
-                    "ai": ai_key,
-                    "team": team,
-                    "color": color,
-                    "start_spot": start_spot,
-                }
-            )
+            entry: dict[str, Any] = {
+                "name": f"AI {len(opponents) + 1}: {ai_display}",
+                "faction": faction,
+                "ai": ai_key,
+                "team": team,
+                "color": color,
+            }
+            if engine_offset:
+                entry["start_spot"] = slot.get("start_spot", si) + 1  # 1-based
+            opponents.append(entry)
         return opponents
 
     # ------------------------------------------------------------------
