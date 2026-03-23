@@ -730,3 +730,160 @@ class TestClientSendChat:
         finally:
             client.disconnect()
             server.stop()
+
+
+# ---------------------------------------------------------------------------
+# GameState buffering tests (fix for backlog #56)
+# ---------------------------------------------------------------------------
+
+
+class TestGameStateBuffering:
+    """Verify GameState isn't lost when TCP coalesces it with Welcome."""
+
+    def test_game_state_received_after_welcome(self):
+        """LobbyClient receives GameState via on_state_updated callback."""
+        port = _find_free_port()
+
+        def provide_state():
+            return {"map_folder": "scmp_009", "map_name": "Theta Passage"}
+
+        server = LobbyServer(port, LobbyCallbacks(), game_state_provider=provide_state)
+        server.start()
+
+        connected = threading.Event()
+        state_received = threading.Event()
+        received_state: dict = {}
+
+        def on_state(state):
+            received_state.update(state)
+            state_received.set()
+
+        client = LobbyClient(
+            "127.0.0.1",
+            port,
+            "Joiner",
+            "uef",
+            LobbyCallbacks(
+                on_connected=lambda: connected.set(),
+                on_state_updated=on_state,
+            ),
+        )
+        try:
+            client.connect()
+            assert connected.wait(timeout=10.0), "Client did not connect"
+            assert state_received.wait(timeout=5.0), "GameState not received"
+            assert received_state["map_folder"] == "scmp_009"
+            assert received_state["map_name"] == "Theta Passage"
+        finally:
+            client.disconnect()
+            server.stop()
+
+    def test_pending_messages_not_lost(self):
+        """Both on_connected and on_state_updated fire when Welcome+GameState coalesce."""
+        port = _find_free_port()
+
+        def provide_state():
+            return {"map_folder": "scmp_007", "game_options": {"Victory": "Sandbox"}}
+
+        server = LobbyServer(port, LobbyCallbacks(), game_state_provider=provide_state)
+        server.start()
+
+        connected = threading.Event()
+        state_received = threading.Event()
+        received_state: dict = {}
+
+        def on_state(state):
+            received_state.update(state)
+            state_received.set()
+
+        client = LobbyClient(
+            "127.0.0.1",
+            port,
+            "Tester",
+            "cybran",
+            LobbyCallbacks(
+                on_connected=lambda: connected.set(),
+                on_state_updated=on_state,
+            ),
+        )
+        try:
+            client.connect()
+            # Both events must fire
+            assert connected.wait(timeout=10.0), "on_connected not fired"
+            assert state_received.wait(timeout=5.0), "on_state_updated not fired"
+            assert received_state.get("game_options", {}).get("Victory") == "Sandbox"
+        finally:
+            client.disconnect()
+            server.stop()
+
+    def test_game_state_provider_returns_none_safely(self):
+        """Client connects normally when provider returns None (no GameState sent)."""
+        port = _find_free_port()
+        server = LobbyServer(port, LobbyCallbacks(), game_state_provider=lambda: None)
+        server.start()
+
+        connected = threading.Event()
+        client = LobbyClient(
+            "127.0.0.1",
+            port,
+            "NullState",
+            "aeon",
+            LobbyCallbacks(on_connected=lambda: connected.set()),
+        )
+        try:
+            client.connect()
+            assert connected.wait(timeout=10.0), "Client did not connect"
+            assert client.is_connected
+            assert client.player_id is not None
+        finally:
+            client.disconnect()
+            server.stop()
+
+    def test_multiple_joiners_each_get_state(self):
+        """Two sequential joiners both receive GameState with correct data."""
+        port = _find_free_port()
+
+        def provide_state():
+            return {"map_folder": "scmp_012", "map_name": "Fields of Isis"}
+
+        server = LobbyServer(port, LobbyCallbacks(), game_state_provider=provide_state)
+        server.start()
+
+        results: list[dict] = []
+        lock = threading.Lock()
+
+        def make_client(name: str) -> None:
+            connected = threading.Event()
+            state_received = threading.Event()
+            received: dict = {}
+
+            def on_state(state):
+                received.update(state)
+                state_received.set()
+
+            c = LobbyClient(
+                "127.0.0.1",
+                port,
+                name,
+                "uef",
+                LobbyCallbacks(
+                    on_connected=lambda: connected.set(),
+                    on_state_updated=on_state,
+                ),
+            )
+            c.connect()
+            assert connected.wait(timeout=10.0), f"{name} did not connect"
+            assert state_received.wait(timeout=5.0), f"{name} did not get state"
+            with lock:
+                results.append(received)
+            c.disconnect()
+
+        try:
+            make_client("Joiner1")
+            make_client("Joiner2")
+            assert len(results) == 2
+            for r in results:
+                assert r["map_folder"] == "scmp_012"
+                assert r["map_name"] == "Fields of Isis"
+        finally:
+            server.stop()
