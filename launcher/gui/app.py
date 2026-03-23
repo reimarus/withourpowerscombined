@@ -4,7 +4,7 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
 try:
     from PIL import Image as PilImage  # type: ignore[import-not-found]
@@ -31,6 +31,31 @@ else:
         BaseApp = object  # type: ignore[misc, no-redef]
 
 from launcher import config, file_transfer, prefs, updater
+from launcher.gui.constants import (
+    AI_DISPLAY_NAMES as _AI_NAMES,
+)
+from launcher.gui.constants import (
+    FACTION_NAMES as _FACTIONS,
+)
+from launcher.gui.constants import (
+    GAME_OPTION_DEFS as _GAME_OPT_DEFS,
+)
+from launcher.gui.constants import (
+    LOBBY_PREVIEW_SIZE,
+    PLAY_LABELS,
+    PLAYER_COLORS,
+    PREVIEW_MIN,
+    color_hex_to_index,
+    color_name_to_hex,
+    game_options_to_engine,
+)
+from launcher.gui.constants import (
+    MAX_SLOTS as _MAX_SLOTS,
+)
+from launcher.gui.constants import (
+    VICTORY_DESCRIPTIONS as _VICTORY_DESCS,
+)
+from launcher.gui.map_canvas import DictSlotAccessor, MapCanvas
 from launcher.gui.worker import SetupWorker
 from launcher.wopc import cmd_launch
 
@@ -58,25 +83,6 @@ COLOR_DANGER = "#E84855"  # Red — LEAVE / destructive actions
 COLOR_TEXT_PRIMARY = "#E8E4D4"  # Warm cream (not cold white)
 COLOR_TEXT_MUTED = "#4A5A70"  # Muted navy-grey
 COLOR_TEXT_GOLD = "#C8A84B"  # Gold text (headers, section labels)
-
-# SCFA player colors (index 1-8 match engine's color system)
-PLAYER_COLORS: list[tuple[str, str]] = [
-    ("#FF0000", "Red"),
-    ("#0000FF", "Blue"),
-    ("#18DAE8", "Teal"),
-    ("#DFBF00", "Yellow"),
-    ("#FF6600", "Orange"),
-    ("#9161FF", "Purple"),
-    ("#FF88FF", "Pink"),
-    ("#00FF00", "Green"),
-]
-
-
-def _icons_dir() -> Path:
-    """Resolve the GUI icons directory (works in dev mode and frozen exe)."""
-    if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS) / "launcher" / "gui" / "icons"  # type: ignore[attr-defined]
-    return Path(__file__).parent / "icons"
 
 
 class WopcApp(BaseApp):  # type: ignore
@@ -123,24 +129,8 @@ class WopcApp(BaseApp):  # type: ignore
         self._current_screen: str = "solo"
         self._log_lines: list[str] = []
 
-        # Map preview state
-        self._canvas_image_id: int | None = None
-        self._canvas_tk_image: Any = None
+        # Map preview state (canvas rendering is in MapCanvas)
         self._current_map_info: map_scanner.MapInfo | None = None
-        self._raw_preview: Any = None
-        self._canvas_redraw_id: str | None = None
-        self._scroll_redraw_id: str | None = None
-        self._marker_icons: dict[str, Any] = {}  # raw PIL images
-        self._marker_tk_cache: list[Any] = []  # keep refs alive for tk
-        self._zoom: float = 1.0
-        self._pan_x: float = 0.0
-        self._pan_y: float = 0.0
-        self._drag_start: tuple[int, int] | None = None
-        self._drag_moved: bool = False
-        self._drag_spawn_src: int = -1  # spawn being dragged
-        self._hover_spawn: int = -1  # index of spawn under cursor
-        self._tinted_icon_cache: dict[tuple[str, int, str], Any] = {}
-        self._load_marker_icons()
 
         self.title("WOPC - Match Lobby")
         self._restore_window_size()
@@ -169,22 +159,8 @@ class WopcApp(BaseApp):  # type: ignore
         self._pending_update: updater.UpdateInfo | None = None
         threading.Thread(target=self._check_for_update, daemon=True).start()
 
-    def _load_marker_icons(self) -> None:
-        """Load map marker icon PNGs from the icons directory."""
-        if not _PIL_AVAILABLE:
-            return
-        icons = _icons_dir()
-        for name in ("marker_mass", "marker_hydro", "marker_commander"):
-            path = icons / f"{name}.png"
-            if path.exists():
-                try:
-                    self._marker_icons[name] = PilImage.open(path).convert("RGBA")
-                except Exception as exc:
-                    logger.debug("Failed to load icon %s: %s", name, exc)
-
     def _set_window_icon(self) -> None:
         """Set the application window icon if it exists."""
-        from pathlib import Path
 
         if getattr(sys, "frozen", False):
             # PyInstaller extracts bundled data to _MEIPASS
@@ -233,16 +209,16 @@ class WopcApp(BaseApp):  # type: ignore
         """Return a thin 1-pixel accent line for use as a section separator."""
         return ctk.CTkFrame(parent, fg_color=color, height=1, corner_radius=0)
 
-    _PREVIEW_MIN: ClassVar[int] = 320
-    _LOBBY_PREVIEW_SIZE: ClassVar[int] = 280
+    _PREVIEW_MIN = PREVIEW_MIN
+    _LOBBY_PREVIEW_SIZE = LOBBY_PREVIEW_SIZE
 
     def _update_map_preview(self, info: "map_scanner.MapInfo | None") -> None:
         """Load and display the map preview image and metadata."""
         self._current_map_info = info
 
         if info is None:
-            self._raw_preview = None
-            self._redraw_canvas()
+            if hasattr(self, "_map_canvas_widget"):
+                self._map_canvas_widget.set_map(None)
             self.map_preview_name.configure(text="No map selected")
             if hasattr(self, "lobby_map_preview_label"):
                 self.lobby_map_preview_label.configure(image=None, text="No Preview")
@@ -259,22 +235,15 @@ class WopcApp(BaseApp):  # type: ignore
         label = f"{parts[0]} — {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
         self.map_preview_name.configure(text=label)
 
-        # Reset zoom/pan/cache when map changes
-        self._zoom = 1.0
-        self._pan_x = 0.0
-        self._pan_y = 0.0
-        self._tinted_icon_cache.clear()
-        self._hover_spawn = -1
-
         # Load raw preview image for canvas rendering
-        self._raw_preview = None
+        raw_preview = None
         lobby_ctk_img = None
         if _PIL_AVAILABLE and info.preview_path and info.preview_path.exists():
             try:
-                self._raw_preview = PilImage.open(info.preview_path).convert("RGB")
+                raw_preview = PilImage.open(info.preview_path).convert("RGB")
                 # Lobby preview (separate widget, still uses CTkImage)
                 lsz = self._LOBBY_PREVIEW_SIZE
-                lobby = self._raw_preview.resize(
+                lobby = raw_preview.resize(
                     (lsz, lsz),
                     PilImage.LANCZOS,  # type: ignore[attr-defined]
                 )
@@ -283,7 +252,9 @@ class WopcApp(BaseApp):  # type: ignore
             except Exception as exc:
                 logger.warning("Failed to load map preview %s: %s", info.preview_path, exc)
 
-        self._redraw_canvas()
+        # Delegate rendering to MapCanvas
+        if hasattr(self, "_map_canvas_widget"):
+            self._map_canvas_widget.set_map(info, raw_preview)
 
         # Update lobby preview widget
         if hasattr(self, "lobby_map_preview_label"):
@@ -298,171 +269,6 @@ class WopcApp(BaseApp):  # type: ignore
             if info.size_label and info.size_label != "?":
                 detail_parts.append(info.size_label)
             self.lobby_map_info.configure(text=", ".join(detail_parts))
-
-    def _on_canvas_resize(self, event: Any) -> None:
-        """Redraw the map canvas when its size changes (throttled)."""
-        # Cancel any pending redraw to avoid flickering during resize
-        if hasattr(self, "_canvas_redraw_id") and self._canvas_redraw_id is not None:
-            self.after_cancel(self._canvas_redraw_id)
-        self._canvas_redraw_id = self.after(50, self._redraw_canvas)
-
-    def _on_canvas_scroll(self, event: Any) -> None:
-        """Zoom the map canvas toward the mouse position (throttled)."""
-        if not hasattr(self, "map_canvas"):
-            return
-        old_zoom = self._zoom
-        if event.delta > 0:
-            self._zoom = min(4.0, self._zoom * 1.15)
-        else:
-            self._zoom = max(1.0, self._zoom / 1.15)
-
-        canvas = self.map_canvas
-        cw = canvas.winfo_width()
-        ch = canvas.winfo_height()
-        mx_rel = event.x - cw / 2
-        my_rel = event.y - ch / 2
-        scale = self._zoom / old_zoom
-        self._pan_x = mx_rel - scale * (mx_rel - self._pan_x)
-        self._pan_y = my_rel - scale * (my_rel - self._pan_y)
-        self._clamp_pan()
-        # Throttle scroll redraws to avoid lag
-        if hasattr(self, "_scroll_redraw_id") and self._scroll_redraw_id is not None:
-            self.after_cancel(self._scroll_redraw_id)
-        self._scroll_redraw_id = self.after(16, self._redraw_canvas)
-
-    def _on_canvas_drag_start(self, event: Any) -> None:
-        """Start panning the map canvas (or spawn drag if clicking a spawn)."""
-        self._drag_start = (event.x, event.y)
-        self._drag_moved = False
-        self._drag_spawn_src = self._hit_test_spawn(event.x, event.y)
-
-    # Minimum pixel distance before a click becomes a drag
-    _DRAG_THRESHOLD: ClassVar[int] = 8
-
-    def _on_canvas_drag(self, event: Any) -> None:
-        """Pan the map canvas by dragging, or drag a spawn to swap positions."""
-        if self._drag_start is None:
-            return
-        dx = event.x - self._drag_start[0]
-        dy = event.y - self._drag_start[1]
-        if abs(dx) > self._DRAG_THRESHOLD or abs(dy) > self._DRAG_THRESHOLD:
-            self._drag_moved = True
-        # If dragging from a spawn point, draw a ghost icon at cursor position
-        if getattr(self, "_drag_spawn_src", -1) >= 0:
-            if self._drag_moved:
-                self._draw_drag_ghost(event.x, event.y)
-            return
-        self._drag_start = (event.x, event.y)
-        self._pan_x += dx
-        self._pan_y += dy
-        self._clamp_pan()
-        self._redraw_canvas()
-
-    def _on_canvas_release(self, event: Any) -> None:
-        """Handle mouse release — click (spawn select), spawn drag-drop, or end pan."""
-        src = getattr(self, "_drag_spawn_src", -1)
-        if not self._drag_moved:
-            self._on_canvas_click(event)
-        elif src >= 0:
-            # Dragged from a spawn — check if dropped on another spawn
-            dst = self._hit_test_spawn(event.x, event.y)
-            if dst >= 0 and dst != src:
-                self._swap_spawns(src, dst)
-        self._drag_start = None
-        self._drag_moved = False
-        self._drag_spawn_src = -1
-        # Clean up drag ghost overlay
-        self._clear_drag_ghost()
-
-    def _on_canvas_motion(self, event: Any) -> None:
-        """Track mouse hover over spawn positions for halo effect."""
-        hit = self._hit_test_spawn(event.x, event.y)
-        if hit != self._hover_spawn:
-            self._hover_spawn = hit
-            canvas = self.map_canvas
-            canvas.configure(cursor="hand2" if hit >= 0 else "")
-            self._redraw_canvas()
-
-    def _draw_drag_ghost(self, cx: int, cy: int) -> None:
-        """Draw a semi-transparent ghost icon at the cursor during spawn drag."""
-        canvas = self.map_canvas
-        # Remove previous ghost items
-        canvas.delete("drag_ghost")
-        # Draw ghost commander icon at cursor
-        icon_size = max(16, min(canvas.winfo_width(), canvas.winfo_height()) // 22)
-        r = icon_size // 2
-        canvas.create_oval(
-            cx - r,
-            cy - r,
-            cx + r,
-            cy + r,
-            fill="",
-            outline="#FFFFFF",
-            width=2,
-            stipple="gray50",
-            tags="drag_ghost",
-        )
-        # Highlight valid drop targets
-        dst = self._hit_test_spawn(cx, cy)
-        if dst >= 0 and dst != getattr(self, "_drag_spawn_src", -1):
-            info = self._current_map_info
-            if info and info.markers and info.map_width:
-                cw = canvas.winfo_width()
-                ch = canvas.winfo_height()
-                base_size = min(cw, ch)
-                size = int(base_size * self._zoom)
-                ox = int((cw - size) / 2 + self._pan_x)
-                oy = int((ch - size) / 2 + self._pan_y)
-                _name, mx, mz = info.markers.armies[dst]
-                px = ox + int(mx / info.map_width * size)
-                py = oy + int(mz / (info.map_height or info.map_width) * size)
-                halo_r = icon_size // 2 + 6
-                canvas.create_oval(
-                    px - halo_r,
-                    py - halo_r,
-                    px + halo_r,
-                    py + halo_r,
-                    fill="",
-                    outline="#00FF00",
-                    width=2,
-                    tags="drag_ghost",
-                )
-
-    def _clear_drag_ghost(self) -> None:
-        """Remove the drag ghost overlay from the canvas."""
-        if hasattr(self, "map_canvas"):
-            self.map_canvas.delete("drag_ghost")
-
-    def _hit_test_spawn(self, mx: int, my: int) -> int:
-        """Return spawn index under (mx, my), or -1 if none."""
-        if not hasattr(self, "map_canvas") or self._current_map_info is None:
-            return -1
-        info = self._current_map_info
-        if info.markers is None or info.map_width == 0:
-            return -1
-        canvas = self.map_canvas
-        cw = canvas.winfo_width()
-        ch = canvas.winfo_height()
-        base_size = min(cw, ch)
-        size = int(base_size * self._zoom)
-        ox = int((cw - size) / 2 + self._pan_x)
-        oy = int((ch - size) / 2 + self._pan_y)
-        mw = info.map_width
-        mh = info.map_height or mw
-        spawn_icon_size = max(16, base_size // 22)
-        hit_radius = spawn_icon_size // 2 + 4
-        for i, (_name, map_x, map_z) in enumerate(info.markers.armies):
-            px = ox + int(map_x / mw * size)
-            py = oy + int(map_z / mh * size)
-            if (mx - px) ** 2 + (my - py) ** 2 <= hit_radius**2:
-                return i
-        return -1
-
-    def _on_canvas_click(self, event: Any) -> None:
-        """Handle click on map canvas — select spawn position."""
-        hit = self._hit_test_spawn(event.x, event.y)
-        if hit >= 0:
-            self._select_spawn(hit)
 
     def _select_spawn(self, spawn_index: int) -> None:
         """Select a spawn position for the human player (slot 0).
@@ -492,249 +298,28 @@ class WopcApp(BaseApp):  # type: ignore
         logger.info("Player start spot set to %d", spawn_index + 1)
         self._redraw_canvas()
 
-    def _swap_spawns(self, src_spawn: int, dst_spawn: int) -> None:
-        """Swap the slot assignments between two spawn positions."""
+    def _swap_spawns_by_index(self, src_spawn: int, dst_spawn: int) -> None:
+        """Swap the slot assignments between two spawn positions (callback for MapCanvas)."""
         if not hasattr(self, "player_slots"):
             return
-        # Build current spawn→slot mapping
         spawn_to_slot: dict[int, int] = {}
         for si, slot in enumerate(self.player_slots):
             spawn_to_slot[slot.get("start_spot", si)] = si
-
         src_slot = spawn_to_slot.get(src_spawn)
         dst_slot = spawn_to_slot.get(dst_spawn)
-
-        # Swap start_spot values on the slot dicts
         if src_slot is not None:
             self.player_slots[src_slot]["start_spot"] = dst_spawn
         if dst_slot is not None:
             self.player_slots[dst_slot]["start_spot"] = src_spawn
-
         logger.info("Swapped spawn %d ↔ %d", src_spawn + 1, dst_spawn + 1)
         self._redraw_canvas()
 
-    def _clamp_pan(self) -> None:
-        """Clamp pan offset to keep the map visible."""
-        if not hasattr(self, "map_canvas"):
-            return
-        canvas = self.map_canvas
-        cw = canvas.winfo_width()
-        ch = canvas.winfo_height()
-        base_size = min(cw, ch)
-        max_pan = base_size * self._zoom / 2
-        self._pan_x = max(-max_pan, min(max_pan, self._pan_x))
-        self._pan_y = max(-max_pan, min(max_pan, self._pan_y))
-
-    def _get_tinted_icon(self, icon_key: str, icon_size: int, tint: str) -> Any:
-        """Get a tinted icon from cache, or create and cache it."""
-        cache_key = (icon_key, icon_size, tint)
-        cached = self._tinted_icon_cache.get(cache_key)
-        if cached is not None:
-            return cached
-        raw = self._marker_icons.get(icon_key)
-        if raw is None:
-            return None
-        scaled = raw.resize(
-            (icon_size, icon_size),
-            PilImage.BILINEAR,  # type: ignore[attr-defined]
-        )
-        r_c = int(tint[1:3], 16)
-        g_c = int(tint[3:5], 16)
-        b_c = int(tint[5:7], 16)
-        # Tint only bright pixels (interior), preserve dark pixels (outline)
-        pixels = scaled.load()
-        for yi in range(icon_size):
-            for xi in range(icon_size):
-                r, g, b, a = pixels[xi, yi]
-                if a > 0 and (r + g + b) > 180:
-                    pixels[xi, yi] = (r_c, g_c, b_c, a)
-        self._tinted_icon_cache[cache_key] = scaled
-        return scaled
-
     def _redraw_canvas(self) -> None:
-        """Redraw the map preview and marker overlays on the canvas."""
-        if not hasattr(self, "map_canvas"):
-            return
-        canvas = self.map_canvas
-        canvas.delete("all")
-
-        cw = canvas.winfo_width()
-        ch = canvas.winfo_height()
-        if cw < 10 or ch < 10:
-            return
-
-        # Square preview with zoom and pan
-        base_size = min(cw, ch)
-        size = int(base_size * self._zoom)
-        ox = int((cw - size) / 2 + self._pan_x)
-        oy = int((ch - size) / 2 + self._pan_y)
-
-        if self._raw_preview is not None and _PIL_AVAILABLE:
-            from PIL import ImageTk  # type: ignore[import-not-found]
-
-            # Use BILINEAR for fast zoom; LANCZOS only at 1x
-            resample = (
-                PilImage.LANCZOS if self._zoom == 1.0 else PilImage.BILINEAR  # type: ignore[attr-defined]
-            )
-            resized = self._raw_preview.resize((size, size), resample)
-            self._canvas_tk_image = ImageTk.PhotoImage(resized)
-            self._canvas_image_id = canvas.create_image(
-                ox, oy, anchor="nw", image=self._canvas_tk_image
-            )
-        else:
-            # Dark placeholder rectangle
-            canvas.create_rectangle(ox, oy, ox + size, oy + size, fill=COLOR_BG, outline="")
-            canvas.create_text(
-                ox + size // 2,
-                oy + size // 2,
-                text="No Preview",
-                fill=COLOR_TEXT_MUTED,
-                font=("Segoe UI", 12),
-            )
-            return
-
-        # Draw marker overlays if available
-        info = self._current_map_info
-        if info is None or info.markers is None or info.map_width == 0:
-            return
-
-        from PIL import ImageTk  # type: ignore[import-not-found]
-
-        mw = info.map_width
-        mh = info.map_height or mw  # fallback to square
-        self._marker_tk_cache.clear()
-
-        def _map_to_px(mx: float, mz: float) -> tuple[int, int]:
-            px = ox + int(mx / mw * size)
-            py = oy + int(mz / mh * size)
-            return px, py
-
-        def _draw_icon(icon_key: str, px: int, py: int, icon_size: int) -> None:
-            raw = self._marker_icons.get(icon_key)
-            if raw is not None:
-                scaled = raw.resize(
-                    (icon_size, icon_size),
-                    PilImage.BILINEAR,  # type: ignore[attr-defined]
-                )
-                tk_img = ImageTk.PhotoImage(scaled)
-                canvas.create_image(px, py, image=tk_img)
-                self._marker_tk_cache.append(tk_img)
-
-        # Icon sizes based on base_size (screen-space constant, shrink when zooming)
-        mass_icon_size = max(6, base_size // 50)
-        for mx, mz in info.markers.mass:
-            px, py = _map_to_px(mx, mz)
-            if "marker_mass" in self._marker_icons:
-                _draw_icon("marker_mass", px, py, mass_icon_size)
-            else:
-                r = max(3, size // 80)
-                canvas.create_oval(
-                    px - r,
-                    py - r,
-                    px + r,
-                    py + r,
-                    fill="#00C800",
-                    outline="#006400",
-                    width=max(1, size // 300),
-                )
-
-        # Hydro points — strategic energy icon, slightly larger
-        hydro_icon_size = max(8, base_size // 40)
-        for mx, mz in info.markers.hydro:
-            px, py = _map_to_px(mx, mz)
-            if "marker_hydro" in self._marker_icons:
-                _draw_icon("marker_hydro", px, py, hydro_icon_size)
-            else:
-                r = max(4, size // 60)
-                canvas.create_oval(
-                    px - r,
-                    py - r,
-                    px + r,
-                    py + r,
-                    fill="#FFD700",
-                    outline="#B8860B",
-                    width=max(1, size // 250),
-                )
-
-        # Army spawn positions — tinted commander icon + hover halo + selection
-        slots = self.player_slots if hasattr(self, "player_slots") else []
-        active_count = len(slots)
-        spawn_icon_size = max(16, base_size // 22)
-
-        # Build spawn-to-slot mapping from start_spot assignments
-        spawn_occupied: dict[int, int] = {}  # spawn_index -> slot_index
-        for si, slot in enumerate(slots):
-            spot = slot.get("start_spot", si)  # default: slot index = spawn index
-            spawn_occupied[spot] = si
-
-        for i, (_name, mx, mz) in enumerate(info.markers.armies):
-            px, py = _map_to_px(mx, mz)
-            slot_idx = spawn_occupied.get(i)
-            is_occupied = slot_idx is not None and slot_idx < active_count
-
-            # Use the player's chosen color from their color_var
-            if is_occupied and slot_idx is not None:
-                slot = slots[slot_idx]
-                cvar = slot.get("color_var")
-                color = self._color_name_to_hex(cvar.get()) if cvar else "#444444"
-                team = slot.get("team_var")
-                team_num = team.get() if team and hasattr(team, "get") else "?"
-            else:
-                color = "#444444"
-                team_num = ""
-
-            is_hovered = i == self._hover_spawn
-
-            # Hover halo — glow ring
-            if is_hovered:
-                halo_r = spawn_icon_size // 2 + 5
-                canvas.create_oval(
-                    px - halo_r,
-                    py - halo_r,
-                    px + halo_r,
-                    py + halo_r,
-                    fill="",
-                    outline=color if is_occupied else "#AAAAAA",
-                    width=2,
-                )
-
-            # Selected spawn — bright ring (human player)
-            if is_occupied and slot_idx == 0:
-                sel_r = spawn_icon_size // 2 + 3
-                canvas.create_oval(
-                    px - sel_r,
-                    py - sel_r,
-                    px + sel_r,
-                    py + sel_r,
-                    fill="",
-                    outline="#FFFFFF",
-                    width=2,
-                )
-
-            # Tinted commander icon (preserves black outline)
-            if "marker_commander" in self._marker_icons:
-                tinted = self._get_tinted_icon("marker_commander", spawn_icon_size, color)
-                if tinted is not None:
-                    tk_img = ImageTk.PhotoImage(tinted)
-                    canvas.create_image(px, py, image=tk_img)
-                    self._marker_tk_cache.append(tk_img)
-            else:
-                r = spawn_icon_size // 2
-                canvas.create_oval(
-                    px - r, py - r, px + r, py + r, fill=color, outline="#000000", width=2
-                )
-
-            # Team number label (instead of slot number)
-            if team_num:
-                r = spawn_icon_size // 2 + 2
-                font_size = max(8, base_size // 50)
-                canvas.create_text(
-                    px + r,
-                    py - r,
-                    text=team_num,
-                    fill="#FFFFFF",
-                    font=("Segoe UI", font_size, "bold"),
-                )
+        """Delegate map canvas redraw to the MapCanvas widget."""
+        if hasattr(self, "_map_canvas_widget"):
+            # Update the slot accessor with current slot data
+            self._slot_accessor._slots = self.player_slots if hasattr(self, "player_slots") else []
+            self._map_canvas_widget.redraw()
 
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
@@ -1022,14 +607,16 @@ class WopcApp(BaseApp):  # type: ignore
         map_frame.grid_columnconfigure(0, weight=1)
         map_frame.grid_rowconfigure(0, weight=1)
 
-        self.map_canvas = tk.Canvas(map_frame, bg=COLOR_BG, highlightthickness=0, cursor="hand2")
-        self.map_canvas.grid(row=0, column=0, padx=4, pady=4, sticky="nsew")
-        self.map_canvas.bind("<Configure>", self._on_canvas_resize)
-        self.map_canvas.bind("<MouseWheel>", self._on_canvas_scroll)
-        self.map_canvas.bind("<ButtonPress-1>", self._on_canvas_drag_start)
-        self.map_canvas.bind("<B1-Motion>", self._on_canvas_drag)
-        self.map_canvas.bind("<ButtonRelease-1>", self._on_canvas_release)
-        self.map_canvas.bind("<Motion>", self._on_canvas_motion)
+        self._slot_accessor = DictSlotAccessor([])
+        self._map_canvas_widget = MapCanvas(
+            parent=map_frame,
+            slot_accessor=self._slot_accessor,
+            on_spawn_select=self._select_spawn,
+            on_spawn_swap=self._swap_spawns_by_index,
+            after_fn=self.after,
+            cancel_fn=self.after_cancel,
+        )
+        self.map_canvas = self._map_canvas_widget.canvas
 
         self.map_preview_name = ctk.CTkLabel(
             map_frame,
@@ -1667,23 +1254,11 @@ class WopcApp(BaseApp):  # type: ignore
     # Player Slots
     # ------------------------------------------------------------------
 
-    FACTION_NAMES: ClassVar[list[str]] = ["Random", "UEF", "Aeon", "Cybran", "Seraphim"]
-    AI_DISPLAY_NAMES: ClassVar[list[str]] = [
-        "Easy",
-        "Medium",
-        "Adaptive",
-        "Rush",
-        "Turtle",
-        "Tech",
-        "Random",
-    ]
-    MAX_SLOTS: ClassVar[int] = 16
-    VICTORY_DESCRIPTIONS: ClassVar[dict[str, str]] = {
-        "Demoralization": "Destroy 70% of an enemy's units to eliminate them",
-        "Supremacy": "Destroy all enemy structures and engineers to win",
-        "Assassination": "Kill the enemy Commander (ACU) to eliminate them",
-        "Sandbox": "No victory condition \u2014 play until you quit",
-    }
+    # Constants imported from launcher.gui.constants
+    FACTION_NAMES = _FACTIONS
+    AI_DISPLAY_NAMES = _AI_NAMES
+    MAX_SLOTS = _MAX_SLOTS
+    VICTORY_DESCRIPTIONS = _VICTORY_DESCS
 
     def _build_player_slots_in(self, parent: Any, grid_row: int = 0) -> None:
         """Build the player slots inside the given parent frame."""
@@ -1749,7 +1324,8 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _on_color_change(self, _val: str) -> None:
         """Broadcast state and redraw map when a color changes."""
-        self._tinted_icon_cache.clear()
+        if hasattr(self, "_map_canvas_widget"):
+            self._map_canvas_widget.invalidate_tint_cache()
         # Persist human player's color to prefs so it survives restarts
         if hasattr(self, "player_color_var"):
             hex_color = self.player_color_var.get()
@@ -1769,12 +1345,7 @@ class WopcApp(BaseApp):  # type: ignore
     @staticmethod
     def _color_name_to_hex(name: str) -> str:
         """Convert a color name or hex value to its hex value."""
-        if name.startswith("#"):
-            return name
-        for hex_val, cname in PLAYER_COLORS:
-            if cname == name:
-                return hex_val
-        return PLAYER_COLORS[0][0]
+        return color_name_to_hex(name)
 
     def _create_color_swatch(self, parent: Any, color_var: Any, row: int, col: int) -> Any:
         """Create a clickable color swatch button that opens a color picker popup."""
@@ -2072,21 +1643,57 @@ class WopcApp(BaseApp):  # type: ignore
         return -1
 
     def _add_ai_slot(self) -> None:
-        """Add an AI opponent slot row."""
+        """Add an AI opponent slot row (solo mode)."""
+        self._add_ai_slot_to(
+            parent=self.slots_scroll,
+            slot_list=self.player_slots,
+            use_swatch=True,
+            track_spawn=True,
+        )
+
+    def _add_lobby_ai_slot(self) -> None:
+        """Add an AI opponent slot row (lobby mode)."""
+        self._add_ai_slot_to(
+            parent=self.lobby_slots_scroll,
+            slot_list=self.lobby_player_slots,
+            use_swatch=False,
+            track_spawn=False,
+        )
+
+    def _add_ai_slot_to(
+        self,
+        parent: Any,
+        slot_list: list[dict[str, Any]],
+        *,
+        use_swatch: bool = True,
+        track_spawn: bool = False,
+    ) -> None:
+        """Unified AI slot builder for both solo and lobby screens.
+
+        Parameters
+        ----------
+        parent : widget
+            The scrollable frame to place widgets in.
+        slot_list : list
+            The slot list to append to (player_slots or lobby_player_slots).
+        use_swatch : bool
+            True → HSV color swatch picker (solo). False → dropdown (lobby).
+        track_spawn : bool
+            True → assign start_spot and redraw canvas (solo only).
+        """
         info = self._current_map_info
         max_armies = len(info.markers.armies) if info and info.markers else self.MAX_SLOTS
-        if len(self.player_slots) >= min(self.MAX_SLOTS, max_armies):
+        if len(slot_list) >= min(self.MAX_SLOTS, max_armies):
             return
 
-        # Find first unoccupied spawn for the new slot
-        free_spawn = self._first_free_spawn()
+        free_spawn = self._first_free_spawn() if track_spawn else -1
 
-        row = len(self.player_slots)
+        row = len(slot_list)
         slot_num = row + 1
         widgets: list[Any] = []
 
         lbl = ctk.CTkLabel(
-            self.slots_scroll,
+            parent,
             text=str(slot_num),
             width=20,
             text_color=COLOR_TEXT_MUTED,
@@ -2098,7 +1705,7 @@ class WopcApp(BaseApp):  # type: ignore
         # AI difficulty
         ai_var = ctk.StringVar(value="Medium")
         ai_menu = ctk.CTkOptionMenu(
-            self.slots_scroll,
+            parent,
             values=self.AI_DISPLAY_NAMES,
             variable=ai_var,
             width=90,
@@ -2110,7 +1717,7 @@ class WopcApp(BaseApp):  # type: ignore
         # Faction
         faction_var = ctk.StringVar(value="Random")
         faction_menu = ctk.CTkOptionMenu(
-            self.slots_scroll,
+            parent,
             values=self.FACTION_NAMES,
             variable=faction_var,
             width=90,
@@ -2120,9 +1727,9 @@ class WopcApp(BaseApp):  # type: ignore
         widgets.append(faction_menu)
 
         # Team (auto-balanced)
-        team_var = ctk.StringVar(value=self._next_team(self.player_slots))
+        team_var = ctk.StringVar(value=self._next_team(slot_list))
         team_menu = ctk.CTkOptionMenu(
-            self.slots_scroll,
+            parent,
             values=["1", "2", "3", "4"],
             variable=team_var,
             command=self._on_team_change,
@@ -2132,10 +1739,21 @@ class WopcApp(BaseApp):  # type: ignore
         team_menu.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(team_menu)
 
-        # Color swatch picker
+        # Color — swatch picker (solo) or dropdown (lobby)
         color_var = ctk.StringVar(value=self._next_free_color())
-        swatch = self._create_color_swatch(self.slots_scroll, color_var, row, 4)
-        widgets.append(swatch)
+        if use_swatch:
+            color_widget = self._create_color_swatch(parent, color_var, row, 4)
+        else:
+            color_widget = ctk.CTkOptionMenu(
+                parent,
+                values=self._get_color_names(),
+                variable=color_var,
+                command=self._on_color_change,
+                width=70,
+                height=24,
+            )
+            color_widget.grid(row=row, column=4, padx=5, pady=2)
+        widgets.append(color_widget)
 
         slot_dict: dict[str, Any] = {
             "type": "ai",
@@ -2145,19 +1763,23 @@ class WopcApp(BaseApp):  # type: ignore
             "color_var": color_var,
             "widgets": widgets,
         }
-        if free_spawn >= 0:
+        if track_spawn and free_spawn >= 0:
             slot_dict["start_spot"] = free_spawn
 
         # Remove button — reference the slot dict, not a stale index
-        def remove_this(sd: dict[str, Any] = slot_dict) -> None:
+        def remove_this(
+            sd: dict[str, Any] = slot_dict,
+            sl: list[dict[str, Any]] = slot_list,
+            redraw: bool = track_spawn,
+        ) -> None:
             try:
-                idx = self.player_slots.index(sd)
+                idx = sl.index(sd)
             except ValueError:
                 return
-            self._remove_slot(idx)
+            self._remove_slot_from(sl, idx, redraw=redraw)
 
         remove_btn = ctk.CTkButton(
-            self.slots_scroll,
+            parent,
             text="✕",
             width=24,
             height=24,
@@ -2169,175 +1791,47 @@ class WopcApp(BaseApp):  # type: ignore
         remove_btn.grid(row=row, column=5, pady=2)
         widgets.append(remove_btn)
 
-        self.player_slots.append(slot_dict)
+        slot_list.append(slot_dict)
         self._broadcast_game_state()
-        self._redraw_canvas()
+        if track_spawn:
+            self._redraw_canvas()
 
     def _remove_slot(self, index: int) -> None:
-        """Remove a player slot and re-layout remaining slots."""
-        if index < 1 or index >= len(self.player_slots):
+        """Remove a solo player slot."""
+        if index < 1:
             return  # Can't remove human slot (index 0)
-
-        # Destroy widgets for the removed slot
-        slot = self.player_slots.pop(index)
-        for w in slot["widgets"]:
-            w.destroy()
-
-        # Re-layout all remaining slots
-        for i, s in enumerate(self.player_slots):
-            for w in s["widgets"]:
-                w.grid_configure(row=i)
-            # Update slot number label
-            s["widgets"][0].configure(text=str(i + 1))
-        self._broadcast_game_state()
-        self._redraw_canvas()
-
-    # ------------------------------------------------------------------
-    # Lobby Player Slots (mirror of solo slots for the lobby screen)
-    # ------------------------------------------------------------------
-
-    def _add_lobby_ai_slot(self) -> None:
-        """Add an AI opponent slot row in the lobby screen."""
-        info = self._current_map_info
-        max_armies = len(info.markers.armies) if info and info.markers else self.MAX_SLOTS
-        if len(self.lobby_player_slots) >= min(self.MAX_SLOTS, max_armies):
-            return
-
-        row = len(self.lobby_player_slots)
-        slot_num = row + 1
-        widgets: list[Any] = []
-
-        lbl = ctk.CTkLabel(
-            self.lobby_slots_scroll,
-            text=str(slot_num),
-            width=20,
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12),
-        )
-        lbl.grid(row=row, column=0, padx=(0, 5), pady=2)
-        widgets.append(lbl)
-
-        # AI difficulty
-        ai_var = ctk.StringVar(value="Medium")
-        ai_menu = ctk.CTkOptionMenu(
-            self.lobby_slots_scroll,
-            values=self.AI_DISPLAY_NAMES,
-            variable=ai_var,
-            width=90,
-            height=24,
-        )
-        ai_menu.grid(row=row, column=1, sticky="w", pady=2)
-        widgets.append(ai_menu)
-
-        # Faction
-        faction_var = ctk.StringVar(value="Random")
-        faction_menu = ctk.CTkOptionMenu(
-            self.lobby_slots_scroll,
-            values=self.FACTION_NAMES,
-            variable=faction_var,
-            width=90,
-            height=24,
-        )
-        faction_menu.grid(row=row, column=2, padx=5, pady=2)
-        widgets.append(faction_menu)
-
-        # Team (auto-balanced)
-        team_var = ctk.StringVar(value=self._next_team(self.lobby_player_slots))
-        team_menu = ctk.CTkOptionMenu(
-            self.lobby_slots_scroll,
-            values=["1", "2", "3", "4"],
-            variable=team_var,
-            width=50,
-            height=24,
-        )
-        team_menu.grid(row=row, column=3, padx=5, pady=2)
-        widgets.append(team_menu)
-
-        # Color selector
-        color_var = ctk.StringVar(value=self._next_free_color())
-        color_menu = ctk.CTkOptionMenu(
-            self.lobby_slots_scroll,
-            values=self._get_color_names(),
-            variable=color_var,
-            command=self._on_color_change,
-            width=70,
-            height=24,
-        )
-        color_menu.grid(row=row, column=4, padx=5, pady=2)
-        widgets.append(color_menu)
-
-        lobby_slot_dict: dict[str, Any] = {
-            "type": "ai",
-            "ai_var": ai_var,
-            "faction_var": faction_var,
-            "team_var": team_var,
-            "color_var": color_var,
-            "widgets": widgets,
-        }
-
-        # Remove button — reference the slot dict, not a stale index
-        def remove_this(sd: dict[str, Any] = lobby_slot_dict) -> None:
-            try:
-                idx = self.lobby_player_slots.index(sd)
-            except ValueError:
-                return
-            self._remove_lobby_slot(idx)
-
-        remove_btn = ctk.CTkButton(
-            self.lobby_slots_scroll,
-            text="\u2715",
-            width=24,
-            height=24,
-            fg_color="transparent",
-            hover_color=COLOR_DANGER,
-            text_color=COLOR_TEXT_MUTED,
-            command=remove_this,
-        )
-        remove_btn.grid(row=row, column=5, pady=2)
-        widgets.append(remove_btn)
-
-        self.lobby_player_slots.append(lobby_slot_dict)
-        self._broadcast_game_state()
+        self._remove_slot_from(self.player_slots, index, redraw=True)
 
     def _remove_lobby_slot(self, index: int) -> None:
-        """Remove a player slot from the lobby screen and re-layout remaining slots."""
-        if index < 0 or index >= len(self.lobby_player_slots):
+        """Remove a lobby player slot."""
+        self._remove_slot_from(self.lobby_player_slots, index, redraw=False)
+
+    def _remove_slot_from(
+        self, slot_list: list[dict[str, Any]], index: int, *, redraw: bool = False
+    ) -> None:
+        """Unified slot removal for both solo and lobby screens."""
+        if index < 0 or index >= len(slot_list):
+            return
+        # Don't remove human slot (always index 0 in solo)
+        if slot_list is self.player_slots and index < 1:
             return
 
-        # Destroy widgets for the removed slot
-        slot = self.lobby_player_slots.pop(index)
+        slot = slot_list.pop(index)
         for w in slot["widgets"]:
             w.destroy()
 
-        # Re-layout all remaining slots
-        for i, s in enumerate(self.lobby_player_slots):
+        # Re-layout remaining slots
+        for i, s in enumerate(slot_list):
             for w in s["widgets"]:
                 w.grid_configure(row=i)
-            # Update slot number label
             s["widgets"][0].configure(text=str(i + 1))
         self._broadcast_game_state()
+        if redraw:
+            self._redraw_canvas()
 
     def _get_lobby_ai_opponents(self) -> list[dict[str, Any]]:
         """Collect AI opponent config from the lobby slot UI."""
-        opponents: list[dict[str, Any]] = []
-        for slot in self.lobby_player_slots:
-            if slot.get("type") != "ai":
-                continue
-            ai_display = slot["ai_var"].get()
-            ai_key = ai_display.lower()
-            faction = slot["faction_var"].get().lower()
-            team = int(slot["team_var"].get())
-            color = self._color_name_to_index(slot["color_var"].get())
-            opponents.append(
-                {
-                    "name": f"AI {len(opponents) + 1}: {ai_display}",
-                    "faction": faction,
-                    "ai": ai_key,
-                    "team": team,
-                    "color": color,
-                }
-            )
-        return opponents
+        return self._get_ai_opponents_from(self.lobby_player_slots)
 
     def _clear_lobby_player_slots(self) -> None:
         """Destroy all lobby player slot widgets and clear the list."""
@@ -2349,25 +1843,7 @@ class WopcApp(BaseApp):  # type: ignore
     @staticmethod
     def _color_name_to_index(val: str) -> int:
         """Convert a color name or hex to the nearest 1-based SCFA engine color index."""
-        # Direct name match
-        for i, (hex_val, cname) in enumerate(PLAYER_COLORS):
-            if cname == val or hex_val == val:
-                return i + 1
-        # Nearest color by RGB distance for arbitrary hex values
-        if val.startswith("#") and len(val) == 7:
-            r = int(val[1:3], 16)
-            g = int(val[3:5], 16)
-            b = int(val[5:7], 16)
-            best_i, best_d = 0, float("inf")
-            for i, (hex_val, _) in enumerate(PLAYER_COLORS):
-                pr = int(hex_val[1:3], 16)
-                pg = int(hex_val[3:5], 16)
-                pb = int(hex_val[5:7], 16)
-                d = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2
-                if d < best_d:
-                    best_i, best_d = i, d
-            return best_i + 1
-        return 1
+        return color_hex_to_index(val)
 
     def get_human_color_index(self) -> int:
         """Return the human player's selected color index (1-based)."""
@@ -2392,46 +1868,51 @@ class WopcApp(BaseApp):  # type: ignore
         return 2
 
     def get_ai_opponents(self) -> list[dict[str, Any]]:
-        """Collect AI opponent config from the slot UI for game_config.py."""
+        """Collect AI opponent config from the solo slot UI for game_config.py."""
+        return self._get_ai_opponents_from(self.player_slots, engine_offset=True)
+
+    def _get_ai_opponents_from(
+        self,
+        slot_list: list[dict[str, Any]],
+        *,
+        engine_offset: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Unified AI opponent extraction from any slot list.
+
+        Parameters
+        ----------
+        engine_offset : bool
+            True → add +1 to team (UI→engine) and include start_spot.
+            False → raw UI values (lobby mode).
+        """
         opponents: list[dict[str, Any]] = []
-        for si, slot in enumerate(self.player_slots):
-            if slot["type"] != "ai":
+        for si, slot in enumerate(slot_list):
+            if slot.get("type") != "ai":
                 continue
             ai_display = slot["ai_var"].get()
             ai_key = ai_display.lower()
             faction = slot["faction_var"].get().lower()
-            team = int(slot["team_var"].get()) + 1  # UI 1-4 → engine 2-5
+            team = int(slot["team_var"].get())
+            if engine_offset:
+                team += 1  # UI 1-4 → engine 2-5
             color = self._color_name_to_index(slot["color_var"].get())
-            start_spot = slot.get("start_spot", si) + 1  # 1-based for engine
-            opponents.append(
-                {
-                    "name": f"AI {len(opponents) + 1}: {ai_display}",
-                    "faction": faction,
-                    "ai": ai_key,
-                    "team": team,
-                    "color": color,
-                    "start_spot": start_spot,
-                }
-            )
+            entry: dict[str, Any] = {
+                "name": f"AI {len(opponents) + 1}: {ai_display}",
+                "faction": faction,
+                "ai": ai_key,
+                "team": team,
+                "color": color,
+            }
+            if engine_offset:
+                entry["start_spot"] = slot.get("start_spot", si) + 1  # 1-based
+            opponents.append(entry)
         return opponents
 
     # ------------------------------------------------------------------
     # Game Options
     # ------------------------------------------------------------------
 
-    # Option definitions: (key, label, values, default)
-    GAME_OPTION_DEFS: ClassVar[list[tuple[str, str, list[str], str]]] = [
-        (
-            "Victory",
-            "Victory",
-            ["Demoralization", "Supremacy", "Assassination", "Sandbox"],
-            "Demoralization",
-        ),
-        ("UnitCap", "Unit Cap", ["500", "1000", "1500", "2000", "4000"], "1500"),
-        ("FogOfWar", "Fog of War", ["Explored", "Unexplored", "None"], "Explored"),
-        ("GameSpeed", "Game Speed", ["Normal", "Fast", "Adjustable"], "Normal"),
-        ("Share", "Share", ["FullShare", "ShareUntilDeath"], "FullShare"),
-    ]
+    GAME_OPTION_DEFS = _GAME_OPT_DEFS
 
     # _build_game_options and _build_settings_column removed — consolidated
     # into _build_options_column and _build_players_column above.
@@ -2442,25 +1923,10 @@ class WopcApp(BaseApp):  # type: ignore
 
     def get_game_options(self) -> dict[str, str]:
         """Collect game options from the UI for game_config.py."""
-        opts: dict[str, str] = {}
+        raw: dict[str, str] = {}
         for key, var in self.game_option_vars.items():
-            val = var.get()
-            # Normalize display names to engine values
-            if key == "FogOfWar":
-                val = {"Explored": "explored", "Unexplored": "unexplored", "None": "none"}.get(
-                    val, val.lower()
-                )
-            elif key == "Victory":
-                val = {
-                    "Demoralization": "demoralization",
-                    "Supremacy": "domination",
-                    "Assassination": "eradication",
-                    "Sandbox": "sandbox",
-                }.get(val, val.lower())
-            elif key == "GameSpeed":
-                val = val.lower()
-            opts[key] = val
-        return opts
+            raw[key] = var.get()
+        return game_options_to_engine(raw)
 
     def _refresh_mods_list(self) -> None:
         """Read available mods and content packs from disk and update the UI."""
@@ -2662,10 +2128,7 @@ class WopcApp(BaseApp):  # type: ignore
     # Launch mode helpers
     # ------------------------------------------------------------------
 
-    _PLAY_LABELS: ClassVar[dict[str, str]] = {
-        "SOLO": "PLAY MATCH",
-        "MULTIPLAYER": "PLAY MATCH",
-    }
+    _PLAY_LABELS = PLAY_LABELS
 
     def _on_expected_humans_change(self, value: str) -> None:
         """Persist expected humans preference when dropdown changes."""
