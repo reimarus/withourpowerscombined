@@ -129,6 +129,12 @@ class WopcApp(BaseApp):  # type: ignore
         self._current_screen: str = "solo"
         self._log_lines: list[str] = []
 
+        # Thread-safe game state cache — network thread reads snapshot only
+        self._cached_game_state: dict[str, Any] | None = None
+        self._game_state_lock = threading.Lock()
+        # Joiner stores the last GameState received from the host
+        self._received_game_state: dict[str, Any] | None = None
+
         # Map preview state (canvas rendering is in MapCanvas)
         self._current_map_info: map_scanner.MapInfo | None = None
 
@@ -2187,6 +2193,7 @@ class WopcApp(BaseApp):  # type: ignore
             return
         self._add_remote_human_slot(player_id, name, faction, slot)
         self._update_host_button_text()
+        self._refresh_cached_game_state()
         self.log(f"Player joined: {name} (slot {slot})")
 
     def _on_player_left(self, player_id: int) -> None:
@@ -2196,6 +2203,7 @@ class WopcApp(BaseApp):  # type: ignore
             for w in info.get("widgets", []):
                 w.destroy()
             self._update_host_button_text()
+            self._refresh_cached_game_state()
             self.log(f"Player left: {info.get('name', '?')}")
 
     def _on_ready_changed(self, player_id: int, ready: bool) -> None:
@@ -2513,6 +2521,21 @@ class WopcApp(BaseApp):  # type: ignore
             "content_packs": mods.get_enabled_packs(),
         }
 
+    def _refresh_cached_game_state(self) -> None:
+        """Rebuild the cached game state snapshot (GUI thread only).
+
+        The network thread calls ``_get_cached_game_state()`` to read the
+        snapshot without touching any tkinter widgets.
+        """
+        state = self._build_game_state()
+        with self._game_state_lock:
+            self._cached_game_state = state
+
+    def _get_cached_game_state(self) -> dict[str, Any] | None:
+        """Return the last cached game state (thread-safe, any thread)."""
+        with self._game_state_lock:
+            return self._cached_game_state
+
     def _validate_before_launch(self) -> list[str]:
         """Check pre-launch conditions. Returns list of error strings (empty = OK)."""
         errors: list[str] = []
@@ -2546,9 +2569,10 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _broadcast_game_state(self) -> None:
         """Send the current game state to all connected joiners."""
+        self._refresh_cached_game_state()
         if not self._lobby_server or not self._lobby_server.is_running:
             return
-        state = self._build_game_state()
+        state = self._get_cached_game_state()
         if state:
             self._lobby_server.broadcast_state(state)
 
@@ -2766,9 +2790,10 @@ class WopcApp(BaseApp):  # type: ignore
             return
         port = int(self.port_entry.get() or "15000")
         prefs.set_host_port(str(port))
+        self._refresh_cached_game_state()
         callbacks = self._make_lobby_callbacks(is_host=True)
         self._lobby_server = LobbyServer(
-            port, callbacks, game_state_provider=self._build_game_state
+            port, callbacks, game_state_provider=self._get_cached_game_state
         )
         try:
             self._lobby_server.start()
@@ -3250,10 +3275,11 @@ class WopcApp(BaseApp):  # type: ignore
     def _on_create_game(self) -> None:
         """Handle CREATE GAME click on browser screen."""
         self._is_hosting = True
+        self._refresh_cached_game_state()
         port = int(prefs.get_host_port() or "15000")
         callbacks = self._make_lobby_callbacks(is_host=True)
         self._lobby_server = LobbyServer(
-            port, callbacks, game_state_provider=self._build_game_state
+            port, callbacks, game_state_provider=self._get_cached_game_state
         )
         try:
             self._lobby_server.start()
