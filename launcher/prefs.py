@@ -22,6 +22,7 @@ DEFAULT_PREFS = {
         "player_name": "Player",
         "minimap_enabled": "True",
         "player_faction": "random",
+        "player_color": "",  # hex color, e.g. "#FF0000"; empty = auto-pick
         "launch_mode": "solo",  # solo | multiplayer
         "host_port": "15000",
         "join_address": "",  # e.g. "192.168.1.50:15000"
@@ -109,6 +110,22 @@ def get_player_faction() -> str:
     """Return the player's chosen faction (uef/aeon/cybran/seraphim/random)."""
     parser = load_prefs()
     return parser.get("Game", "player_faction", fallback="random")
+
+
+def get_player_color() -> str:
+    """Return the player's chosen color as a hex string (e.g. '#FF0000').
+
+    Returns empty string if no color has been saved (auto-pick).
+    """
+    parser = load_prefs()
+    return parser.get("Game", "player_color", fallback="")
+
+
+def set_player_color(hex_color: str) -> None:
+    """Set the player's chosen color (hex string like '#FF0000')."""
+    parser = load_prefs()
+    parser.set("Game", "player_color", hex_color)
+    save_prefs(parser)
 
 
 def set_player_name(name: str) -> None:

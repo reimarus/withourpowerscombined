@@ -336,13 +336,16 @@ class WopcApp(BaseApp):  # type: ignore
         self._drag_moved = False
         self._drag_spawn_src = self._hit_test_spawn(event.x, event.y)
 
+    # Minimum pixel distance before a click becomes a drag
+    _DRAG_THRESHOLD: ClassVar[int] = 8
+
     def _on_canvas_drag(self, event: Any) -> None:
         """Pan the map canvas by dragging, or drag a spawn to swap positions."""
         if self._drag_start is None:
             return
         dx = event.x - self._drag_start[0]
         dy = event.y - self._drag_start[1]
-        if abs(dx) > 3 or abs(dy) > 3:
+        if abs(dx) > self._DRAG_THRESHOLD or abs(dy) > self._DRAG_THRESHOLD:
             self._drag_moved = True
         # If dragging from a spawn point, draw a ghost icon at cursor position
         if getattr(self, "_drag_spawn_src", -1) >= 0:
@@ -1598,7 +1601,6 @@ class WopcApp(BaseApp):  # type: ignore
         self.search_entry.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 3))
 
         self.type_var = ctk.StringVar(value="All")
-        self.type_var.trace_add("write", self._apply_map_filters)
         self.type_menu = ctk.CTkOptionMenu(
             self.filter_frame,
             values=["All", "Skirmish", "Campaign"],
@@ -1610,7 +1612,6 @@ class WopcApp(BaseApp):  # type: ignore
         self.type_menu.grid(row=1, column=0, padx=(0, 2), sticky="ew")
 
         self.players_var = ctk.StringVar(value="Any")
-        self.players_var.trace_add("write", self._apply_map_filters)
         self.players_menu = ctk.CTkOptionMenu(
             self.filter_frame,
             values=["Any"],
@@ -1622,7 +1623,6 @@ class WopcApp(BaseApp):  # type: ignore
         self.players_menu.grid(row=1, column=1, padx=(0, 2), sticky="ew")
 
         self.size_var = ctk.StringVar(value="Any")
-        self.size_var.trace_add("write", self._apply_map_filters)
         self.size_menu = ctk.CTkOptionMenu(
             self.filter_frame,
             values=["Any"],
@@ -1724,6 +1724,9 @@ class WopcApp(BaseApp):  # type: ignore
     def _on_color_change(self, _val: str) -> None:
         """Broadcast state and redraw map when a color changes."""
         self._tinted_icon_cache.clear()
+        # Persist human player's color to prefs so it survives restarts
+        if self.player_slots and self.player_slots[0].get("color_var"):
+            prefs.set_player_color(self.player_slots[0]["color_var"].get())
         self._broadcast_game_state()
         self._redraw_canvas()
 
@@ -1995,8 +1998,10 @@ class WopcApp(BaseApp):  # type: ignore
         team_menu.grid(row=row, column=3, padx=5, pady=2)
         widgets.append(team_menu)
 
-        # Color swatch picker
-        color_var = ctk.StringVar(value=self._next_free_color())
+        # Color swatch picker — load saved color from prefs, fall back to auto-pick
+        saved_color = prefs.get_player_color()
+        initial_color = saved_color if saved_color else self._next_free_color()
+        color_var = ctk.StringVar(value=initial_color)
         swatch = self._create_color_swatch(self.slots_scroll, color_var, row, 4)
         widgets.append(swatch)
 
@@ -2334,10 +2339,14 @@ class WopcApp(BaseApp):  # type: ignore
         return 1
 
     def get_human_team(self) -> int:
-        """Return the human player's selected team number."""
+        """Return the human player's selected team number (engine-format).
+
+        SCFA engine uses Team 1 = no team (FFA), Team 2+ = allied teams.
+        The UI shows teams 1-4, so we add 1 to convert: UI 1 → engine 2.
+        """
         if self.player_slots and self.player_slots[0].get("team_var"):
-            return int(self.player_slots[0]["team_var"].get())
-        return 1
+            return int(self.player_slots[0]["team_var"].get()) + 1
+        return 2
 
     def get_ai_opponents(self) -> list[dict[str, Any]]:
         """Collect AI opponent config from the slot UI for game_config.py."""
@@ -2348,7 +2357,7 @@ class WopcApp(BaseApp):  # type: ignore
             ai_display = slot["ai_var"].get()
             ai_key = ai_display.lower()
             faction = slot["faction_var"].get().lower()
-            team = int(slot["team_var"].get())
+            team = int(slot["team_var"].get()) + 1  # UI 1-4 → engine 2-5
             color = self._color_name_to_index(slot["color_var"].get())
             start_spot = slot.get("start_spot", si) + 1  # 1-based for engine
             opponents.append(
