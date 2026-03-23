@@ -57,7 +57,8 @@ Items to tackle over time, roughly grouped by priority.
 52. **Player color mismatch in-game** — launcher shows correct colors but game shows wrong ones. Root cause: `PLAYER_COLORS` index ordering in `app.py` may not match SCFA engine's internal `armycolors` palette. HSV custom color picker's nearest-match may also misalign.
 53. **Auto-updater map list not loading after restart** — after auto-update downloads and restarts the launcher, the map list doesn't populate. User must close and reopen manually.
 54. **Civilian filler armies investigation** — gap-filling in `game_config.py` creates `Civilian=true` entries for unused ARMY positions. Investigate whether the engine spawns idle commanders for these entries (gameplay impact).
-55. **Refactor app.py monolith** — 4,320 lines / 105 methods in one class. Extract `models.py` (PlayerSlotManager), `constants.py` (lookup tables), `map_canvas.py` (renderer), `slot_widget.py` (unified slot UI). See `.claude/plans/gentle-enchanting-bengio.md`.
+55. **Refactor app.py monolith** — ~~4,320 lines~~ → 3,865 (Phase 2-3 done). Extracted `constants.py`, `models.py`, `map_canvas.py`. Remaining: `slot_widget.py` (unified slot UI). See `.claude/plans/gentle-enchanting-bengio.md`.
+56. **Multiplayer join broken** — friend could see game in browser and click join, but host didn't see them enter the lobby, and joiner had wrong map loaded. TCP lobby handshake, map sync, and player list broadcast need investigation. This is a prerequisite for real multiplayer testing.
 
 ## Features
 
