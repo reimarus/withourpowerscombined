@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -212,11 +213,14 @@ def apply_update(tmp_path: Path) -> bool:
         tmp_path.rename(exe_path)
         LOG.info("Moved update into %s", exe_path.name)
 
-        # Restart with the new exe
+        # Restart with the new exe.
+        # On Windows, os.execv doesn't truly replace the process — it spawns
+        # a child and the parent continues.  Use subprocess + sys.exit instead.
         LOG.info("Restarting launcher ...")
-        os.execv(str(exe_path), [str(exe_path)])
+        subprocess.Popen([str(exe_path)])
+        LOG.info("New process launched, exiting old process.")
+        os._exit(0)  # Hard exit — avoid tkinter cleanup issues
 
-        # os.execv replaces the current process, so this is unreachable
         return True  # pragma: no cover
     except OSError as exc:
         LOG.error("Failed to apply update: %s", exc)
