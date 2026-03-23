@@ -210,7 +210,7 @@ quickstart.lua
 - **Phase 3** ✅ WOPC Lua overlay (quickstart system + content packs)
 - **Phase 4** ✅ Multiplayer support — TCP lobby, game state sync, file transfer, chat, kick, ready
 - **Phase 5** ✅ Player slot management + game options (colors, teams, victory, unit cap, share)
-- **Phase 6** 🔧 Modern multiplayer UX — game browser, LAN discovery, unified lobby room
+- **Phase 6** ✅ Modern multiplayer UX — game browser, LAN discovery, unified lobby room
 - **Phase 7** → C++ pathfinding patch
 
 ## Rules (MUST follow)
