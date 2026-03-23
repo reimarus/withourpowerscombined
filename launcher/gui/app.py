@@ -3713,6 +3713,20 @@ class WopcApp(BaseApp):  # type: ignore
         start_spot = self.get_human_start_spot() if hasattr(self, "player_slots") else 1
         team = self.get_human_team() if hasattr(self, "player_slots") else 1
 
+        # Diagnostic: log spawn assignments so we can verify correctness
+        if hasattr(self, "player_slots"):
+            for si, slot in enumerate(self.player_slots):
+                raw_spot = slot.get("start_spot", si)
+                slot_type = slot["type"]
+                logger.info(
+                    "Launch slot %d (%s): start_spot=%d (engine StartSpot=%d)",
+                    si,
+                    slot_type,
+                    raw_spot,
+                    raw_spot + 1,
+                )
+            self.log(f"Spawns: human→ARMY_{start_spot}, team→{team}")
+
         ret = cmd_launch(
             ai_opponents=ai_opponents,
             game_options=game_options,
