@@ -50,6 +50,9 @@ Items to tackle over time, roughly grouped by priority.
 46. **Design asset library** — `launcher/gui/icons/ASSETS.md` indexes all available game textures. Faction icons (`faction_*.png`), strategic icons, chrome borders all pre-converted. Expand as new UI features need assets.
 47. ~~**Show player name in slot**~~ ✅ — human slot shows player name from prefs, updates on name change (v2.01.0027)
 
+48. **Rearrange Player Settings layout** — Name inline with Faction (same row), Color inline with minimap preference (same row). Reduces vertical space and groups related settings logically.
+49. **Spawn position bug** ✅ — Players array index must match ARMY_N for correct spawn. Gap-filling with civilian entries ensures contiguous array. (v2.01.0032)
+
 ## Features
 
 19. **Map Library Browser** — searchable map library where players can browse, preview, and download maps (replaces flat list)

@@ -92,9 +92,14 @@ local function BuildGameInfo(cfg, hostPeerID)
     -- The engine waits for all unique OwnerIDs to connect before starting
     -- the sim.  AI slots owned by a different ID cause "waiting for players"
     -- to hang forever.  FAF's lobby.lua uses hostID for AI slots (line 538).
+    -- Build playerOptions indexed to match army positions.
+    -- Players[N] in the config corresponds to ARMY_N on the map.
+    -- Civilian filler entries (gap slots) pass through Civilian=true so
+    -- the engine creates the army but assigns no AI brain.
     local playerOptions = {}
     for i, p in cfg.Players do
         local isHuman = p.Human != false
+        local isCivilian = (p.Civilian == true)
         local faction = ResolveFaction(p.Faction or 1)
         playerOptions[i] = {
             Team = p.Team or 1,
@@ -106,7 +111,7 @@ local function BuildGameInfo(cfg, hostPeerID)
             PlayerName = p.PlayerName or ("Player " .. i),
             AIPersonality = p.AIPersonality or '',
             Human = isHuman,
-            Civilian = false,
+            Civilian = isCivilian,
             OwnerID = hostPeerID,
         }
     end
