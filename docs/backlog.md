@@ -18,7 +18,7 @@ Items to tackle over time, roughly grouped by priority.
 ## High Priority — Player Experience
 
 5. ~~**Launcher self-update**~~ ✅ — check GitHub Releases on startup, download and replace exe, restart (PR #28)
-6. **SupCom-authentic UI assets** — the launcher currently uses generic CustomTkinter buttons and backgrounds. Extract and implement actual Supreme Commander design assets (metallic button frames, brushed-metal backgrounds, faction-themed borders, glowing hover states) so the launcher feels like a modern SupCom experience, not a generic app with a color theme.
+6. ~~**SupCom-authentic UI assets**~~ ✅ — 9-slice metallic chrome borders (SupComFrame widget), faction icons in player slots, beveled button accents on all primary actions, gold sidebar accent. Chrome PNGs rendered via PIL compositing on tk.Canvas.
 7. ~~**Remember launcher window size**~~ ✅ — persist width/height in wopc_prefs.ini Window section, restore on launch (PR #29)
 8. ~~**SupCom color picker**~~ ✅ — HSV color wheel popup with brightness slider, click/drag to pick any color, nearest-match to SCFA engine palette for game config (v2.01.0027)
 9. **Content-v2 release build** — run `scripts/build_content_release.py` and upload wopc_core.scd, wopc-maps.zip, strategic icons to `content-v2` GitHub Release so the standalone installer can download them
@@ -43,7 +43,7 @@ Items to tackle over time, roughly grouped by priority.
 36. ~~**Map preview too small**~~ ✅ — enlarged preview with 5:1 column weight ratio, reduced padding, preview dominates left side
 37. ~~**Map list should be narrower**~~ ✅ — compact sidebar with minsize=200, map list no longer competes with preview
 38. ~~**Game browser refresh button**~~ ✅ — manual "⟳ Refresh" button + auto-poll every 5s
-39. **SupCom-authentic UI chrome** — use metallic SupCom frames/borders. Chrome PNGs extracted to `launcher/gui/icons/frame_*.png` (9-slice pattern from UEF lobby textures). Need to implement 9-slice rendering in CustomTkinter panels.
+39. ~~**SupCom-authentic UI chrome**~~ ✅ — 9-slice metallic frames applied to solo screen (config, map, log panels), lobby screen (map, players, options, chat), and browser screen (game list). SupComFrame widget in `launcher/gui/supcom_frame.py`.
 40. ~~**Marker visibility at small sizes**~~ ✅ — increased marker radii and outline widths with better scaling formulas
 41. ~~**Map description panel**~~ ✅ — description shown in inspect window header (map_inspect.py lines 102-112)
 44. ~~**Icon-based map markers**~~ ✅ — tinted commander icons with preserved outlines, hover halo, click-to-select spawn. Mass/hydro use strategic icons from `launcher/gui/icons/marker_*.png`.
