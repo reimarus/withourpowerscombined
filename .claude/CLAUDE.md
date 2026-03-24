@@ -127,8 +127,14 @@ C:\Users\roskv\wopc\          (repo)
     toolchain.py               Compiler discovery (Clang, GCC, LD)
     manifest.py                Patch manifest parsing (wopc_patches.toml)
     patcher.py                 Build orchestration for patched exe
-    gui/                       GUI launcher (customtkinter)
-      app.py                   WopcApp — main window, map selector, multiplayer lobby, game browser
+    gui/                       GUI launcher (customtkinter, 7 modules)
+      app.py                   WopcApp — main window, solo screen, sidebar, settings (1,913 lines)
+      lobby_screen.py          Lobby room UI + multiplayer networking, TCP callbacks (1,070 lines)
+      slot_widget.py           Player slot builders, color picker, team/spawn utilities (832 lines)
+      map_canvas.py            Canvas rendering, zoom/pan, markers, spawn interaction (578 lines)
+      browser_screen.py        Game browser UI + LAN/relay discovery lifecycle (458 lines)
+      models.py                PlayerSlot + PlayerSlotManager, zero widget deps (226 lines)
+      constants.py             Shared constants: colors, palette, factions, AI names, options (205 lines)
       worker.py                SetupWorker — async setup in background thread
       wopc.ico                 Application icon
   build_exe.py                 PyInstaller build script → dist/WOPC-Launcher.exe
