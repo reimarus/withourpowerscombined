@@ -311,7 +311,13 @@ class RelayClient:
 
     @staticmethod
     def upload_logs(log_lines: list[str], host_name: str = "") -> bool:
-        """Upload launcher log lines to Firebase ``/reports/`` node.
+        """Upload launcher + engine logs to Firebase ``/reports/`` node.
+
+        Includes:
+        - Launcher GUI log (last 500 lines from ``log_lines``)
+        - Engine log (last 300 lines from WOPC.log)
+        - System info (OS, Python version, WOPC version, exe path)
+        - Game.prefs snippet (active_mods section for corruption diagnosis)
 
         Returns True on success, False on any failure.
         """
@@ -319,11 +325,83 @@ class RelayClient:
             return False
         report_id = str(uuid.uuid4())
         url = f"{config.RELAY_URL}/reports/{report_id}.json"
+
+        # Collect engine log (WOPC.log) — the real source of game errors
+        engine_log = ""
+        try:
+            engine_log_path = config.WOPC_BIN / config.GAME_LOG
+            if engine_log_path.exists():
+                all_lines = engine_log_path.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
+                engine_log = "\n".join(all_lines[-300:])
+        except Exception:
+            engine_log = "(could not read engine log)"
+
+        # Also grab SupCom.sclog — the vanilla SCFA log that captures
+        # early boot failures before WOPC.log is created
+        sclog = ""
+        try:
+            from launcher.game_prefs_repair import _GAME_PREFS_DIR
+
+            sclog_path = _GAME_PREFS_DIR / "SupCom.sclog"
+            if sclog_path.exists():
+                sc_lines = sclog_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                sclog = "\n".join(sc_lines[-200:])
+        except Exception:
+            pass
+
+        # Collect engine errors/warnings separately for quick triage
+        engine_errors = ""
+        try:
+            if engine_log:
+                err_lines = [
+                    line
+                    for line in engine_log.splitlines()
+                    if line.startswith(("warning:", "error:", "ASSERT"))
+                ]
+                engine_errors = "\n".join(err_lines[-50:])
+        except Exception:
+            pass
+
+        # System info for remote diagnosis
+        import platform
+        import sys
+
+        system_info = {
+            "os": platform.platform(),
+            "python": sys.version,
+            "wopc_version": config.VERSION,
+            "scfa_path": str(config.SCFA_STEAM),
+            "wopc_root": str(config.WOPC_ROOT),
+        }
+
+        # Check if Game.prefs exists and grab active_mods state
+        from launcher.game_prefs_repair import GAME_PREFS_PATH
+
+        game_prefs_snippet = ""
+        try:
+            if GAME_PREFS_PATH.exists():
+                import re
+
+                content = GAME_PREFS_PATH.read_text(encoding="utf-8", errors="replace")
+                # Extract active_mods lines for corruption diagnosis
+                match = re.search(r"active_mods\s*=\s*[^\n]+", content)
+                if match:
+                    game_prefs_snippet = match.group(0)[:200]
+        except Exception:
+            pass
+
         payload: dict[str, Any] = {
             "timestamp": time.time(),
             "host_name": host_name,
-            "log": "\n".join(log_lines[-500:]),  # cap at 500 lines
             "version": config.VERSION,
+            "system": system_info,
+            "launcher_log": "\n".join(log_lines[-500:]),
+            "engine_log": engine_log,
+            "engine_errors": engine_errors,
+            "scfa_log": sclog,
+            "game_prefs_active_mods": game_prefs_snippet,
         }
         try:
             data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -333,7 +411,7 @@ class RelayClient:
                 headers={"Content-Type": "application/json"},
                 method="PUT",
             )
-            urllib.request.urlopen(req, timeout=10)
+            urllib.request.urlopen(req, timeout=15)
             logger.info("Log report uploaded as %s", report_id)
             return True
         except (OSError, urllib.error.URLError) as exc:

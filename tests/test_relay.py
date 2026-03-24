@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.error
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -552,14 +553,26 @@ class TestAuditLogging:
 class TestUploadLogs:
     """Tests for RelayClient.upload_logs()."""
 
-    def test_upload_succeeds(self) -> None:
-        """Successful upload returns True."""
+    def test_upload_succeeds(self, tmp_path: Path) -> None:
+        """Successful upload returns True and includes all log sources."""
+        # Create a fake engine log
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        (fake_bin / "WOPC.log").write_text("warning: test engine error\ninfo: ok\n")
         with (
             patch("launcher.relay.urllib.request.urlopen") as mock_open,
             patch("launcher.relay.config") as mock_cfg,
+            patch(
+                "launcher.game_prefs_repair.GAME_PREFS_PATH",
+                tmp_path / "Game.prefs",
+            ),
         ):
             mock_cfg.RELAY_URL = "https://example.firebaseio.com"
             mock_cfg.VERSION = "2.01.0012"
+            mock_cfg.WOPC_BIN = fake_bin
+            mock_cfg.GAME_LOG = "WOPC.log"
+            mock_cfg.SCFA_STEAM = tmp_path
+            mock_cfg.WOPC_ROOT = tmp_path
             mock_open.return_value = _make_response(b"{}")
             result = RelayClient.upload_logs(["line 1", "line 2"], host_name="Alice")
         assert result is True
@@ -568,21 +581,35 @@ class TestUploadLogs:
         assert "/reports/" in req.full_url
         body = json.loads(req.data)
         assert body["host_name"] == "Alice"
-        assert body["log"] == "line 1\nline 2"
+        assert body["launcher_log"] == "line 1\nline 2"
+        assert "test engine error" in body["engine_log"]
+        assert "engine_errors" in body
+        assert "system" in body
 
-    def test_upload_caps_at_500_lines(self) -> None:
-        """Only the last 500 lines are sent."""
+    def test_upload_caps_at_500_lines(self, tmp_path: Path) -> None:
+        """Only the last 500 launcher lines are sent."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
         lines = [f"line {i}" for i in range(600)]
         with (
             patch("launcher.relay.urllib.request.urlopen") as mock_open,
             patch("launcher.relay.config") as mock_cfg,
+            patch(
+                "launcher.game_prefs_repair.GAME_PREFS_PATH",
+                tmp_path / "Game.prefs",
+            ),
         ):
             mock_cfg.RELAY_URL = "https://example.firebaseio.com"
             mock_cfg.VERSION = "2.01.0012"
+            mock_cfg.WOPC_BIN = fake_bin
+            mock_cfg.GAME_LOG = "WOPC.log"
+            mock_cfg.SCFA_STEAM = tmp_path
+            mock_cfg.WOPC_ROOT = tmp_path
             mock_open.return_value = _make_response(b"{}")
             RelayClient.upload_logs(lines)
         body = json.loads(mock_open.call_args[0][0].data)
-        assert body["log"].count("\n") == 499  # 500 lines = 499 newlines
+        # 500 lines = 499 newlines
+        assert body["launcher_log"].count("\n") == 499
 
     def test_upload_returns_false_on_network_error(self) -> None:
         """Network error returns False instead of raising."""
