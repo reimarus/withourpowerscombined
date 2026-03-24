@@ -102,6 +102,26 @@ SPEED_MAP: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
+# UI theme colors — the SupCom gold + navy palette used across all screens
+# ---------------------------------------------------------------------------
+
+COLOR_BG = "#080C14"  # Deep space black-navy (sidebar, deepest level)
+COLOR_PANEL = "#0D1220"  # Dark navy main background
+COLOR_MOD_PANEL = "#111827"  # Secondary panel (mod pane, cards)
+COLOR_SURFACE = "#162030"  # Card/elevated surface
+COLOR_BORDER = "#1E2D42"  # Subtle panel border
+COLOR_ACCENT = "#C8A84B"  # Gold — primary interactive
+COLOR_ACCENT_HOVER = "#E8C870"  # Gold hover state
+COLOR_ACCENT_DIM = "#6B5A28"  # Dimmed gold for decorative lines/dividers
+COLOR_READY = "#C8A84B"  # Gold — PLAY MATCH (matches accent)
+COLOR_LAUNCH = "#4DC3F5"  # Electric cyan — LAUNCH GAME in lobby
+COLOR_WARN = "#FF8C42"  # Orange — warning state
+COLOR_DANGER = "#E84855"  # Red — LEAVE / destructive actions
+COLOR_TEXT_PRIMARY = "#E8E4D4"  # Warm cream (not cold white)
+COLOR_TEXT_MUTED = "#4A5A70"  # Muted navy-grey
+COLOR_TEXT_GOLD = "#C8A84B"  # Gold text (headers, section labels)
+
+# ---------------------------------------------------------------------------
 # Canvas / UI tuning constants
 # ---------------------------------------------------------------------------
 

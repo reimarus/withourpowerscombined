@@ -101,6 +101,9 @@ source = ["launcher"]
 omit = [
     "tests/*",
     "launcher/gui/app.py",  # GUI module — requires display, untestable in headless CI
+    "launcher/gui/slot_widget.py",  # GUI widget builder — requires display
+    "launcher/gui/browser_screen.py",  # GUI screen builder — requires display
+    "launcher/gui/lobby_screen.py",  # GUI screen builder — requires display
 ]
 
 [tool.coverage.report]
