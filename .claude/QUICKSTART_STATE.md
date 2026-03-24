@@ -54,23 +54,17 @@ See `.claude/plans/gentle-enchanting-bengio.md` for the full plan:
 - Fix 3 bugs: map black screen after ready check, send logs failure, color palette mismatch
 - Target: app.py 4,320 → ~2,500 lines, 80%+ test coverage on extracted modules
 
-### Known bugs (see backlog items 50-54):
-- Map black screen after ready check / auto-update
-- "Send Logs" failure after auto-update
-- Player color mismatch between launcher and in-game
-- Auto-updater map list not loading after self-restart
-- Civilian filler armies — investigate idle commander spawns
+### Known bugs (see backlog):
+- "Send Logs" failure after auto-update (#51)
+- Civilian filler armies — investigate idle commander spawns (#54)
 
-### Branch: `fix/multiplayer-join` — multiplayer join fix (6 bugs)
-- Fixed GameState silently dropped during Welcome wait (TCP coalescing bug in `lobby.py`)
-- Fixed `_build_game_state()` thread safety — now uses cached snapshot readable from any thread
-- Fixed joiner launch config — uses received GameState instead of solo-screen widgets
-- Fixed joiner map sync — `prefs.set_active_map()` called when GameState arrives
-- Fixed `_all_maps` empty causing false map-missing detection — filesystem fallback added
-- Fixed joiner `expected_humans` — calculated from host's player count
-- 4 new tests in `test_lobby.py` for GameState buffering
-- Diagnostic logging added to handshake pipeline
-- Latest release: v2.01.0033
+### Branch: `fix/bugs-50-52-and-hook` — bug fixes #50, #52, #53
+- Fixed map black screen (#50): always-rescan map list + deferred canvas redraw
+- Fixed player color mismatch (#52): aligned PLAYER_COLORS with engine's GameColors.lua (8→19 colors)
+- Fixed map list after restart (#53): covered by #50's always-rescan fix
+
+### Recent merges:
+- **PR #64** (v2.01.0034): Multiplayer join fix — 6 bugs in TCP handshake, thread safety, joiner config
 
 ### Completed refactor (PR #63, merged):
 - `launcher/gui/constants.py` — lookup tables, color conversions, game option mappings (171 lines)
