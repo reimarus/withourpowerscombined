@@ -48,15 +48,17 @@
 - `launcher/updater.py` — GitHub Releases auto-update (subprocess + os._exit on Windows)
 - `launcher/prefs.py` — INI-based preferences (player name, faction, color, map, display)
 
-### Active plan: Solo Launcher Refactor
-See `.claude/plans/gentle-enchanting-bengio.md` for the full plan:
-- Extract `models.py` (PlayerSlotManager), `constants.py` (lookup tables), `map_canvas.py` (renderer), `slot_widget.py` (unified slot UI)
-- Fix 3 bugs: map black screen after ready check, send logs failure, color palette mismatch
-- Target: app.py 4,320 → ~2,500 lines, 80%+ test coverage on extracted modules
+### Active plan: Bug Fixes + SupCom UI Skinning
+See `C:\Users\roskv\.claude\plans\glimmering-riding-cocke.md` for the full plan:
+- **PR 1 (bugs):** Fix civilian filler armies (#54), spawn auto-assign on map load (#57), structured launch logging (#60)
+- **PR 2 (skinning):** 9-slice metallic borders from SCFA assets, faction icons in player slots, compact player settings layout (#48), button border accents
+- Mark Send Logs (#51) as fixed (Firebase rules updated in console)
 
 ### Known bugs (see backlog):
-- "Send Logs" failure after auto-update (#51)
 - Civilian filler armies — investigate idle commander spawns (#54)
+- Spawn markers uncolored on initial map load (#57)
+- Multiplayer TCP port unreachable for remote players (#59, deferred)
+- Launcher log missing structured launch params (#60)
 
 ### Branch: `fix/bugs-50-52-and-hook` — bug fixes #50, #52, #53
 - Fixed map black screen (#50): always-rescan map list + deferred canvas redraw
