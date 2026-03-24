@@ -259,6 +259,9 @@ class WopcApp(BaseApp):  # type: ignore
 
         # Delegate rendering to MapCanvas
         if hasattr(self, "_map_canvas_widget"):
+            # Sync slot accessor before rendering so spawn markers show player
+            # colors on initial load (bug #57)
+            self._slot_accessor._slots = self.player_slots if hasattr(self, "player_slots") else []
             self._map_canvas_widget.set_map(info, raw_preview)
 
         # Update lobby preview widget

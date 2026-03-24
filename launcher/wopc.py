@@ -326,17 +326,27 @@ def cmd_launch(
             logger.warning("No map selected — launching to main menu")
         logger.info("Launching WOPC (solo mode)...")
 
-    logger.info("  Exe:  %s", exe_path)
-    logger.info("  Init: %s", init_path)
-    logger.info("  Log:  %s", WOPC_BIN / GAME_LOG)
+    # --- Structured launch diagnostics (#60) ---
+    logger.info("--- WOPC Launch ---")
+    logger.info("  Mode:     %s", launch_mode)
+    logger.info("  Exe:      %s", exe_path)
+    logger.info("  Init:     %s", init_path)
+    logger.info("  Log:      %s", WOPC_BIN / GAME_LOG)
     if active_map and launch_mode != "join":
-        logger.info("  Map:  %s", active_map)
+        logger.info("  Map:      %s", active_map)
+    if launch_mode in ("host", "join"):
+        logger.info("  Humans:   %s", locals().get("expected_humans", "?"))
+    logger.info("  Players:  %s", locals().get("player_name", "?"))
     if all_mod_uids:
-        logger.info("  Mods: %s", ", ".join(all_mod_uids))
+        logger.info("  Mods:     %s", ", ".join(all_mod_uids))
+    if locals().get("config_path"):
+        logger.info("  Config:   %s", locals()["config_path"])
+    logger.info("  Command:  %s", " ".join(cmd))
+    logger.info("-------------------")
 
     try:
         subprocess.Popen(cmd, cwd=str(WOPC_BIN))
-        logger.info("  Game started.")
+        logger.info("  Game process started successfully.")
     except Exception:
         logger.exception("ERROR: Failed to launch")
         return 1

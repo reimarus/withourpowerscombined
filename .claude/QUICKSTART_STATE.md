@@ -58,24 +58,25 @@
 - `launcher/updater.py` — GitHub Releases auto-update (subprocess + os._exit on Windows)
 - `launcher/prefs.py` — INI-based preferences (player name, faction, color, map, display)
 
-### Active plan: Bug Fixes + SupCom UI Skinning
-See `C:\Users\roskv\.claude\plans\glimmering-riding-cocke.md` for the full plan:
-- **PR 1 (bugs):** Fix civilian filler armies (#54), spawn auto-assign on map load (#57), structured launch logging (#60)
-- **PR 2 (skinning):** 9-slice metallic borders from SCFA assets, faction icons in player slots, compact player settings layout (#48), button border accents
-- Mark Send Logs (#51) as fixed (Firebase rules updated in console)
+### Active plan: Cleanup + Bug Fixes (#57, #59, #60) + Rule Update
+See `.claude/plans/gentle-enchanting-bengio.md` for the full plan:
+- Git cleanup, merge stale docs branch
+- Fix #57: spawn markers auto-assign on map load
+- Fix #59: UPnP auto-port-forwarding + NAT error messages
+- Fix #60: structured launch logging
+- Rewrite Rule #15: WOPC is fully standalone (own all shipped code)
 
 ### Known bugs (see backlog):
 - Civilian filler armies — investigate idle commander spawns (#54)
 - Spawn markers uncolored on initial map load (#57)
-- Multiplayer TCP port unreachable for remote players (#59, deferred)
+- Multiplayer TCP port unreachable for remote players (#59)
 - Launcher log missing structured launch params (#60)
 
 ### Recent merges:
-- **PR #68** (v2.01.0037): GUI refactor — extracted slot_widget.py, browser_screen.py, lobby_screen.py from app.py (4,320 → 1,913 lines, 56% reduction)
-- **PR #64** (v2.01.0034): Multiplayer join fix — 6 bugs in TCP handshake, thread safety, joiner config
+- **PR #69** (docs): Update stale refs after GUI refactor
+- **PR #68** (v2.01.0037): GUI refactor — extracted slot_widget.py, browser_screen.py, lobby_screen.py
+- **PR #67**: Fix black screen + enhance remote diagnostics
+- **PR #66**: Phase 7 movement tuning foundation
 
 ### Recent releases:
-- **v2.01.0037**: GUI refactor — extracted 3 screen modules, centralized color constants
-- **v2.01.0034**: Multiplayer join fix — 6 bugs in TCP handshake, thread safety, joiner config
-- **v2.01.0033**: Refactor — extracted constants, models, map_canvas from app.py
-- **v2.01.0032**: Spawn position fix — Players array gap-filling with civilian entries
+- **v2.01.0037**: GUI refactor + movement tuning + black screen fix + enhanced diagnostics

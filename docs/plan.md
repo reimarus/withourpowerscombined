@@ -29,22 +29,16 @@ All Phase 6 items are complete:
 
 ---
 
-## Active: Solo Launcher Refactor — Testing, Maintainability, Stability
+## Completed: Solo Launcher Refactor (PRs #63, #65-#68)
 
-**Full plan:** `.claude/plans/gentle-enchanting-bengio.md`
+Refactored `app.py` from 4,320 → 1,913 lines (56% reduction). Extracted 6 modules: `constants.py`, `models.py`, `map_canvas.py`, `slot_widget.py`, `browser_screen.py`, `lobby_screen.py`. Fixed bugs #50 (map black screen), #51 (Send Logs), #52 (color palette mismatch), #53 (map list after restart).
 
-`app.py` has grown to 4,320 lines / 105 methods. Refactoring to improve testability, eliminate duplication, and fix 3 new bugs.
+---
 
-### Steps (7 commits):
-1. ⬜ Doc updates + backlog (Phase 1)
-2. ⬜ Extract `launcher/gui/constants.py` — lookup tables + color mappings
-3. ⬜ Extract `launcher/gui/models.py` — PlayerSlotManager (pure data, no widgets)
-4. ⬜ Extract `launcher/gui/map_canvas.py` — canvas rendering, zoom/pan, spawn clicks
-5. ⬜ Unify solo/multiplayer slot code → `launcher/gui/slot_widget.py`
-6. ⬜ Bug fixes: map black screen, send logs, color palette mismatch
-7. ⬜ Test coverage improvements (target 80%+ on extracted modules)
+## No active plan.
 
-### Bug fixes included:
-- Map black screen after ready check / auto-update
-- "Send Logs" failure after auto-update
-- Player color mismatch (PLAYER_COLORS vs SCFA engine palette)
+Next candidates (see `docs/backlog.md`):
+- Bug #57: Spawn markers not auto-assigned on initial load
+- Bug #59: Multiplayer NAT traversal (UPnP)
+- Bug #60: Structured launch logging
+- Feature #25: SC2-style unit movement (Phase 7)
