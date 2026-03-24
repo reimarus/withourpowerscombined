@@ -8,18 +8,32 @@ lives here so there's exactly one place to maintain the mappings.
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Player colors — 8 slots matching SCFA's engine palette order
+# Player colors — matches the SCFA engine's GameColors.lua palette exactly.
+# Source: vendor/faf-ui/lua/GameColors.lua → ArmyColors / PlayerColors
+# Format: AARRGGBB in engine, we store as #RRGGBB (alpha stripped).
+# Index N here → engine color index N+1 (1-based in Lua).
 # ---------------------------------------------------------------------------
 
 PLAYER_COLORS: list[tuple[str, str]] = [
-    ("#FF0000", "Red"),
-    ("#0000FF", "Blue"),
-    ("#18DAE8", "Teal"),
-    ("#DFBF00", "Yellow"),
-    ("#FF6600", "Orange"),
-    ("#9161FF", "Purple"),
-    ("#FF88FF", "Pink"),
-    ("#00FF00", "Green"),
+    ("#E80A0A", "Cybran Red"),  # (01)
+    ("#901427", "Dark Red"),  # (02)
+    ("#FF873E", "Orange"),  # (03) Nomads orange
+    ("#B76518", "Brown"),  # (04)
+    ("#A79602", "Gold"),  # (05) Sera golden
+    ("#FAFA00", "Yellow"),  # (06)
+    ("#9FD802", "Lime"),  # (07) Order green
+    ("#40BF40", "Green"),  # (08)
+    ("#2E8B57", "Sea Green"),  # (09)
+    ("#2F4F4F", "Olive"),  # (10)
+    ("#436EEE", "Blue"),  # (11)
+    ("#2929E1", "UEF Blue"),  # (12)
+    ("#5F01A7", "Dark Purple"),  # (13)
+    ("#9161FF", "Purple"),  # (14)
+    ("#66FFCC", "Aqua"),  # (15)
+    ("#FFFFFF", "White"),  # (16)
+    ("#616D7E", "Grey"),  # (17)
+    ("#FF88FF", "Pink"),  # (18)
+    ("#FF32FF", "Fuchsia"),  # (19)
 ]
 
 # ---------------------------------------------------------------------------

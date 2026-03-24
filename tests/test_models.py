@@ -39,12 +39,12 @@ class TestPlayerSlot:
         assert slot.start_spot_engine == 4
 
     def test_color_index_exact_match(self) -> None:
-        slot = PlayerSlot(slot_type="human", color_hex="#0000FF")
-        assert slot.color_index == 2  # Blue is index 2
+        slot = PlayerSlot(slot_type="human", color_hex="#436EEE")
+        assert slot.color_index == 11  # Blue is index 11 in engine palette
 
     def test_color_index_nearest_match(self) -> None:
-        slot = PlayerSlot(slot_type="human", color_hex="#FE0101")
-        assert slot.color_index == 1  # Nearest to Red
+        slot = PlayerSlot(slot_type="human", color_hex="#E70909")
+        assert slot.color_index == 1  # Nearest to Cybran Red
 
 
 # ---------------------------------------------------------------------------
@@ -65,15 +65,15 @@ class TestSlotManagerAddRemove:
 
     def test_add_ai_auto_defaults(self) -> None:
         mgr = PlayerSlotManager(max_positions=8)
-        mgr.add_human(start_spot=0, team=1, color_hex="#FF0000")
+        mgr.add_human(start_spot=0, team=1, color_hex="#E80A0A")
         idx = mgr.add_ai()
         assert idx == 1
         ai = mgr.slots[1]
         assert ai.slot_type == "ai"
         # Auto-balanced to team 2 (team 1 has the human)
         assert ai.team == 2
-        # First free color (Red taken → Blue)
-        assert ai.color_hex == "#0000FF"
+        # First free color (Cybran Red taken → Dark Red)
+        assert ai.color_hex == "#901427"
         # First free spawn (0 taken → 1)
         assert ai.start_spot == 1
 
@@ -218,23 +218,23 @@ class TestTeamBalance:
 class TestColorAllocation:
     """Test next_free_color() allocation."""
 
-    def test_first_slot_gets_red(self) -> None:
+    def test_first_slot_gets_first_color(self) -> None:
         mgr = PlayerSlotManager()
-        assert mgr.next_free_color() == "#FF0000"
+        assert mgr.next_free_color() == "#E80A0A"  # Cybran Red
 
     def test_skips_used_colors(self) -> None:
         mgr = PlayerSlotManager()
-        mgr.add_human(color_hex="#FF0000")  # Red taken
-        assert mgr.next_free_color() == "#0000FF"  # Blue is next
+        mgr.add_human(color_hex="#E80A0A")  # Cybran Red taken
+        assert mgr.next_free_color() == "#901427"  # Dark Red is next
 
     def test_all_taken_wraps_to_first(self) -> None:
-        mgr = PlayerSlotManager(max_positions=16)
+        mgr = PlayerSlotManager(max_positions=20)
         from launcher.gui.constants import PLAYER_COLORS
 
         for i, (hex_val, _) in enumerate(PLAYER_COLORS):
             mgr.add_ai(color_hex=hex_val, start_spot=i)
-        # All 8 used → returns first
-        assert mgr.next_free_color() == "#FF0000"
+        # All 19 used → returns first
+        assert mgr.next_free_color() == "#E80A0A"
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +257,8 @@ class TestEngineOutput:
 
     def test_human_color_index(self) -> None:
         mgr = PlayerSlotManager()
-        mgr.add_human(color_hex="#0000FF")
-        assert mgr.get_human_color_index() == 2  # Blue
+        mgr.add_human(color_hex="#436EEE")
+        assert mgr.get_human_color_index() == 11  # Blue
 
     def test_human_team_engine(self) -> None:
         mgr = PlayerSlotManager()
@@ -272,11 +272,11 @@ class TestEngineOutput:
 
     def test_to_ai_opponents(self) -> None:
         mgr = PlayerSlotManager(max_positions=8)
-        mgr.add_human(start_spot=0, team=1, color_hex="#FF0000")
+        mgr.add_human(start_spot=0, team=1, color_hex="#E80A0A")
         mgr.add_ai(
             faction="UEF",
             team=2,
-            color_hex="#0000FF",
+            color_hex="#436EEE",
             start_spot=3,
             ai_key="medium",
             name="AI 1: Medium",
@@ -288,7 +288,7 @@ class TestEngineOutput:
         assert ai["faction"] == "uef"
         assert ai["ai"] == "medium"
         assert ai["team"] == 3  # UI 2 → engine 3
-        assert ai["color"] == 2  # Blue is index 2
+        assert ai["color"] == 11  # Blue is index 11
         assert ai["start_spot"] == 4  # 0-based 3 → 1-based 4
 
     def test_to_ai_opponents_multiple(self) -> None:
