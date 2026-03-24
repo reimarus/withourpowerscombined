@@ -491,6 +491,14 @@ def run_setup(
             _patch_scd(wopc_core_dst, "lua/sim/units/structureunit.lua", structure_src)
             logger.info("  patched wopc_core.scd with fixed StructureUnit.lua")
 
+        # simInit.lua — WOPC movement tuning hook (Phase 7).
+        # The engine loads simInit.lua via C++ doscript (first-added priority),
+        # so we must patch the first entry in the SCD just like uimain.lua.
+        siminit_src = wopc_patches_src / "lua" / "simInit.lua"
+        if siminit_src.exists() and wopc_core_dst.exists():
+            _patch_scd(wopc_core_dst, "lua/siminit.lua", siminit_src)
+            logger.info("  patched wopc_core.scd with WOPC simInit.lua")
+
     # --- Step 4b: Acquire content packs ---
     _report("[4/6] Downloading content packs", 4)
     _acquire_content_packs()

@@ -59,6 +59,7 @@ Items to tackle over time, roughly grouped by priority.
 54. **Civilian filler armies investigation** — gap-filling in `game_config.py` creates `Civilian=true` entries for unused ARMY positions. Investigate whether the engine spawns idle commanders for these entries (gameplay impact).
 55. **Refactor app.py monolith** — ~~4,320 lines~~ → 3,865 (Phase 2-3 done). Extracted `constants.py`, `models.py`, `map_canvas.py`. Remaining: `slot_widget.py` (unified slot UI). See `.claude/plans/gentle-enchanting-bengio.md`.
 56. ~~**Multiplayer join broken**~~ ✅ — Six bugs fixed: (1) GameState silently dropped during Welcome wait (TCP coalescing), (2) `_build_game_state()` called from network thread (thread safety), (3) joiner launch reading solo-screen widgets instead of host config, (4) joiner map never written to prefs, (5) `_all_maps` empty causing false map-missing, (6) joiner `expected_humans` never set. See PR for details.
+57. **Map spawn markers not assigned on initial load** — when loading a map in solo mode with 2+ players, the commander icons on the map canvas don't show player color assignments until the user clicks one. The markers should auto-assign on first render.
 
 ## Features
 
