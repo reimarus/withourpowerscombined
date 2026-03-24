@@ -1,8 +1,8 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-23
+> Last updated: 2026-03-24
 > If session runs out of tokens, a new session can pick up from here.
 
-## Current State: Phase 6 ✅ Complete — Stabilization & Refactoring Next
+## Current State: Phase 6 ✅ Complete — GUI Refactored, Bug Fixes Next
 
 ### What works now:
 1. **Solo mode** (quickstart bypass): GUI → select map/players/options → PLAY MATCH → game enters sim
@@ -37,13 +37,23 @@
 | **Browser** | MULTIPLAYER selected | LAN + internet game list, CREATE GAME, Direct Connect (collapsed) |
 | **Lobby** | After creating/joining game | Map panel, player list, game options, chat + action bar (LEAVE / LAUNCH) |
 
-### Key modules:
+### GUI module structure (refactored in PR #68, v2.01.0037):
+| Module | Lines | Role |
+|--------|-------|------|
+| `launcher/gui/app.py` | 1,913 | WopcApp main window, solo screen, sidebar, settings — delegates to other modules |
+| `launcher/gui/lobby_screen.py` | 1,070 | Lobby room UI + full multiplayer networking (TCP callbacks, file transfer, game state) |
+| `launcher/gui/slot_widget.py` | 832 | Player slot builders, color picker, team/spawn/color utilities |
+| `launcher/gui/map_canvas.py` | 578 | Canvas rendering, zoom/pan, markers, spawn interaction |
+| `launcher/gui/browser_screen.py` | 458 | Game browser UI + LAN/relay discovery lifecycle |
+| `launcher/gui/models.py` | 226 | `PlayerSlot` + `PlayerSlotManager`, zero widget deps |
+| `launcher/gui/constants.py` | 205 | All shared constants: colors, player palette, faction names, AI names, game option defs |
+
+### Other key modules:
 - `launcher/discovery.py` — UDP LAN game discovery (BeaconBroadcaster + BeaconListener)
 - `launcher/relay.py` — Firebase REST API for internet game registration/discovery
 - `launcher/lobby.py` — TCP lobby server/client, JSON-line protocol
 - `launcher/file_transfer.py` — map auto-download over TCP
 - `launcher/map_scanner.py` — scenario + save file parsing, DDS extraction, marker extraction
-- `launcher/gui/app.py` — **4,320 lines, 105 methods — refactor planned** (see `.claude/plans/`)
 - `launcher/game_config.py` — generates `wopc_game_config.lua` with gap-filling for ARMY mapping
 - `launcher/updater.py` — GitHub Releases auto-update (subprocess + os._exit on Windows)
 - `launcher/prefs.py` — INI-based preferences (player name, faction, color, map, display)
@@ -60,23 +70,12 @@ See `C:\Users\roskv\.claude\plans\glimmering-riding-cocke.md` for the full plan:
 - Multiplayer TCP port unreachable for remote players (#59, deferred)
 - Launcher log missing structured launch params (#60)
 
-### Branch: `fix/bugs-50-52-and-hook` — bug fixes #50, #52, #53
-- Fixed map black screen (#50): always-rescan map list + deferred canvas redraw
-- Fixed player color mismatch (#52): aligned PLAYER_COLORS with engine's GameColors.lua (8→19 colors)
-- Fixed map list after restart (#53): covered by #50's always-rescan fix
-
 ### Recent merges:
+- **PR #68** (v2.01.0037): GUI refactor — extracted slot_widget.py, browser_screen.py, lobby_screen.py from app.py (4,320 → 1,913 lines, 56% reduction)
 - **PR #64** (v2.01.0034): Multiplayer join fix — 6 bugs in TCP handshake, thread safety, joiner config
 
-### Completed refactor (PR #63, merged):
-- `launcher/gui/constants.py` — lookup tables, color conversions, game option mappings (171 lines)
-- `launcher/gui/models.py` — `PlayerSlot` + `PlayerSlotManager`, zero widget deps (226 lines)
-- `launcher/gui/map_canvas.py` — canvas rendering, zoom/pan, markers, spawn interaction (531 lines)
-- `app.py`: 4,320 → 3,784 lines (536 extracted)
-
 ### Recent releases:
+- **v2.01.0037**: GUI refactor — extracted 3 screen modules, centralized color constants
+- **v2.01.0034**: Multiplayer join fix — 6 bugs in TCP handshake, thread safety, joiner config
 - **v2.01.0033**: Refactor — extracted constants, models, map_canvas from app.py
 - **v2.01.0032**: Spawn position fix — Players array gap-filling with civilian entries
-- **v2.01.0031**: Diagnostic spawn logging, team offset fix (+1 for engine)
-- **v2.01.0030**: Player color persistence in prefs, spawn swap logic, filter reset fix
-- **v2.01.0029**: Auto-updater fix (subprocess + os._exit on Windows)
