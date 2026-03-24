@@ -173,6 +173,14 @@ def cmd_launch(
         logger.error("Run 'wopc setup' first.")
         return 1
 
+    # Repair corrupted Game.prefs before launch (e.g. active_mods = true)
+    from launcher.game_prefs_repair import repair_game_prefs
+
+    repairs = repair_game_prefs()
+    if repairs:
+        for r in repairs:
+            logger.warning("Pre-launch repair: %s", r)
+
     # Regenerate init_wopc.lua from current preferences (content packs, mods)
     from launcher.init_generator import generate_init_lua
 
