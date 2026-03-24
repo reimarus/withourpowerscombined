@@ -702,9 +702,15 @@ class LobbyClient:
                 time.sleep(0.2)
 
         except (OSError, ConnectionError) as exc:
-            logger.error("Connection failed: %s", exc)
+            error_str = str(exc)
+            if "timed out" in error_str or "Connection refused" in error_str:
+                error_str += (
+                    f" — The host's port {self.port} may be blocked by a firewall."
+                    " Ask the host to forward the port or enable UPnP on their router."
+                )
+            logger.error("Connection failed: %s", error_str)
             if self._cb.on_error:
-                self._cb.on_error(str(exc))
+                self._cb.on_error(error_str)
 
         self._running = False
         if self._cb.on_disconnected:

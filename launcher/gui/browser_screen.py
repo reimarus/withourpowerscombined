@@ -408,7 +408,7 @@ def _on_internet_games_fetched(app: Any, games: list[Any]) -> None:
     merge_and_refresh(app)
 
 
-def start_relay_registration(app: Any) -> None:
+def start_relay_registration(app: Any, *, upnp_ok: bool = False) -> None:
     """Register this hosted game on the internet relay (background thread)."""
     from launcher import config
 
@@ -435,6 +435,7 @@ def start_relay_registration(app: Any) -> None:
             lobby_port=port,
             public_ip=public_ip,
             game_name=state.get("game_name", ""),
+            upnp_ok=upnp_ok,
         )
         if ok:
             client.start_heartbeat(lambda: beacon_state(app))

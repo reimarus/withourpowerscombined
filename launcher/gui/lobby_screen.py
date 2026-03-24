@@ -456,9 +456,19 @@ def on_lobby_option_change(app: Any, key: str) -> None:
 
 def on_create_game(app: Any) -> None:
     """Handle CREATE GAME click on browser screen."""
+    from launcher import upnp
+
     app._is_hosting = True
     refresh_cached_game_state(app)
     port = int(prefs.get_host_port() or "15000")
+
+    # Attempt UPnP port mapping before starting the server
+    app._upnp_mapped = upnp.try_open_port(port)
+    if app._upnp_mapped:
+        app.log(f"UPnP: port {port} opened on router")
+    else:
+        app.log(f"UPnP unavailable — remote players may need you to forward TCP port {port}")
+
     callbacks = make_lobby_callbacks(app, is_host=True)
     app._lobby_server = LobbyServer(
         port, callbacks, game_state_provider=lambda: get_cached_game_state(app)
@@ -469,11 +479,13 @@ def on_create_game(app: Any) -> None:
     except OSError as exc:
         app.log(f"Failed to start lobby server: {exc}")
         app._lobby_server = None
+        upnp.close_port(port)
+        app._upnp_mapped = False
         return
     browser_screen.start_beacon_broadcaster(app)
     browser_screen.stop_beacon_listener(app)
     browser_screen.stop_relay_polling(app)
-    browser_screen.start_relay_registration(app)
+    browser_screen.start_relay_registration(app, upnp_ok=app._upnp_mapped)
     app._show_screen("lobby")
     update_lobby_for_host(app)
 
@@ -524,6 +536,13 @@ def on_leave_lobby(app: Any) -> None:
         if app._lobby_server:
             app._lobby_server.stop()
             app._lobby_server = None
+        # Clean up UPnP port mapping
+        if getattr(app, "_upnp_mapped", False):
+            from launcher import upnp
+
+            port = int(prefs.get_host_port() or "15000")
+            upnp.close_port(port)
+            app._upnp_mapped = False
     else:
         if app._lobby_client:
             app._lobby_client.disconnect()

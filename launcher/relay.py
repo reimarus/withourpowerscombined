@@ -108,6 +108,7 @@ class RelayClient:
         lobby_port: int,
         public_ip: str,
         game_name: str = "",
+        upnp_ok: bool = False,
     ) -> bool:
         """Write a new game record to Firebase.  Returns True on success.
 
@@ -127,6 +128,7 @@ class RelayClient:
             "max_players": max_players,
             "lobby_port": lobby_port,
             "host_ip": public_ip,
+            "upnp_ok": upnp_ok,
             "last_seen": time.time(),
         }
         try:
