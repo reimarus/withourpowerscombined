@@ -37,6 +37,7 @@ from launcher.gui.constants import (
     COLOR_TEXT_MUTED,
     COLOR_TEXT_PRIMARY,
 )
+from launcher.gui.supcom_frame import SupComFrame
 from launcher.lobby import LobbyCallbacks, LobbyClient, LobbyServer
 from launcher.wopc import cmd_launch
 
@@ -59,8 +60,9 @@ def build_lobby_screen(app: Any) -> None:
     app.lobby_screen.grid_columnconfigure(1, weight=1)
 
     # --- Map Section (top-left) ---
-    map_frame = ctk.CTkFrame(app.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
-    map_frame.grid(row=0, column=0, padx=(20, 5), pady=(20, 5), sticky="nsew")
+    _map_sf = SupComFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
+    _map_sf.frame.grid(row=0, column=0, padx=(20, 5), pady=(20, 5), sticky="nsew")
+    map_frame = _map_sf.interior
     map_frame.grid_rowconfigure(3, weight=1)
     map_frame.grid_columnconfigure(0, weight=1)
 
@@ -116,8 +118,9 @@ def build_lobby_screen(app: Any) -> None:
     app.lobby_change_map_btn.grid(row=4, column=0, padx=10, pady=(0, 10), sticky="w")
 
     # --- Players Section (top-right) ---
-    players_frame = ctk.CTkFrame(app.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
-    players_frame.grid(row=0, column=1, padx=(5, 20), pady=(20, 5), sticky="nsew")
+    _players_sf = SupComFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
+    _players_sf.frame.grid(row=0, column=1, padx=(5, 20), pady=(20, 5), sticky="nsew")
+    players_frame = _players_sf.interior
     players_frame.grid_rowconfigure(1, weight=1)
     players_frame.grid_columnconfigure(0, weight=1)
 
@@ -156,8 +159,9 @@ def build_lobby_screen(app: Any) -> None:
     app.lobby_player_slots = []  # list[dict[str, Any]]
 
     # --- Options Section (bottom-left) ---
-    opts_frame = ctk.CTkFrame(app.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
-    opts_frame.grid(row=1, column=0, padx=(20, 5), pady=(5, 5), sticky="nsew")
+    _opts_sf = SupComFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
+    _opts_sf.frame.grid(row=1, column=0, padx=(20, 5), pady=(5, 5), sticky="nsew")
+    opts_frame = _opts_sf.interior
     opts_frame.grid_columnconfigure(1, weight=1)
 
     opts_header = ctk.CTkLabel(
@@ -213,8 +217,9 @@ def build_lobby_screen(app: Any) -> None:
     app.lobby_option_vars["Victory"].trace_add("write", _update_lobby_victory_desc)
 
     # --- Chat Section (bottom-right) ---
-    chat_frame = ctk.CTkFrame(app.lobby_screen, fg_color=COLOR_SURFACE, corner_radius=4)
-    chat_frame.grid(row=1, column=1, padx=(5, 20), pady=(5, 5), sticky="nsew")
+    _chat_sf = SupComFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
+    _chat_sf.frame.grid(row=1, column=1, padx=(5, 20), pady=(5, 5), sticky="nsew")
+    chat_frame = _chat_sf.interior
     chat_frame.grid_rowconfigure(1, weight=1)
     chat_frame.grid_columnconfigure(0, weight=1)
 
@@ -269,6 +274,8 @@ def build_lobby_screen(app: Any) -> None:
         text_color=COLOR_TEXT_PRIMARY,
         font=ctk.CTkFont(size=14, weight="bold"),
         corner_radius=4,
+        border_width=1,
+        border_color="#FF6B75",
         command=lambda: on_leave_lobby(app),
     )
     app.lobby_leave_btn.grid(row=0, column=0, sticky="w")
@@ -283,6 +290,8 @@ def build_lobby_screen(app: Any) -> None:
         text_color=COLOR_BG,
         font=ctk.CTkFont(size=16, weight="bold"),
         corner_radius=4,
+        border_width=1,
+        border_color="#6CD4FF",
         command=lambda: on_lobby_launch_click(app),
     )
     app.lobby_launch_btn.grid(row=0, column=2, sticky="e")

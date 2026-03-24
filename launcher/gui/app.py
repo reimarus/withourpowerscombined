@@ -357,6 +357,10 @@ class WopcApp(BaseApp):  # type: ignore
         self.sidebar.grid_columnconfigure(0, weight=1)
         self.sidebar.grid_rowconfigure(9, weight=1)
 
+        # Thin gold accent line at the very top of the sidebar
+        top_accent = ctk.CTkFrame(self.sidebar, height=2, fg_color=COLOR_ACCENT, corner_radius=0)
+        top_accent.place(x=0, y=0, relwidth=1)
+
         # --- Logo / Title ---
         self.logo_label = ctk.CTkLabel(
             self.sidebar,
@@ -528,6 +532,8 @@ class WopcApp(BaseApp):  # type: ignore
             hover_color=COLOR_ACCENT_HOVER,
             text_color=COLOR_BG,
             corner_radius=4,
+            border_width=1,
+            border_color="#D4A030",
             command=self._on_primary_click,
         )
         self.primary_btn.grid(row=13, column=0, padx=20, pady=(10, 6), sticky="ew")

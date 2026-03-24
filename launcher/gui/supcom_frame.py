@@ -20,8 +20,10 @@ try:
     from PIL import ImageTk
 
     _PIL_OK = True
+    _LANCZOS = PilImage.LANCZOS  # type: ignore[attr-defined]
 except ImportError:
     _PIL_OK = False
+    _LANCZOS = None
 
 _ICONS_DIR = Path(__file__).parent / "icons"
 
@@ -56,11 +58,11 @@ def _load_frame_parts(
         img = PilImage.open(p).convert("RGBA")
         # Scale corners to target size, edges to strip thickness
         if name in ("topleft", "topright", "bottomleft", "bottomright"):
-            img = img.resize((corner, corner), PilImage.LANCZOS)
+            img = img.resize((corner, corner), _LANCZOS)
         elif name in ("top", "bottom"):
-            img = img.resize((corner, _EDGE_THICKNESS), PilImage.LANCZOS)
+            img = img.resize((corner, _EDGE_THICKNESS), _LANCZOS)
         elif name in ("left", "right"):
-            img = img.resize((_EDGE_THICKNESS, corner), PilImage.LANCZOS)
+            img = img.resize((_EDGE_THICKNESS, corner), _LANCZOS)
         parts[name] = img
     return parts
 
@@ -186,25 +188,25 @@ class SupComFrame:
         right_h = max(1, h - 2 * c)
 
         if top_w > 0:
-            top_img = parts["top"].resize((top_w, et), PilImage.LANCZOS)
+            top_img = parts["top"].resize((top_w, et), _LANCZOS)
             tk_top = ImageTk.PhotoImage(top_img)
             self._tk_images.append(tk_top)
             canvas.create_image(c, 0, image=tk_top, anchor="nw", tags="border")
 
         if bottom_w > 0:
-            bot_img = parts["bottom"].resize((bottom_w, et), PilImage.LANCZOS)
+            bot_img = parts["bottom"].resize((bottom_w, et), _LANCZOS)
             tk_bot = ImageTk.PhotoImage(bot_img)
             self._tk_images.append(tk_bot)
             canvas.create_image(c, h - et, image=tk_bot, anchor="nw", tags="border")
 
         if left_h > 0:
-            left_img = parts["left"].resize((et, left_h), PilImage.LANCZOS)
+            left_img = parts["left"].resize((et, left_h), _LANCZOS)
             tk_left = ImageTk.PhotoImage(left_img)
             self._tk_images.append(tk_left)
             canvas.create_image(0, c, image=tk_left, anchor="nw", tags="border")
 
         if right_h > 0:
-            right_img = parts["right"].resize((et, right_h), PilImage.LANCZOS)
+            right_img = parts["right"].resize((et, right_h), _LANCZOS)
             tk_right = ImageTk.PhotoImage(right_img)
             self._tk_images.append(tk_right)
             canvas.create_image(w - et, c, image=tk_right, anchor="nw", tags="border")

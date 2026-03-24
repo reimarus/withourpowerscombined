@@ -54,6 +54,29 @@ from launcher.gui.constants import (
     MAX_SLOTS as _MAX_SLOTS,
 )
 
+_ICONS_DIR = __import__("pathlib").Path(__file__).parent / "icons"
+_FACTION_ICON_SIZE = 20
+_faction_icon_cache: dict[str, Any] = {}
+
+
+def _get_faction_icon(faction: str) -> Any | None:
+    """Return a cached CTkImage for the given faction, or None."""
+    if not _PIL_AVAILABLE or ctk is None:
+        return None
+    key = faction.lower()
+    if key in _faction_icon_cache:
+        return _faction_icon_cache[key]
+    path = _ICONS_DIR / f"faction_{key}.png"
+    if not path.exists():
+        _faction_icon_cache[key] = None
+        return None
+    img = PilImage.open(path).convert("RGBA")
+    sz = (_FACTION_ICON_SIZE, _FACTION_ICON_SIZE)
+    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=sz)
+    _faction_icon_cache[key] = ctk_img
+    return ctk_img
+
+
 # ---------------------------------------------------------------------------
 # Pure utility functions (no app reference needed)
 # ---------------------------------------------------------------------------
@@ -187,11 +210,15 @@ def add_human_slot(app: Any) -> None:
     type_lbl.grid(row=row, column=1, sticky="w", pady=2)
     widgets.append(type_lbl)
 
+    human_faction = prefs.get_player_faction()
+    faction_icon = _get_faction_icon(human_faction)
     faction_lbl = ctk.CTkLabel(
         app.slots_scroll,
-        text="(see Player Settings)",
+        text=human_faction.capitalize(),
         text_color=COLOR_TEXT_MUTED,
         font=ctk.CTkFont(size=11),
+        image=faction_icon,
+        compound="left",
     )
     faction_lbl.grid(row=row, column=2, padx=5, pady=2)
     widgets.append(faction_lbl)
@@ -298,15 +325,32 @@ def add_ai_slot_to(
     widgets.append(ai_menu)
 
     faction_var = ctk.StringVar(value="Random")
+    faction_frame = ctk.CTkFrame(parent, fg_color="transparent")
+    faction_frame.grid(row=row, column=2, padx=5, pady=2, sticky="w")
+
+    faction_icon_lbl = ctk.CTkLabel(
+        faction_frame,
+        text="",
+        image=_get_faction_icon("random"),
+        width=_FACTION_ICON_SIZE,
+    )
+    faction_icon_lbl.grid(row=0, column=0, padx=(0, 2))
+
+    def _on_faction_change(val: str, lbl: Any = faction_icon_lbl) -> None:
+        icon = _get_faction_icon(val)
+        if icon:
+            lbl.configure(image=icon)
+
     faction_menu = ctk.CTkOptionMenu(
-        parent,
+        faction_frame,
         values=list(_FACTIONS),
         variable=faction_var,
+        command=_on_faction_change,
         width=90,
         height=24,
     )
-    faction_menu.grid(row=row, column=2, padx=5, pady=2)
-    widgets.append(faction_menu)
+    faction_menu.grid(row=0, column=1)
+    widgets.append(faction_frame)
 
     team_var = ctk.StringVar(value=next_team(slot_list))
     team_menu = ctk.CTkOptionMenu(
@@ -437,11 +481,14 @@ def add_remote_human_slot(app: Any, player_id: int, name: str, faction: str, slo
     name_lbl.grid(row=row, column=1, sticky="w", pady=2)
     widgets.append(name_lbl)
 
+    faction_icon = _get_faction_icon(faction)
     faction_lbl = ctk.CTkLabel(
         scroll,
         text=faction.capitalize(),
         text_color=COLOR_TEXT_MUTED,
         font=ctk.CTkFont(size=11),
+        image=faction_icon,
+        compound="left",
     )
     faction_lbl.grid(row=row, column=2, padx=5, pady=2)
     widgets.append(faction_lbl)
@@ -545,11 +592,14 @@ def apply_remote_ai_slots(app: Any, ai_slots: list[dict[str, Any]]) -> None:
         name_lbl.grid(row=row, column=1, sticky="w", pady=2)
         widgets.append(name_lbl)
 
+        ai_faction = ai.get("faction", "random")
         faction_lbl = ctk.CTkLabel(
             scroll,
-            text=ai.get("faction", "random").capitalize(),
+            text=ai_faction.capitalize(),
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=11),
+            image=_get_faction_icon(ai_faction),
+            compound="left",
         )
         faction_lbl.grid(row=row, column=2, padx=5, pady=2)
         widgets.append(faction_lbl)

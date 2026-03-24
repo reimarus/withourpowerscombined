@@ -33,6 +33,7 @@ from launcher.gui.constants import (
     COLOR_TEXT_MUTED,
     COLOR_TEXT_PRIMARY,
 )
+from launcher.gui.supcom_frame import SupComFrame
 
 logger = logging.getLogger("wopc.gui")
 
@@ -59,13 +60,17 @@ def build_browser_screen(app: Any) -> None:
     )
     header.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
 
-    # Game list (scrollable)
+    # Game list (scrollable) inside SupComFrame border
+    _list_sf = SupComFrame(app.browser_screen, fg_color=COLOR_SURFACE)
+    _list_sf.frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="nsew")
+    _list_sf.interior.grid_rowconfigure(0, weight=1)
+    _list_sf.interior.grid_columnconfigure(0, weight=1)
     app.game_list_frame = ctk.CTkScrollableFrame(
-        app.browser_screen,
+        _list_sf.interior,
         fg_color=COLOR_SURFACE,
-        corner_radius=4,
+        corner_radius=0,
     )
-    app.game_list_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="nsew")
+    app.game_list_frame.grid(row=0, column=0, sticky="nsew")
     app.game_list_frame.grid_columnconfigure(0, weight=1)
 
     # Empty state label
@@ -102,6 +107,8 @@ def build_browser_screen(app: Any) -> None:
         hover_color=COLOR_ACCENT_HOVER,
         text_color=COLOR_BG,
         corner_radius=4,
+        border_width=1,
+        border_color="#D4A030",
         command=app._on_create_game,
     )
     app.create_game_btn.grid(row=0, column=1, sticky="w")
