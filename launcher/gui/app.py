@@ -1991,10 +1991,12 @@ class WopcApp(BaseApp):  # type: ignore
         self._update_play_summary()
 
     def _refresh_map_list(self) -> None:
-        """Scan the maps directory and cache the list, then apply filters."""
-        self._all_maps = getattr(self, "_all_maps", [])
-        if not self._all_maps:
-            self._all_maps = map_scanner.scan_all_maps()
+        """Scan the maps directory and populate the list + filters.
+
+        Always rescans the filesystem — stale caches caused black map
+        previews after setup/update (backlog #50, #53).
+        """
+        self._all_maps = map_scanner.scan_all_maps()
 
         # Auto-select the first map if none is set in prefs.
         if self._all_maps and not prefs.get_active_map():

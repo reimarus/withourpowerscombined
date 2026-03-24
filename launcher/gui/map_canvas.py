@@ -191,6 +191,13 @@ class MapCanvas:
         self._tinted_icon_cache.clear()
         self._hover_spawn = -1
         self.redraw()
+        # Safety net: if redraw() bailed because the canvas hasn't been laid
+        # out yet (winfo_width() == 1), schedule a deferred retry so the map
+        # preview isn't left black.  (Backlog #50)
+        if self.canvas.winfo_width() < 10:
+            if self._canvas_redraw_id is not None:
+                self._cancel(self._canvas_redraw_id)
+            self._canvas_redraw_id = self._after(100, self.redraw)
 
     def redraw(self) -> None:
         """Full redraw of the map preview and all overlays."""

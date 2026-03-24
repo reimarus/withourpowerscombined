@@ -103,22 +103,22 @@ class TestAppReexports:
     def test_player_colors_available(self) -> None:
         from launcher.gui.app import PLAYER_COLORS
 
-        assert len(PLAYER_COLORS) == 8
+        assert len(PLAYER_COLORS) == 19
 
     def test_color_name_to_hex_via_app(self) -> None:
         """The static method on WopcApp delegates to constants.color_name_to_hex."""
         from launcher.gui.constants import color_name_to_hex
 
-        assert color_name_to_hex("Red") == "#FF0000"
+        assert color_name_to_hex("Cybran Red") == "#E80A0A"
         assert color_name_to_hex("#ABCDEF") == "#ABCDEF"
 
     def test_color_hex_to_index_via_app(self) -> None:
         """The static method on WopcApp delegates to constants.color_hex_to_index."""
         from launcher.gui.constants import color_hex_to_index
 
-        assert color_hex_to_index("#FF0000") == 1
-        assert color_hex_to_index("#0000FF") == 2
-        assert color_hex_to_index("#FE0101") == 1  # nearest match
+        assert color_hex_to_index("#E80A0A") == 1  # Cybran Red (exact)
+        assert color_hex_to_index("#2929E1") == 12  # UEF Blue (exact)
+        assert color_hex_to_index("#E70909") == 1  # nearest → Cybran Red
 
 
 class TestRemoveByIdentity:

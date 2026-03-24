@@ -21,16 +21,17 @@ from launcher.gui.constants import (
 class TestPlayerColors:
     """Verify palette structure and constraints."""
 
-    def test_eight_colors(self) -> None:
-        assert len(PLAYER_COLORS) == 8
+    def test_nineteen_colors(self) -> None:
+        """Palette must match SCFA engine's GameColors.lua (19 colors)."""
+        assert len(PLAYER_COLORS) == 19
 
     def test_unique_hex_values(self) -> None:
         hexes = [h for h, _ in PLAYER_COLORS]
-        assert len(set(hexes)) == 8
+        assert len(set(hexes)) == len(PLAYER_COLORS)
 
     def test_unique_names(self) -> None:
         names = [n for _, n in PLAYER_COLORS]
-        assert len(set(names)) == 8
+        assert len(set(names)) == len(PLAYER_COLORS)
 
     def test_hex_format(self) -> None:
         for hex_val, _ in PLAYER_COLORS:
@@ -42,8 +43,8 @@ class TestColorNameToHex:
     """Tests for color_name_to_hex()."""
 
     def test_known_name(self) -> None:
-        assert color_name_to_hex("Red") == "#FF0000"
-        assert color_name_to_hex("Blue") == "#0000FF"
+        assert color_name_to_hex("Cybran Red") == "#E80A0A"
+        assert color_name_to_hex("Blue") == "#436EEE"
 
     def test_passthrough_hex(self) -> None:
         assert color_name_to_hex("#ABCDEF") == "#ABCDEF"
@@ -64,12 +65,12 @@ class TestColorHexToIndex:
             assert color_hex_to_index(name) == i + 1
 
     def test_nearest_rgb_distance(self) -> None:
-        # Very close to Red (#FF0000)
-        assert color_hex_to_index("#FE0101") == 1
+        # Very close to Cybran Red (#E80A0A)
+        assert color_hex_to_index("#E70909") == 1
 
     def test_nearest_to_green(self) -> None:
-        # Close to Green (#00FF00)
-        assert color_hex_to_index("#00FE00") == 8  # Green is index 8
+        # Close to mid green (#40BF40)
+        assert color_hex_to_index("#41BE41") == 8  # Green is index 8
 
     def test_unknown_string_returns_1(self) -> None:
         assert color_hex_to_index("garbage") == 1
@@ -82,7 +83,7 @@ class TestColorIndexToHex:
     """Tests for color_index_to_hex()."""
 
     def test_valid_indices(self) -> None:
-        for i in range(1, 9):
+        for i in range(1, len(PLAYER_COLORS) + 1):
             assert color_index_to_hex(i) == PLAYER_COLORS[i - 1][0]
 
     def test_clamp_low(self) -> None:

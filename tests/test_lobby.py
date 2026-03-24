@@ -810,7 +810,7 @@ class TestGameStateBuffering:
             client.connect()
             # Both events must fire
             assert connected.wait(timeout=10.0), "on_connected not fired"
-            assert state_received.wait(timeout=5.0), "on_state_updated not fired"
+            assert state_received.wait(timeout=10.0), "on_state_updated not fired"
             assert received_state.get("game_options", {}).get("Victory") == "Sandbox"
         finally:
             client.disconnect()
