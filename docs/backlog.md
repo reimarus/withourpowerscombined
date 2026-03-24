@@ -13,6 +13,7 @@ Items to tackle over time, roughly grouped by priority.
 7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
 42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers at lines 194, 303, 317, 398 in `deploy.py` don't check the return value. The immediate crash (`FileNotFoundError` at line 522) is fixed (PR #42), but other download calls still fail silently. Also: the `content-v2` GitHub Release doesn't exist yet — must create it with `wopc_core.scd.zip`, `wopc-maps.zip`, and strategic icons so first-time setup works for new users.
 43. ~~**"Send Logs" button**~~ ✅ — one-click button in launcher uploads log to Firebase `/reports/` node for remote troubleshooting (v2.01.0014)
+58. ~~**Game.prefs corruption causes black screen**~~ ✅ — `active_mods = true` (boolean) in Game.prefs instead of `active_mods = { }` (table) crashes prefs.lua/optionslogic.lua with "attempt to index a boolean value". Auto-repair runs before every game launch, backs up corrupted file, replaces boolean with empty table.
 
 ## High Priority — Player Experience
 
