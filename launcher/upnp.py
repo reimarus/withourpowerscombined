@@ -13,7 +13,7 @@ logger = logging.getLogger("wopc.upnp")
 
 # Best-effort import — miniupnpc is an optional dependency.
 try:
-    import miniupnpc  # type: ignore[import-untyped]
+    import miniupnpc  # type: ignore[import-untyped,import-not-found]
 
     _HAS_UPNP = True
 except ImportError:
