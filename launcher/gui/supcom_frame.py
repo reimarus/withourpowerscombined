@@ -136,7 +136,10 @@ class SupComFrame:
             corner_radius=0,
         )
         pad = _EDGE_THICKNESS
-        self.interior.place(x=pad, y=pad, relwidth=1, relheight=1, width=-2 * pad, height=-2 * pad)
+        # CTkFrame.place() doesn't accept width/height — use padx/pady via grid
+        self.frame.grid_rowconfigure(0, weight=1)
+        self.frame.grid_columnconfigure(0, weight=1)
+        self.interior.grid(row=0, column=0, padx=pad, pady=pad, sticky="nsew")
 
         self._fg_color = fg_color
         self._corner = corner
