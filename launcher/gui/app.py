@@ -54,6 +54,7 @@ from launcher.gui.constants import (
     VICTORY_DESCRIPTIONS as _VICTORY_DESCS,
 )
 from launcher.gui.map_canvas import DictSlotAccessor, MapCanvas
+from launcher.gui.supcom_frame import SupComFrame
 from launcher.gui.worker import SetupWorker
 from launcher.wopc import cmd_launch
 
@@ -595,8 +596,9 @@ class WopcApp(BaseApp):  # type: ignore
         # --- Main config panel: 4 columns ---
         # Col 0: Game Options + Mods | Col 1: Player Settings + Players
         # Col 2: Map (hero) | Col 3: Map List
-        self.config_panel = ctk.CTkFrame(self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4)
-        self.config_panel.grid(row=1, column=0, sticky="nsew")
+        self._config_sf = SupComFrame(self.solo_screen, fg_color=COLOR_SURFACE)
+        self._config_sf.frame.grid(row=1, column=0, sticky="nsew")
+        self.config_panel = self._config_sf.interior
         self.config_panel.grid_columnconfigure(0, weight=0, minsize=180)
         self.config_panel.grid_columnconfigure(1, weight=1, minsize=340)
         self.config_panel.grid_columnconfigure(2, weight=4)  # map hero
@@ -610,8 +612,9 @@ class WopcApp(BaseApp):  # type: ignore
         self._build_players_column()
 
         # --- Col 2: Map Preview (hero) ---
-        map_frame = ctk.CTkFrame(self.config_panel, fg_color=COLOR_PANEL, corner_radius=4)
-        map_frame.grid(row=0, column=2, sticky="nsew", padx=4, pady=6)
+        self._map_sf = SupComFrame(self.config_panel, fg_color=COLOR_PANEL)
+        self._map_sf.frame.grid(row=0, column=2, sticky="nsew", padx=4, pady=6)
+        map_frame = self._map_sf.interior
         map_frame.grid_columnconfigure(0, weight=1)
         map_frame.grid_rowconfigure(0, weight=1)
 
@@ -638,10 +641,9 @@ class WopcApp(BaseApp):  # type: ignore
         self._build_map_list_column()
 
         # --- Log / Chat Window ---
-        self.log_chat_frame = ctk.CTkFrame(
-            self.solo_screen, fg_color=COLOR_SURFACE, corner_radius=4
-        )
-        self.log_chat_frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        self._log_sf = SupComFrame(self.solo_screen, fg_color=COLOR_SURFACE)
+        self._log_sf.frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        self.log_chat_frame = self._log_sf.interior
         self.log_chat_frame.grid_columnconfigure(0, weight=1)
         self.log_chat_frame.grid_rowconfigure(0, weight=1)
 
