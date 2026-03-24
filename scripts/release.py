@@ -11,19 +11,32 @@ Bumps the build number automatically, or specify minor/major:
     py scripts/release.py minor     # 2.01.0042 -> 2.02.0001
     py scripts/release.py major     # 2.01.0042 -> 3.00.0001
 
-Then: runs tests, builds exe, commits, creates GitHub release, pushes.
+Then: runs tests + builds exe (in parallel), optionally rebuilds content-v2
+(only when content source files changed), commits, creates GitHub release, pushes.
 """
 
 from __future__ import annotations
 
+import concurrent.futures
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 EXE_NAME = "WOPC-Launcher.exe"
+
+# Paths whose changes require a content-v2 rebuild.
+CONTENT_SOURCE_PREFIXES = (
+    "gamedata/",
+    "vendor/faf-ui/",
+    "init/",
+    "launcher/deploy.py",
+    "launcher/mods.py",
+    "scripts/build_content_release.py",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -98,14 +111,14 @@ def bump(current: str, part: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def run(cmd: str, *, check: bool = True) -> subprocess.CompletedProcess[str]:
+def run(cmd: str, *, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess[str]:
     """Run a shell command and stream output."""
     print(f"\n  $ {cmd}")
     result = subprocess.run(
         cmd,
         shell=True,
         cwd=REPO_ROOT,
-        capture_output=False,
+        capture_output=capture,
         text=True,
     )
     if check and result.returncode != 0:
@@ -114,11 +127,71 @@ def run(cmd: str, *, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 # ---------------------------------------------------------------------------
+# Content change detection
+# ---------------------------------------------------------------------------
+
+
+def _content_changed_since_last_release() -> bool:
+    """Check if any content source files changed since the last content-v2 build.
+
+    Uses a lightweight marker tag 'content-v2-built' to track the last commit
+    that triggered a content rebuild. Falls back to always rebuilding if the
+    tag doesn't exist.
+    """
+    result = subprocess.run(
+        "git diff --name-only content-v2-built..HEAD",
+        shell=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        # Tag doesn't exist — rebuild to be safe
+        return True
+
+    changed_files = result.stdout.strip().splitlines()
+    for f in changed_files:
+        normalized = f.replace("\\", "/")
+        if any(normalized.startswith(p) for p in CONTENT_SOURCE_PREFIXES):
+            return True
+    return False
+
+
+def _update_content_built_tag() -> None:
+    """Move the content-v2-built tag to HEAD."""
+    subprocess.run(
+        "git tag -f content-v2-built HEAD",
+        shell=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pip install skip
+# ---------------------------------------------------------------------------
+
+
+def _is_editable_installed() -> bool:
+    """Check if the package is already installed in editable mode."""
+    result = subprocess.run(
+        "py -m pip show wopc",
+        shell=True,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return "Editable project location" in (result.stdout or "")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
+    t0 = time.monotonic()
+
     part = sys.argv[1] if len(sys.argv) > 1 else "build"
     if part not in ("build", "minor", "major"):
         raise SystemExit(f"Usage: py scripts/release.py [build|minor|major]  (got '{part}')")
@@ -135,16 +208,23 @@ def main() -> None:
     _write_version(new_ver)
     print(f"  OK: Updated pyproject.toml to {new_ver}")
 
-    # 2. Reinstall package so importlib.metadata picks up the new version
-    run("py -m pip install -e . -q")
+    # 2. Reinstall package (skip if already editable)
+    if _is_editable_installed():
+        print("\n  SKIP: Package already installed in editable mode")
+    else:
+        run("py -m pip install -e . -q")
 
-    # 3. Run tests
-    print("\n-- Running tests --")
-    run("py -m pytest tests/ -x -q --no-header")
-
-    # 4. Build exe
-    print("\n-- Building exe --")
-    run("py build_exe.py")
+    # 3. Run tests + build exe IN PARALLEL
+    print("\n-- Running tests + building exe (parallel) --")
+    t_parallel = time.monotonic()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        test_future = pool.submit(run, "py -m pytest tests/ -x -q --no-header")
+        build_future = pool.submit(run, "py build_exe.py")
+        # Wait for both — raise if either fails
+        test_future.result()
+        build_future.result()
+    parallel_sec = time.monotonic() - t_parallel
+    print(f"  OK: Tests + build completed in {parallel_sec:.0f}s")
 
     exe_path = REPO_ROOT / EXE_NAME
     if not exe_path.exists():
@@ -153,52 +233,58 @@ def main() -> None:
     size_mb = exe_path.stat().st_size / 1_000_000
     print(f"  OK: Built {EXE_NAME} ({size_mb:.1f} MB)")
 
-    # 5. Rebuild content-v2 assets and update the content release
-    print("\n-- Rebuilding content-v2 --")
-    content_result = run("py scripts/build_content_release.py", check=False)
-    if content_result.returncode == 0:
-        staging = REPO_ROOT / "release-staging"
-        scd = staging / "wopc_core.scd"
-        scd_zip = staging / "wopc_core.scd.zip"
-        maps_zip = staging / "wopc-maps.zip"
-        icons_scd = staging / "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd"
+    # 4. Rebuild content-v2 ONLY if content source files changed
+    if _content_changed_since_last_release():
+        print("\n-- Rebuilding content-v2 (content files changed) --")
+        content_result = run("py scripts/build_content_release.py", check=False)
+        if content_result.returncode == 0:
+            staging = REPO_ROOT / "release-staging"
+            scd = staging / "wopc_core.scd"
+            scd_zip = staging / "wopc_core.scd.zip"
+            maps_zip = staging / "wopc-maps.zip"
+            icons_scd = staging / "BrewLAN-StrategicIconsOverhaul-LARGE-classic.scd"
 
-        # Zip the SCD if not already zipped
-        if scd.exists() and not scd_zip.exists():
-            import zipfile
+            # Zip the SCD if not already zipped
+            if scd.exists() and not scd_zip.exists():
+                import zipfile
 
-            with zipfile.ZipFile(scd_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
-                zf.write(scd, "wopc_core.scd")
-            size_mb = scd_zip.stat().st_size / 1_000_000
-            print(f"  OK: Zipped wopc_core.scd ({size_mb:.1f} MB)")
+                with zipfile.ZipFile(scd_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
+                    zf.write(scd, "wopc_core.scd")
+                size_mb = scd_zip.stat().st_size / 1_000_000
+                print(f"  OK: Zipped wopc_core.scd ({size_mb:.1f} MB)")
 
-        # Upload assets to content-v2 (delete old, re-upload)
-        assets = [f for f in [scd_zip, maps_zip, icons_scd] if f.exists()]
-        if assets:
-            # Delete existing assets first
-            for asset in assets:
-                run(f'gh release delete-asset content-v2 "{asset.name}" --yes', check=False)
-            # Upload new assets
-            asset_args = " ".join(f'"{a}"' for a in assets)
-            run(f"gh release upload content-v2 {asset_args} --clobber")
-            print("  OK: Updated content-v2 release")
+            # Upload assets to content-v2 (delete old, re-upload)
+            assets = [f for f in [scd_zip, maps_zip, icons_scd] if f.exists()]
+            if assets:
+                # Delete existing assets first
+                for asset in assets:
+                    run(f'gh release delete-asset content-v2 "{asset.name}" --yes', check=False)
+                # Upload new assets
+                asset_args = " ".join(f'"{a}"' for a in assets)
+                run(f"gh release upload content-v2 {asset_args} --clobber")
+                print("  OK: Updated content-v2 release")
+
+            _update_content_built_tag()
+        else:
+            print("  WARNING: Content build failed — content-v2 not updated")
+            print("           (This is non-fatal; launcher release continues)")
     else:
-        print("  WARNING: Content build failed — content-v2 not updated")
-        print("           (This is non-fatal; launcher release continues)")
+        print("\n  SKIP: No content source changes — content-v2 rebuild skipped")
 
-    # 6. Commit the version bump
+    # 5. Commit the version bump
     run(f"git add {PYPROJECT.name} launcher/__version__.py")
     run(f'git commit -m "release: v{new_ver}" --no-verify')
 
-    # 7. Create GitHub release and upload exe
+    # 6. Create GitHub release and upload exe
     print("\n-- Creating GitHub release --")
     title = f"WOPC Launcher v{new_ver}"
     run(f'gh release create {tag} "{exe_path}" --title "{title}" --generate-notes --latest')
 
-    # 8. Push the commit
+    # 7. Push the commit
     run("git push")
 
-    print(f"\n  DONE: Released {tag}")
+    elapsed = time.monotonic() - t0
+    print(f"\n  DONE: Released {tag} in {elapsed:.0f}s")
     print(f"     https://github.com/reimarus/withourpowerscombined/releases/tag/{tag}")
 
 
