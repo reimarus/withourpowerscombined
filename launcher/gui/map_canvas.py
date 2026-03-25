@@ -192,12 +192,31 @@ class MapCanvas:
         self._hover_spawn = -1
         self.redraw()
         # Safety net: if redraw() bailed because the canvas hasn't been laid
-        # out yet (winfo_width() == 1), schedule a deferred retry so the map
+        # out yet (winfo_width() == 1), schedule deferred retries so the map
         # preview isn't left black.  (Backlog #50)
+        # Use escalating delays — after auto-update restart, the canvas can
+        # take longer to lay out than the initial 100ms retry allows.
         if self.canvas.winfo_width() < 10:
-            if self._canvas_redraw_id is not None:
-                self._cancel(self._canvas_redraw_id)
-            self._canvas_redraw_id = self._after(100, self.redraw)
+            self._schedule_deferred_redraw(attempt=0)
+
+    _REDRAW_DELAYS = (100, 200, 500, 1000, 2000)  # escalating retry delays (ms)
+
+    def _schedule_deferred_redraw(self, attempt: int = 0) -> None:
+        """Schedule a deferred redraw with escalating delays."""
+        if self._canvas_redraw_id is not None:
+            self._cancel(self._canvas_redraw_id)
+        if attempt >= len(self._REDRAW_DELAYS):
+            return  # give up after all attempts
+        delay = self._REDRAW_DELAYS[attempt]
+
+        def _retry() -> None:
+            self._canvas_redraw_id = None
+            self.redraw()
+            # If still not laid out, try again with longer delay
+            if self.canvas.winfo_width() < 10 and attempt + 1 < len(self._REDRAW_DELAYS):
+                self._schedule_deferred_redraw(attempt + 1)
+
+        self._canvas_redraw_id = self._after(delay, _retry)
 
     def redraw(self) -> None:
         """Full redraw of the map preview and all overlays."""
