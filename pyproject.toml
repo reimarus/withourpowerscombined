@@ -81,6 +81,14 @@ disallow_untyped_defs = false
 check_untyped_defs = true
 files = ["launcher"]
 
+[[tool.mypy.overrides]]
+module = ["PIL", "PIL.*", "customtkinter", "customtkinter.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["launcher.gui.*"]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [

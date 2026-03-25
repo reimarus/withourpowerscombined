@@ -214,12 +214,15 @@ class TestContentPackAcquisition:
         with patch("launcher.deploy._download_file", mock_dl):
             _acquire_content_packs()
 
-        # blackops: 1 SCD + 2 sounds = 3; TotalMayhem: 1 SCD + 10 sounds = 11
-        assert mock_dl.call_count == 14
+        # lua(1) + loc(1) + blackops(3) + TotalMayhem(11) + brewlan(1)
+        # + loud_units(1) + Wyvern(3) + 4D(1) = 22
+        assert mock_dl.call_count == 22
 
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         assert (wopc_gd / "blackops.scd").exists()
         assert (wopc_gd / "TotalMayhem.scd").exists()
+        assert (wopc_gd / "lua.scd").exists()
+        assert (wopc_gd / "brewlan.scd").exists()
 
     def test_skips_when_already_cached(self, patched_config):
         """Does not re-download when files already exist in WOPC."""
@@ -228,14 +231,23 @@ class TestContentPackAcquisition:
         # Pre-populate WOPC with existing files for ALL content packs
         wopc_gd = patched_config["WOPC_GAMEDATA"]
         wopc_gd.mkdir(parents=True, exist_ok=True)
-        (wopc_gd / "blackops.scd").write_bytes(b"\x00" * 100)
-        (wopc_gd / "TotalMayhem.scd").write_bytes(b"\x00" * 100)
+        for scd in [
+            "lua.scd",
+            "loc_US.scd",
+            "blackops.scd",
+            "TotalMayhem.scd",
+            "brewlan.scd",
+            "loud_units.scd",
+            "WyvernBattlePack.scd",
+            "4D-CompatibilityPack.scd",
+        ]:
+            (wopc_gd / scd).write_bytes(b"\x00" * 100)
 
         wopc_sounds = patched_config["WOPC_SOUNDS"]
         wopc_sounds.mkdir(parents=True, exist_ok=True)
-        (wopc_sounds / "blackopssb.xsb").write_bytes(b"\x01")
-        (wopc_sounds / "blackopswb.xwb").write_bytes(b"\x02")
         for sfx in [
+            "blackopssb.xsb",
+            "blackopswb.xwb",
             "tm_aeonweapons.xsb",
             "tm_aeonweaponsounds.xwb",
             "tm_aircrafts.xsb",
@@ -246,6 +258,8 @@ class TestContentPackAcquisition:
             "tm_explosionsounds.xwb",
             "tm_uefweapons.xsb",
             "tm_uefweaponsounds.xwb",
+            "BattlePackSB.xsb",
+            "BattlePackWB.xwb",
         ]:
             (wopc_sounds / sfx).write_bytes(b"\x03")
 

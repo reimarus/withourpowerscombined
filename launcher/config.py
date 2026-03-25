@@ -132,30 +132,75 @@ CONTENT_ICONS_SCD = "content_icons.scd"
 CONTENT_ICONS_URL = "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/content_icons.scd"
 
 # Content pack assets hosted on GitHub releases.
+_V1 = "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1"
+_V3 = "https://github.com/reimarus/withourpowerscombined/releases/download/content-v3"
+
 CONTENT_PACK_ASSETS: dict[str, dict] = {
+    # --- Required dependency (auto-enabled when any unit pack is active) ---
+    "lua.scd": {
+        "url": f"{_V3}/lua.scd",
+    },
+    "loc_US.scd": {
+        "url": f"{_V3}/loc_US.scd",
+    },
+    # --- Unit packs (content-v1) ---
     "blackops.scd": {
-        "url": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackops.scd",
+        "url": f"{_V1}/blackops.scd",
         "sounds": {
-            "blackopssb.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackopssb.xsb",
-            "blackopswb.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/blackopswb.xwb",
+            "blackopssb.xsb": f"{_V1}/blackopssb.xsb",
+            "blackopswb.xwb": f"{_V1}/blackopswb.xwb",
         },
     },
     "TotalMayhem.scd": {
-        "url": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/TotalMayhem.scd",
+        "url": f"{_V1}/TotalMayhem.scd",
         "sounds": {
-            "tm_aeonweapons.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aeonweapons.xsb",
-            "tm_aeonweaponsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aeonweaponsounds.xwb",
-            "tm_aircrafts.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aircrafts.xsb",
-            "tm_aircraftsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_aircraftsounds.xwb",
-            "tm_cybranweapons.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_cybranweapons.xsb",
-            "tm_cybranweaponsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_cybranweaponsounds.xwb",
-            "tm_explosions.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_explosions.xsb",
-            "tm_explosionsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_explosionsounds.xwb",
-            "tm_uefweapons.xsb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_uefweapons.xsb",
-            "tm_uefweaponsounds.xwb": "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/tm_uefweaponsounds.xwb",
+            "tm_aeonweapons.xsb": f"{_V1}/tm_aeonweapons.xsb",
+            "tm_aeonweaponsounds.xwb": f"{_V1}/tm_aeonweaponsounds.xwb",
+            "tm_aircrafts.xsb": f"{_V1}/tm_aircrafts.xsb",
+            "tm_aircraftsounds.xwb": f"{_V1}/tm_aircraftsounds.xwb",
+            "tm_cybranweapons.xsb": f"{_V1}/tm_cybranweapons.xsb",
+            "tm_cybranweaponsounds.xwb": f"{_V1}/tm_cybranweaponsounds.xwb",
+            "tm_explosions.xsb": f"{_V1}/tm_explosions.xsb",
+            "tm_explosionsounds.xwb": f"{_V1}/tm_explosionsounds.xwb",
+            "tm_uefweapons.xsb": f"{_V1}/tm_uefweapons.xsb",
+            "tm_uefweaponsounds.xwb": f"{_V1}/tm_uefweaponsounds.xwb",
         },
     },
+    # --- Unit packs (content-v3) ---
+    "brewlan.scd": {
+        "url": f"{_V3}/brewlan.scd",
+    },
+    "loud_units.scd": {
+        "url": f"{_V3}/loud_units.scd",
+    },
+    "WyvernBattlePack.scd": {
+        "url": f"{_V3}/WyvernBattlePack.scd",
+        "sounds": {
+            "BattlePackSB.xsb": f"{_V3}/BattlePackSB.xsb",
+            "BattlePackWB.xwb": f"{_V3}/BattlePackWB.xwb",
+        },
+    },
+    "4D-CompatibilityPack.scd": {
+        "url": f"{_V3}/4D-CompatibilityPack.scd",
+    },
 }
+
+# SCDs that must be mounted when any unit pack SCD is enabled.
+# lua.scd provides base classes (defaultunits.lua, loudutilities.lua) that
+# all LOUD unit mods import. loc_US.scd provides localization strings.
+UNIT_PACK_DEPENDENCIES: frozenset[str] = frozenset({"lua.scd", "loc_US.scd"})
+
+# SCDs that contain unit mods (trigger auto-enabling of dependencies).
+UNIT_PACK_SCDS: frozenset[str] = frozenset(
+    {
+        "blackops.scd",
+        "TotalMayhem.scd",
+        "brewlan.scd",
+        "loud_units.scd",
+        "WyvernBattlePack.scd",
+        "4D-CompatibilityPack.scd",
+    }
+)
 
 # --- Content version and core assets for standalone installer ---
 # deploy.py downloads these from GitHub Releases when not building from source.
