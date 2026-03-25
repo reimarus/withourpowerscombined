@@ -16,12 +16,14 @@
 
 local Unit = Unit
 
--- Cache the original method (upvalue for performance, per FAF convention)
+-- Cache the original methods (upvalue for performance, per FAF convention)
 local OriginalOnMotionHorzEventChange = Unit.OnMotionHorzEventChange
+local OriginalOnCreate = Unit.OnCreate
 
 -- Upvalue engine functions for performance
 local EntitySetCollisionShape = moho.entity_methods.SetCollisionShape
 local UnitRevertCollisionShape = moho.unit_methods.RevertCollisionShape
+local EntityCategoryContains = EntityCategoryContains
 
 --- Apply reduced collision shape to a moving unit.
 -- Uses the blueprint's SizeX/Y/Z scaled by the soft collision factor.
@@ -60,6 +62,22 @@ local function ApplySoftCollision(self)
     )
 end
 
+--- Hooked OnCreate — mark ENGINEER units for permanent zero collision.
+-- Uses the C++ WopcMarkZeroCollision which:
+--   1. Registers the entity ID in a C++ array
+--   2. Calls SetCollisionShape('None') immediately
+-- The C++ system prevents any future collision restoration.
+Unit.OnCreate = function(self)
+    OriginalOnCreate(self)
+
+    -- Mark engineers for zero collision via C++ API
+    if self.WopcMarkZeroCollision
+        and EntityCategoryContains(categories.ENGINEER, self)
+    then
+        self:WopcMarkZeroCollision()
+    end
+end
+
 --- Hooked OnMotionHorzEventChange — applies soft collision during movement.
 Unit.OnMotionHorzEventChange = function(self, new, old)
     -- Call original (sounds, effects, weapon state)
@@ -71,6 +89,12 @@ Unit.OnMotionHorzEventChange = function(self, new, old)
 
     -- Skip structures — they don't move and shouldn't have collision modified
     if self.Blueprint.Physics and self.Blueprint.Physics.MotionType == 'RULEUMT_None' then
+        return
+    end
+
+    -- Zero collision units: always keep collision removed, never revert
+    if self.WopcIsZeroCollision and self:WopcIsZeroCollision() then
+        EntitySetCollisionShape(self, 'None')
         return
     end
 

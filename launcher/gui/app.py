@@ -159,8 +159,9 @@ class WopcApp(BaseApp):  # type: ignore
         self._check_installation_status()
         self._bind_hotkeys()
 
-        # Clean up old exe from previous update and check for new version
-        updater.cleanup_old_exe()
+        # Clean up old exe from previous update — defer 5s to let the old
+        # process fully release its _MEI temp directory file handles first.
+        self.after(5000, updater.cleanup_old_exe)
         self._pending_update: updater.UpdateInfo | None = None
         threading.Thread(target=self._check_for_update, daemon=True).start()
 
@@ -1504,13 +1505,18 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _do_check_assets(self) -> None:
         """Check bundled assets and schedule next check."""
-        self._assets_ok = (config.WOPC_ROOT / "gamedata").exists()
+        wopc_core_ok = (config.WOPC_GAMEDATA / config.WOPC_CORE_SCD).exists()
+        self._assets_ok = (config.WOPC_ROOT / "gamedata").exists() and wopc_core_ok
+        if not wopc_core_ok and (config.WOPC_ROOT / "gamedata").exists():
+            label_fail = "✗  Assets: wopc_core.scd missing"
+        else:
+            label_fail = "✗  Assets: Not Deployed"
         self._resolve_status_check(
             self.status_bundled,
             self.progress_bundled,
             ok=self._assets_ok,
             label_ok="✓  Assets: Ready",
-            label_fail="✗  Assets: Not Deployed",
+            label_fail=label_fail,
             color_ok=COLOR_LAUNCH,
             color_fail=COLOR_TEXT_MUTED,
         )
@@ -1563,10 +1569,13 @@ class WopcApp(BaseApp):  # type: ignore
                 "Supreme Commander Forged Alliance install folder."
             )
 
-        if scfa_ok and not wopc_ok:
-            self.log("WOPC not deployed — starting automatic installation...")
+        if scfa_ok and (not wopc_ok or not assets_ok):
+            if not assets_ok and wopc_ok:
+                self.log("wopc_core.scd missing — re-running setup to repair...")
+            else:
+                self.log("WOPC not deployed — starting automatic installation...")
             self._start_install()
-        elif scfa_ok and wopc_ok:
+        elif scfa_ok and wopc_ok and assets_ok:
             mode = self.mode_var.get()
             label = self._PLAY_LABELS.get(mode, "PLAY MATCH")
             self.primary_btn.configure(

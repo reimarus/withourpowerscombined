@@ -31,6 +31,16 @@ function BeginSession()
     LOG('WOPC Pathing: Soft collision factor = ' .. tostring(WopcSoftCollisionFactor)
         .. ' (units shrink to ' .. tostring(WopcSoftCollisionFactor * 100) .. '% collision while moving)')
 
+    -- Zero collision for engineers — permanently removes collision shapes
+    -- for ENGINEER category units.  Handled in C++ (WopcPathfinding.cpp)
+    -- to prevent the engine from reverting the change.
+    if WopcSetZeroCollisionEnabled then
+        WopcSetZeroCollisionEnabled(true)
+        LOG('WOPC Pathing: Engineer zero collision enabled (C++ enforced)')
+    else
+        LOG('WOPC Pathing: WopcSetZeroCollisionEnabled not available (need patched exe)')
+    end
+
     -- Log stats for diagnostics
     if GetPathfindingStats then
         local stats = GetPathfindingStats()
