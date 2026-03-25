@@ -41,14 +41,13 @@ from launcher.gui.constants import (
     GAME_OPTION_DEFS as _GAME_OPT_DEFS,
 )
 from launcher.gui.constants import (
-    LOBBY_PREVIEW_SIZE,
+    MAX_SLOTS as _MAX_SLOTS,
+)
+from launcher.gui.constants import (
     PLAY_LABELS,
     PLAYER_COLORS,
     PREVIEW_MIN,
     game_options_to_engine,
-)
-from launcher.gui.constants import (
-    MAX_SLOTS as _MAX_SLOTS,
 )
 from launcher.gui.constants import (
     VICTORY_DESCRIPTIONS as _VICTORY_DESCS,
@@ -227,7 +226,6 @@ class WopcApp(BaseApp):  # type: ignore
         return ctk.CTkFrame(parent, fg_color=color, height=1, corner_radius=0)
 
     _PREVIEW_MIN = PREVIEW_MIN
-    _LOBBY_PREVIEW_SIZE = LOBBY_PREVIEW_SIZE
 
     def _update_map_preview(self, info: "map_scanner.MapInfo | None") -> None:
         """Load and display the map preview image and metadata."""
@@ -237,10 +235,10 @@ class WopcApp(BaseApp):  # type: ignore
             if hasattr(self, "_map_canvas_widget"):
                 self._map_canvas_widget.set_map(None)
             self.map_preview_name.configure(text="No map selected")
-            if hasattr(self, "lobby_map_preview_label"):
-                self.lobby_map_preview_label.configure(image=None, text="No Preview")
+            if hasattr(self, "_lobby_map_canvas_widget"):
+                self._lobby_map_canvas_widget.set_map(None)
+            if hasattr(self, "lobby_map_label"):
                 self.lobby_map_label.configure(text="No map selected")
-                self.lobby_map_info.configure(text="")
             return
 
         # Compact metadata: "Syrtis Major — 4p, 20km"
@@ -254,18 +252,9 @@ class WopcApp(BaseApp):  # type: ignore
 
         # Load raw preview image for canvas rendering
         raw_preview = None
-        lobby_ctk_img = None
         if _PIL_AVAILABLE and info.preview_path and info.preview_path.exists():
             try:
                 raw_preview = PilImage.open(info.preview_path).convert("RGB")
-                # Lobby preview (separate widget, still uses CTkImage)
-                lsz = self._LOBBY_PREVIEW_SIZE
-                lobby = raw_preview.resize(
-                    (lsz, lsz),
-                    PilImage.LANCZOS,  # type: ignore[attr-defined]
-                )
-                lobby_ctk_img = ctk.CTkImage(light_image=lobby, dark_image=lobby, size=(lsz, lsz))
-                self._lobby_preview_ctk_image = lobby_ctk_img
             except Exception as exc:
                 logger.warning("Failed to load map preview %s: %s", info.preview_path, exc)
 
@@ -276,19 +265,11 @@ class WopcApp(BaseApp):  # type: ignore
             self._slot_accessor._slots = self.player_slots if hasattr(self, "player_slots") else []
             self._map_canvas_widget.set_map(info, raw_preview)
 
-        # Update lobby preview widget
-        if hasattr(self, "lobby_map_preview_label"):
-            if lobby_ctk_img is not None:
-                self.lobby_map_preview_label.configure(image=lobby_ctk_img, text="")
-            else:
-                self.lobby_map_preview_label.configure(image=None, text="No Preview")
+        # Update lobby map canvas (4-column layout uses a real MapCanvas)
+        if hasattr(self, "_lobby_map_canvas_widget"):
+            self._lobby_map_canvas_widget.set_map(info, raw_preview)
+        if hasattr(self, "lobby_map_label"):
             self.lobby_map_label.configure(text=info.display_name)
-            detail_parts = []
-            if info.max_players:
-                detail_parts.append(f"{info.max_players}p")
-            if info.size_label and info.size_label != "?":
-                detail_parts.append(info.size_label)
-            self.lobby_map_info.configure(text=", ".join(detail_parts))
 
     def _select_spawn(self, spawn_index: int) -> None:
         """Select a spawn position for the human player (slot 0).
@@ -355,8 +336,8 @@ class WopcApp(BaseApp):  # type: ignore
             "browser": self.browser_screen,
             "lobby": self.lobby_screen,
         }[screen]
-        if screen == "solo":
-            target.grid(row=0, column=1, columnspan=2, sticky="nsew")
+        if screen in ("solo", "lobby"):
+            target.grid(row=0, column=1, columnspan=2, sticky="nsew", padx=20, pady=20)
         else:
             target.grid(row=0, column=1, sticky="nsew")
         self._current_screen = screen
