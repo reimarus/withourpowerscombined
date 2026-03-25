@@ -235,7 +235,12 @@ def apply_update(tmp_path: Path) -> bool:
 
 
 def cleanup_old_exe() -> None:
-    """Remove the ``.old`` leftover from a previous update."""
+    """Remove the ``.old`` leftover from a previous update and stale _MEI dirs.
+
+    PyInstaller ``--onefile`` extracts to a temp ``_MEI*`` directory. If the
+    process crashes, these dirs accumulate and PyInstaller shows a warning
+    dialog on next launch. Clean up any that aren't ours.
+    """
     if not getattr(sys, "frozen", False):
         return
     old_path = Path(sys.executable).with_suffix(".old")
@@ -245,3 +250,23 @@ def cleanup_old_exe() -> None:
             LOG.info("Cleaned up %s", old_path.name)
         except OSError:
             pass  # Still locked, will try next launch
+
+    # Clean up stale _MEI temp directories from previous PyInstaller runs
+    import shutil
+    import tempfile
+
+    our_meipass = getattr(sys, "_MEIPASS", None)
+    temp_dir = Path(tempfile.gettempdir())
+    try:
+        for entry in temp_dir.iterdir():
+            if entry.name.startswith("_MEI") and entry.is_dir():
+                # Don't delete our own extraction directory
+                if our_meipass and str(entry) == our_meipass:
+                    continue
+                try:
+                    shutil.rmtree(entry)
+                    LOG.info("Cleaned up stale PyInstaller temp dir: %s", entry.name)
+                except OSError:
+                    pass  # Still in use by another process
+    except OSError:
+        pass
