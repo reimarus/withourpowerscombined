@@ -528,18 +528,19 @@ def run_setup(
     if config.REPO_BUNDLED_SOUNDS.exists():
         shutil.copytree(config.REPO_BUNDLED_SOUNDS, config.WOPC_SOUNDS, dirs_exist_ok=True)
 
-    # --- Step 5: Copy usermods (not symlink - user may add/remove mods) ---
-    _report("[5/6] Copying user mods", 5)
-    if config.REPO_BUNDLED_USERMODS.exists() and not config.WOPC_USERMODS.exists():
-        shutil.copytree(config.REPO_BUNDLED_USERMODS, config.WOPC_USERMODS)
-        logger.info(
-            "  copied usermods/ (%d files)", sum(1 for _ in config.WOPC_USERMODS.rglob("*"))
-        )
-    elif config.WOPC_USERMODS.exists():
-        logger.info("  usermods/ already exists, skipping")
+    # --- Step 5: Sync usermods (merge shipped mods into existing dir) ---
+    _report("[5/6] Syncing user mods", 5)
+    config.WOPC_USERMODS.mkdir(parents=True, exist_ok=True)
+    if config.REPO_BUNDLED_USERMODS.exists():
+        # Merge each shipped mod into usermods — overwrites shipped mod files
+        # but preserves any user-installed mods not in the bundle.
+        for mod_dir in sorted(config.REPO_BUNDLED_USERMODS.iterdir()):
+            if mod_dir.is_dir():
+                dest = config.WOPC_USERMODS / mod_dir.name
+                shutil.copytree(mod_dir, dest, dirs_exist_ok=True)
+                logger.info("  synced mod: %s", mod_dir.name)
     else:
-        config.WOPC_USERMODS.mkdir(parents=True, exist_ok=True)
-        logger.info("  created empty usermods/")
+        logger.info("  no bundled usermods to sync")
 
     # --- Step 6: Setup user maps ---
     _report("[6/6] Setting up user maps", 6)
