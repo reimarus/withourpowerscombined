@@ -23,6 +23,14 @@ function BeginSession()
         LOG('WOPC Pathing: Navigator personal pos max distance = 20.0 (vanilla 50.0)')
     end
 
+    -- Soft collision: shrink unit collision shapes while moving.
+    -- Factor 0.0 = no collision, 0.5 = half radius, 1.0 = disabled.
+    -- This allows units to overlap slightly during movement, preventing
+    -- the "traffic jam" gridlock that SCFA's hard collision model causes.
+    WopcSoftCollisionFactor = 0.4
+    LOG('WOPC Pathing: Soft collision factor = ' .. tostring(WopcSoftCollisionFactor)
+        .. ' (units shrink to ' .. tostring(WopcSoftCollisionFactor * 100) .. '% collision while moving)')
+
     -- Log stats for diagnostics
     if GetPathfindingStats then
         local stats = GetPathfindingStats()
