@@ -159,8 +159,9 @@ class WopcApp(BaseApp):  # type: ignore
         self._check_installation_status()
         self._bind_hotkeys()
 
-        # Clean up old exe from previous update and check for new version
-        updater.cleanup_old_exe()
+        # Clean up old exe from previous update — defer 5s to let the old
+        # process fully release its _MEI temp directory file handles first.
+        self.after(5000, updater.cleanup_old_exe)
         self._pending_update: updater.UpdateInfo | None = None
         threading.Thread(target=self._check_for_update, daemon=True).start()
 

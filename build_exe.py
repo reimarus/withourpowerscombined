@@ -70,6 +70,11 @@ def main() -> int:
         # Bundle GUI icon assets (map markers, faction icons, chrome)
         "--add-data",
         f"{repo_root / 'launcher' / 'gui' / 'icons'}{os.pathsep}launcher/gui/icons",
+        # Bundle server mods and user mods (deployed to WOPC/ during setup)
+        "--add-data",
+        f"{repo_root / 'bundled' / 'mods'}{os.pathsep}bundled/mods",
+        "--add-data",
+        f"{repo_root / 'bundled' / 'usermods'}{os.pathsep}bundled/usermods",
         # Output directly to repo root (not dist/)
         "--distpath",
         str(repo_root),
