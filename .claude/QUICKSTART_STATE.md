@@ -1,8 +1,8 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-24
+> Last updated: 2026-03-24 (v2.01.0042)
 > If session runs out of tokens, a new session can pick up from here.
 
-## Current State: Phase 6 ✅ Complete — GUI Refactored, Bug Fixes Next
+## Current State: Phase 7 — Pathfinding + Stability
 
 ### What works now:
 1. **Solo mode** (quickstart bypass): GUI → select map/players/options → PLAY MATCH → game enters sim
@@ -58,25 +58,23 @@
 - `launcher/updater.py` — GitHub Releases auto-update (subprocess + os._exit on Windows)
 - `launcher/prefs.py` — INI-based preferences (player name, faction, color, map, display)
 
-### Active plan: Cleanup + Bug Fixes (#57, #59, #60) + Rule Update
-See `.claude/plans/gentle-enchanting-bengio.md` for the full plan:
-- Git cleanup, merge stale docs branch
-- Fix #57: spawn markers auto-assign on map load
-- Fix #59: UPnP auto-port-forwarding + NAT error messages
-- Fix #60: structured launch logging
-- Rewrite Rule #15: WOPC is fully standalone (own all shipped code)
+### Active work: Phase 7 — Pathfinding
+- `bundled/mods/wopc_pathing/` — server mod (always active) with blocked timer capping (20 ticks vs vanilla 40-80) and tighter formation slots
+- `vendor/FA-Binary-Patches/section/WopcPathfinding.cpp` — Lua API for tuning: `SetBlockedTimerTuning()`, `GetPathfindingStats()`
+- `vendor/FA-Binary-Patches/hooks/WayPointArrive.cpp` — inline ASM for blocked timer clamping
+- Next: unit collision radius predictability, A* improvements
 
 ### Known bugs (see backlog):
 - Civilian filler armies — investigate idle commander spawns (#54)
-- Spawn markers uncolored on initial map load (#57)
-- Multiplayer TCP port unreachable for remote players (#59)
-- Launcher log missing structured launch params (#60)
+- PyInstaller _MEI temp dir cleanup failure (#32 in Architecture Refactors)
+- AI reclaim grid reference missing (#33 in Architecture Refactors)
 
 ### Recent merges:
-- **PR #69** (docs): Update stale refs after GUI refactor
-- **PR #68** (v2.01.0037): GUI refactor — extracted slot_widget.py, browser_screen.py, lobby_screen.py
-- **PR #67**: Fix black screen + enhance remote diagnostics
-- **PR #66**: Phase 7 movement tuning foundation
+- **PR #76**: Phase 7 pathing mod + bug #34 prefs fix + release speed optimization
+- **PR #75**: Speed up release script
+- **PR #74**: Fix SupCom frame placement error
 
 ### Recent releases:
+- **v2.01.0042**: Phase 7 pathing mod, Game.prefs three-layer corruption fix, release script speedup
+- **v2.01.0041**: Release script speed optimization
 - **v2.01.0037**: GUI refactor + movement tuning + black screen fix + enhanced diagnostics
