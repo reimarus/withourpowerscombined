@@ -58,23 +58,25 @@
 - `launcher/updater.py` — GitHub Releases auto-update (subprocess + os._exit on Windows)
 - `launcher/prefs.py` — INI-based preferences (player name, faction, color, map, display)
 
-### Active work: Phase 7 — Pathfinding
-- `bundled/mods/wopc_pathing/` — server mod (always active) with blocked timer capping (20 ticks vs vanilla 40-80) and tighter formation slots
-- `vendor/FA-Binary-Patches/section/WopcPathfinding.cpp` — Lua API for tuning: `SetBlockedTimerTuning()`, `GetPathfindingStats()`
+### Active work: Phase 7 — Pathfinding + Multiplayer Fixes
+- `bundled/usermods/wopc_pathing/` — toggleable mod with blocked timer capping, soft collision, engineer zero collision
+- `vendor/FA-Binary-Patches/section/WopcPathfinding.cpp` — C++ API: `SetBlockedTimerTuning()`, `GetPathfindingStats()`, `WopcSetZeroCollisionEnabled()`, `unit:WopcMarkZeroCollision()`, `unit:WopcIsZeroCollision()`
 - `vendor/FA-Binary-Patches/hooks/WayPointArrive.cpp` — inline ASM for blocked timer clamping
-- Next: unit collision radius predictability, A* improvements
+- `bundled/usermods/wopc_artillery/` — T3 artillery range/cost reduction mod
+- Next: multiplayer UX bugs (#61-#69), A* improvements
 
 ### Known bugs (see backlog):
 - Civilian filler armies — investigate idle commander spawns (#54)
-- PyInstaller _MEI temp dir cleanup failure (#32 in Architecture Refactors)
 - AI reclaim grid reference missing (#33 in Architecture Refactors)
+- 9 multiplayer UX bugs (#61-#69): spawn selection, color picker, player options, AI on map, Enter key, friend join, game cleanup
 
 ### Recent merges:
-- **PR #76**: Phase 7 pathing mod + bug #34 prefs fix + release speed optimization
-- **PR #75**: Speed up release script
-- **PR #74**: Fix SupCom frame placement error
+- **PR #83**: MEI cleanup, bundle mods in exe, engineer zero collision C++, wopc_core.scd auto-repair
+- **PR #82**: Converge multiplayer lobby to 4-column layout matching solo
+- **PR #81**: Soft collision, T3 artillery, LOUD unit packs
+- **PR #80**: SC2 movement system research for Phase 7 pathfinding
 
 ### Recent releases:
+- **v2.01.0045**: MEI fix, bundle mods in exe, engineer zero collision, wopc_core.scd auto-repair
+- **v2.01.0044**: Multiplayer lobby 4-column layout convergence
 - **v2.01.0042**: Phase 7 pathing mod, Game.prefs three-layer corruption fix, release script speedup
-- **v2.01.0041**: Release script speed optimization
-- **v2.01.0037**: GUI refactor + movement tuning + black screen fix + enhanced diagnostics
