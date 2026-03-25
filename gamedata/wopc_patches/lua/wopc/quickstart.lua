@@ -226,14 +226,16 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
     -- Persist active mods to profile prefs so FAF's GetSelectedMods()
     -- returns them correctly for any code path that reads preferences
     -- (e.g. blueprint pre-game data loading).
-    if cfg.ActiveMods and table.getn(cfg.ActiveMods) > 0 then
-        local activeModsTable = {}
+    -- ALWAYS write this — even when empty — to overwrite any corrupted
+    -- value (e.g. active_mods = true instead of a table).
+    local activeModsTable = {}
+    if cfg.ActiveMods then
         for _, uid in cfg.ActiveMods do
             activeModsTable[uid] = true
         end
-        Prefs.SetToCurrentProfile('active_mods', activeModsTable)
-        LOG("WOPC QuickStart: Set " .. table.getn(cfg.ActiveMods) .. " active mods in preferences")
     end
+    Prefs.SetToCurrentProfile('active_mods', activeModsTable)
+    LOG("WOPC QuickStart: Set " .. table.getn(cfg.ActiveMods or {}) .. " active mods in preferences")
 
     -- Build the flat gameInfo and launch directly into the simulation
     local gameInfo = BuildGameInfo(cfg, hostPeerID)
@@ -278,6 +280,16 @@ function JoinLaunch(protocol, address, playerName, natTraversalProvider)
         LOG("WOPC QuickStart: Failed to load config: " .. tostring(cfg))
         return
     end
+
+    -- Sanitize active_mods in prefs (prevents active_mods=true corruption)
+    local Prefs = import('/lua/user/prefs.lua')
+    local activeModsTable = {}
+    if cfg.ActiveMods then
+        for _, uid in cfg.ActiveMods do
+            activeModsTable[uid] = true
+        end
+    end
+    Prefs.SetToCurrentProfile('active_mods', activeModsTable)
 
     -- Always dispatch to multilobby for join mode
     LOG("WOPC QuickStart: Joining multiplayer game at " .. tostring(address))

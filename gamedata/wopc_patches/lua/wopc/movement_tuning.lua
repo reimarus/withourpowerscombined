@@ -17,7 +17,7 @@ local zeroCollisionThread = nil
 function WopcMovement.TuneNavigator()
     if SetNavigatorPersonalPosMaxDistance then
         SetNavigatorPersonalPosMaxDistance(25.0)
-        LOG('WOPC Movement: Navigator personal pos max distance → 25.0 (was 50.0)')
+        LOG('WOPC Movement: Navigator personal pos max distance set to 25.0 (vanilla 50.0)')
     else
         LOG('WOPC Movement: SetNavigatorPersonalPosMaxDistance not available (patched exe required)')
     end

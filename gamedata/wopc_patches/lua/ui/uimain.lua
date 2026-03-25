@@ -34,6 +34,28 @@ function SetupUI()
     if alreadySetup then return end
     alreadySetup = true
 
+    -- WOPC: Repair corrupted profile fields before anything reads them.
+    -- The engine sometimes writes boolean values where tables are expected
+    -- (e.g. active_mods = true instead of active_mods = {}), causing
+    -- "attempt to index a boolean value" errors in prefs/options code.
+    local profile = Prefs.GetCurrentProfile()
+    if profile then
+        local repaired = false
+        if profile.active_mods != nil and type(profile.active_mods) != 'table' then
+            Prefs.SetToCurrentProfile('active_mods', {})
+            repaired = true
+            LOG('WOPC: Repaired corrupted active_mods (was ' .. type(profile.active_mods) .. ')')
+        end
+        if profile.options != nil and type(profile.options) != 'table' then
+            Prefs.SetToCurrentProfile('options', {})
+            repaired = true
+            LOG('WOPC: Repaired corrupted options (was ' .. type(profile.options) .. ')')
+        end
+        if repaired then
+            SavePreferences()
+        end
+    end
+
     UIUtil.currentLayout = Prefs.GetFromCurrentProfile('layout') or 'bottom'
     local skin = Prefs.GetFromCurrentProfile('skin')
     UIUtil.SetCurrentSkin(skin or 'uef')    -- default skin to start

@@ -61,14 +61,32 @@ wopc patch --clean   # Build with new patches
 wopc setup           # Deploy patched exe
 ```
 
+## Toggleable Mod
+
+The pathing improvements ship as a toggleable user mod (`WOPC Better Pathing`) in
+`bundled/usermods/wopc_pathing/`. The mod hooks `simInit.lua:BeginSession()` to
+call `SetBlockedTimerTuning(20, 3)` and `SetNavigatorPersonalPosMaxDistance(20.0)`.
+
+Toggle on/off in the launcher GUI (Mods section) to A/B test behavior.
+
+## Phase 2 Status
+
+1. ~~**Observe**~~: SetGoal hook + stats API working (v2.01.0040)
+2. **Blocked timer tuning** ✅: `WayPointArrive.cpp` modified to clamp blocked ticks
+   to configurable maximum. `SetBlockedTimerTuning(max, min)` Lua API added.
+3. **Navigator distance** ✅: `SetNavigatorPersonalPosMaxDistance()` already existed,
+   now tuned to 20.0 via mod (was 25.0 in auto-include, vanilla 50.0).
+4. **Collision radius**: SCFA collision is inconsistent — units sometimes pass through
+   each other (overlap at destination) but block each other en route. The engine's
+   movement collision is directional and path-segment-dependent.
+
 ## Next Steps
 
-1. **Observe**: Launch games and call `GetPathfindingStats()` to understand pathing load
-2. **Reverse engineer**: Disassemble `SetGoal` to understand the internal A* implementation
-3. **Path smoothing**: Hook the per-tick movement update to skip unnecessary waypoints
-4. **Continuous movement**: Replace stop-at-waypoint with smooth interpolation
-5. **Local avoidance**: Add RVO2-style unit collision avoidance
-6. **Flowfield**: For large groups, generate shared flowfields instead of per-unit A*
+1. **Test blocked timer**: Play with mod on vs off, compare unit responsiveness
+2. **Path smoothing**: Hook the per-tick movement update to skip unnecessary waypoints
+3. **Continuous movement**: Replace stop-at-waypoint with smooth interpolation
+4. **Local avoidance**: Add RVO2-style unit collision avoidance
+5. **Flowfield**: For large groups, generate shared flowfields instead of per-unit A*
 
 ## Key Constraints
 
