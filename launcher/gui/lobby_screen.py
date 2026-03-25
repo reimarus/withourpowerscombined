@@ -30,13 +30,15 @@ from launcher.gui.constants import (
     COLOR_BG,
     COLOR_DANGER,
     COLOR_LAUNCH,
-    COLOR_MOD_PANEL,
     COLOR_PANEL,
     COLOR_SURFACE,
     COLOR_TEXT_GOLD,
     COLOR_TEXT_MUTED,
     COLOR_TEXT_PRIMARY,
+    GAME_OPTION_DEFS,
+    VICTORY_DESCRIPTIONS,
 )
+from launcher.gui.map_canvas import DictSlotAccessor, MapCanvas
 from launcher.gui.supcom_frame import SupComFrame
 from launcher.lobby import LobbyCallbacks, LobbyClient, LobbyServer
 from launcher.wopc import cmd_launch
@@ -50,94 +52,131 @@ logger = logging.getLogger("wopc.gui")
 
 
 def build_lobby_screen(app: Any) -> None:
-    """Build the multiplayer lobby room screen."""
+    """Build the multiplayer lobby room screen.
+
+    Uses the same 4-column layout as the solo screen for visual consistency:
+    Col 0: Game Options | Col 1: Players | Col 2: Map Canvas (hero) | Col 3: Map List
+    Bottom: Chat bar + action buttons (LEAVE / LAUNCH).
+    """
     app.lobby_screen = ctk.CTkFrame(app, fg_color="transparent")
     # Don't grid — _show_screen handles it
 
-    app.lobby_screen.grid_rowconfigure(0, weight=2)
+    # Row 0: header, Row 1: 4-column config panel, Row 2: chat + actions
     app.lobby_screen.grid_rowconfigure(1, weight=1)
     app.lobby_screen.grid_columnconfigure(0, weight=1)
-    app.lobby_screen.grid_columnconfigure(1, weight=1)
 
-    # --- Map Section (top-left) ---
-    _map_sf = SupComFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
-    _map_sf.frame.grid(row=0, column=0, padx=(20, 5), pady=(20, 5), sticky="nsew")
-    map_frame = _map_sf.interior
-    map_frame.grid_rowconfigure(3, weight=1)
-    map_frame.grid_columnconfigure(0, weight=1)
+    # Header
+    app.lobby_header = ctk.CTkLabel(
+        app.lobby_screen,
+        text="MULTIPLAYER LOBBY",
+        text_color=COLOR_TEXT_GOLD,
+        font=ctk.CTkFont(size=18, weight="bold"),
+    )
+    app.lobby_header.grid(row=0, column=0, sticky="w", pady=(0, 6))
 
-    map_header = ctk.CTkLabel(
-        map_frame,
-        text="MAP",
+    # --- Main config panel: 4 columns (mirrors solo _build_main_lobby) ---
+    _lobby_config_sf = SupComFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
+    _lobby_config_sf.frame.grid(row=1, column=0, sticky="nsew")
+    lobby_panel = _lobby_config_sf.interior
+    lobby_panel.grid_columnconfigure(0, weight=0, minsize=180)
+    lobby_panel.grid_columnconfigure(1, weight=1, minsize=280)
+    lobby_panel.grid_columnconfigure(2, weight=4)  # map hero
+    lobby_panel.grid_columnconfigure(3, weight=0, minsize=200)
+    lobby_panel.grid_rowconfigure(0, weight=1)
+
+    # --- Col 0: Game Options ---
+    _build_lobby_options_column(app, lobby_panel)
+
+    # --- Col 1: Players ---
+    _build_lobby_players_column(app, lobby_panel)
+
+    # --- Col 2: Map Canvas (hero) ---
+    _build_lobby_map_canvas(app, lobby_panel)
+
+    # --- Col 3: Map List ---
+    _build_lobby_map_list(app, lobby_panel)
+
+    # --- Bottom: Chat + Action Bar ---
+    _build_lobby_bottom_bar(app)
+
+
+def _build_lobby_options_column(app: Any, parent: Any) -> None:
+    """Col 0: Game Options (mirrors solo _build_options_column)."""
+    col = ctk.CTkFrame(parent, fg_color="transparent")
+    col.grid(row=0, column=0, sticky="nsew", padx=(10, 5), pady=10)
+    col.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(
+        col,
+        text="GAME OPTIONS",
         text_color=COLOR_TEXT_GOLD,
         font=ctk.CTkFont(size=12, weight="bold"),
-    )
-    map_header.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
+    ).grid(row=0, column=0, sticky="w", pady=(0, 5))
 
-    # Lobby map preview image
-    _lps = app._LOBBY_PREVIEW_SIZE
-    app.lobby_map_preview_label = ctk.CTkLabel(
-        map_frame,
-        text="No Preview",
-        width=_lps,
-        height=_lps,
-        fg_color=COLOR_PANEL,
-        corner_radius=4,
+    opts_frame = ctk.CTkFrame(col, fg_color="transparent")
+    opts_frame.grid(row=1, column=0, sticky="ew")
+
+    app.lobby_option_vars = {}
+    app.lobby_option_widgets = []
+
+    for idx, (key, label, values, default) in enumerate(GAME_OPTION_DEFS):
+        lbl = ctk.CTkLabel(
+            opts_frame,
+            text=f"{label}:",
+            text_color=COLOR_TEXT_MUTED,
+            font=ctk.CTkFont(size=11),
+        )
+        lbl.grid(row=idx, column=0, sticky="w", padx=(0, 5), pady=1)
+        var = ctk.StringVar(value=default)
+        menu = ctk.CTkOptionMenu(
+            opts_frame,
+            values=values,
+            variable=var,
+            command=lambda _v, _k=key: on_lobby_option_change(app, _k),
+            width=110,
+            height=22,
+        )
+        menu.grid(row=idx, column=1, sticky="w", pady=1)
+        app.lobby_option_vars[key] = var
+        app.lobby_option_widgets.extend([lbl, menu])
+
+    # Victory description
+    app.lobby_victory_desc = ctk.CTkLabel(
+        col,
+        text=VICTORY_DESCRIPTIONS.get("Demoralization", ""),
         text_color=COLOR_TEXT_MUTED,
-        font=ctk.CTkFont(size=11),
+        font=ctk.CTkFont(size=10, slant="italic"),
+        wraplength=170,
     )
-    app.lobby_map_preview_label.grid(row=1, column=0, padx=10, pady=(6, 4), sticky="n")
+    app.lobby_victory_desc.grid(row=2, column=0, sticky="w", pady=(2, 8))
 
-    app.lobby_map_label = ctk.CTkLabel(
-        map_frame,
-        text="No map selected",
-        text_color=COLOR_TEXT_PRIMARY,
-        font=ctk.CTkFont(size=16, weight="bold"),
-    )
-    app.lobby_map_label.grid(row=2, column=0, padx=10, pady=(5, 0), sticky="w")
+    def _update_lobby_victory_desc(*_a: Any) -> None:
+        desc = VICTORY_DESCRIPTIONS.get(app.lobby_option_vars["Victory"].get(), "")
+        app.lobby_victory_desc.configure(text=desc)
 
-    # Map info (type, size, players)
-    app.lobby_map_info = ctk.CTkLabel(
-        map_frame,
-        text="",
-        text_color=COLOR_TEXT_MUTED,
-    )
-    app.lobby_map_info.grid(row=3, column=0, padx=10, pady=5, sticky="nw")
+    app.lobby_option_vars["Victory"].trace_add("write", _update_lobby_victory_desc)
 
-    app.lobby_change_map_btn = ctk.CTkButton(
-        map_frame,
-        text="Change Map",
-        width=100,
-        height=28,
-        fg_color=COLOR_ACCENT,
-        hover_color=COLOR_ACCENT_HOVER,
-        text_color=COLOR_BG,
-        corner_radius=3,
-        command=lambda: on_lobby_change_map(app),
-    )
-    app.lobby_change_map_btn.grid(row=4, column=0, padx=10, pady=(0, 10), sticky="w")
 
-    # --- Players Section (top-right) ---
-    _players_sf = SupComFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
-    _players_sf.frame.grid(row=0, column=1, padx=(5, 20), pady=(20, 5), sticky="nsew")
-    players_frame = _players_sf.interior
-    players_frame.grid_rowconfigure(1, weight=1)
-    players_frame.grid_columnconfigure(0, weight=1)
+def _build_lobby_players_column(app: Any, parent: Any) -> None:
+    """Col 1: Players — host row, remote humans, AI slots."""
+    col = ctk.CTkFrame(parent, fg_color="transparent")
+    col.grid(row=0, column=1, sticky="nsew", padx=5, pady=10)
+    col.grid_columnconfigure(0, weight=1)
+    col.grid_rowconfigure(1, weight=1)
 
-    players_header_frame = ctk.CTkFrame(players_frame, fg_color="transparent")
-    players_header_frame.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="ew")
-    players_header_frame.grid_columnconfigure(0, weight=1)
+    header_frame = ctk.CTkFrame(col, fg_color="transparent")
+    header_frame.grid(row=0, column=0, sticky="ew")
+    header_frame.grid_columnconfigure(0, weight=1)
 
-    players_label = ctk.CTkLabel(
-        players_header_frame,
+    ctk.CTkLabel(
+        header_frame,
         text="PLAYERS",
         text_color=COLOR_TEXT_GOLD,
         font=ctk.CTkFont(size=12, weight="bold"),
-    )
-    players_label.grid(row=0, column=0, sticky="w")
+    ).grid(row=0, column=0, sticky="w")
 
     app.lobby_add_ai_btn = ctk.CTkButton(
-        players_header_frame,
+        header_frame,
         text="+ Add AI",
         width=70,
         height=24,
@@ -151,150 +190,176 @@ def build_lobby_screen(app: Any) -> None:
     app.lobby_add_ai_btn.grid(row=0, column=1, sticky="e")
 
     app.lobby_slots_scroll = ctk.CTkScrollableFrame(
-        players_frame,
+        col,
         fg_color="transparent",
     )
-    app.lobby_slots_scroll.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
+    app.lobby_slots_scroll.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
     app.lobby_slots_scroll.grid_columnconfigure(1, weight=1)
-    app.lobby_player_slots = []  # list[dict[str, Any]]
+    app.lobby_player_slots = []
 
-    # --- Options Section (bottom-left) ---
-    _opts_sf = SupComFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
-    _opts_sf.frame.grid(row=1, column=0, padx=(20, 5), pady=(5, 5), sticky="nsew")
-    opts_frame = _opts_sf.interior
-    opts_frame.grid_columnconfigure(1, weight=1)
 
-    opts_header = ctk.CTkLabel(
-        opts_frame,
-        text="GAME OPTIONS",
+def _build_lobby_map_canvas(app: Any, parent: Any) -> None:
+    """Col 2: Interactive map canvas (hero, mirrors solo)."""
+    map_frame = ctk.CTkFrame(parent, fg_color=COLOR_PANEL)
+    map_frame.grid(row=0, column=2, sticky="nsew", padx=4, pady=6)
+    map_frame.grid_columnconfigure(0, weight=1)
+    map_frame.grid_rowconfigure(0, weight=1)
+
+    app._lobby_slot_accessor = DictSlotAccessor([])
+    app._lobby_map_canvas_widget = MapCanvas(
+        parent=map_frame,
+        slot_accessor=app._lobby_slot_accessor,
+        on_spawn_select=lambda idx: None,  # host overrides in update_lobby_for_host
+        on_spawn_swap=lambda a, b: None,
+        after_fn=app.after,
+        cancel_fn=app.after_cancel,
+    )
+    app.lobby_map_canvas = app._lobby_map_canvas_widget.canvas
+
+    app.lobby_map_label = ctk.CTkLabel(
+        map_frame,
+        text="",
+        text_color=COLOR_TEXT_GOLD,
+        font=ctk.CTkFont(size=13, weight="bold"),
+    )
+    app.lobby_map_label.grid(row=1, column=0, padx=10, pady=(0, 4), sticky="w")
+
+
+def _build_lobby_map_list(app: Any, parent: Any) -> None:
+    """Col 3: Searchable map list (mirrors solo _build_map_list_column)."""
+    col = ctk.CTkFrame(parent, fg_color="transparent")
+    col.grid(row=0, column=3, sticky="nsew", padx=(5, 10), pady=10)
+    col.grid_columnconfigure(0, weight=1)
+    col.grid_rowconfigure(2, weight=1)
+
+    ctk.CTkLabel(
+        col,
+        text="MAP LIST",
         text_color=COLOR_TEXT_GOLD,
         font=ctk.CTkFont(size=12, weight="bold"),
-    )
-    opts_header.grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 5), sticky="w")
+    ).grid(row=0, column=0, sticky="w", pady=(0, 5))
 
-    app.lobby_option_vars = {}  # dict[str, Any]
-    app.lobby_option_widgets = []  # list[Any]
+    # Filters
+    filter_frame = ctk.CTkFrame(col, fg_color="transparent")
+    filter_frame.grid(row=1, column=0, sticky="ew", pady=(0, 3))
+    filter_frame.grid_columnconfigure(0, weight=1)
 
-    # Reuse the same option definitions as the solo screen for consistency
-    for i, (key, label, values, default) in enumerate(app.GAME_OPTION_DEFS):
-        lbl = ctk.CTkLabel(
-            opts_frame,
-            text=f"{label}:",
-            text_color=COLOR_TEXT_MUTED,
-            font=ctk.CTkFont(size=12),
-        )
-        lbl.grid(row=i + 1, column=0, padx=(10, 5), pady=2, sticky="w")
-        var = ctk.StringVar(value=default)
-        menu = ctk.CTkOptionMenu(
-            opts_frame,
-            values=values,
-            variable=var,
-            width=130,
-            height=24,
-            command=lambda _val, _key=key: on_lobby_option_change(app, _key),
-        )
-        menu.grid(row=i + 1, column=1, padx=(5, 10), pady=2, sticky="w")
-        app.lobby_option_vars[key] = var
-        app.lobby_option_widgets.extend([lbl, menu])
+    app.lobby_search_var = ctk.StringVar()
+    app.lobby_search_var.trace_add("write", lambda *_a: _apply_lobby_map_filters(app))
+    ctk.CTkEntry(
+        filter_frame,
+        textvariable=app.lobby_search_var,
+        placeholder_text="Search...",
+        height=24,
+    ).grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 3))
 
-    # Victory description label (below all option rows)
-    victory_row = len(app.GAME_OPTION_DEFS) + 1
-    app.lobby_victory_desc = ctk.CTkLabel(
-        opts_frame,
-        text=app.VICTORY_DESCRIPTIONS.get("Demoralization", ""),
-        text_color=COLOR_TEXT_MUTED,
-        font=ctk.CTkFont(size=11, slant="italic"),
-        wraplength=250,
-    )
-    app.lobby_victory_desc.grid(
-        row=victory_row, column=0, columnspan=2, padx=10, pady=(2, 5), sticky="w"
-    )
-
-    def _update_lobby_victory_desc(*_a: Any) -> None:
-        desc = app.VICTORY_DESCRIPTIONS.get(app.lobby_option_vars["Victory"].get(), "")
-        app.lobby_victory_desc.configure(text=desc)
-
-    app.lobby_option_vars["Victory"].trace_add("write", _update_lobby_victory_desc)
-
-    # --- Chat Section (bottom-right) ---
-    _chat_sf = SupComFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
-    _chat_sf.frame.grid(row=1, column=1, padx=(5, 20), pady=(5, 5), sticky="nsew")
-    chat_frame = _chat_sf.interior
-    chat_frame.grid_rowconfigure(1, weight=1)
-    chat_frame.grid_columnconfigure(0, weight=1)
-
-    chat_header = ctk.CTkLabel(
-        chat_frame,
-        text="CHAT",
-        text_color=COLOR_TEXT_GOLD,
-        font=ctk.CTkFont(size=12, weight="bold"),
-    )
-    chat_header.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="nw")
-
-    app.lobby_chat_textbox = ctk.CTkTextbox(
-        chat_frame,
-        height=100,
-        fg_color=COLOR_BG,
-        text_color=COLOR_TEXT_MUTED,
-        state="disabled",
-    )
-    app.lobby_chat_textbox.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
-
-    chat_input_frame = ctk.CTkFrame(chat_frame, fg_color="transparent")
-    chat_input_frame.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="ew")
-    chat_input_frame.grid_columnconfigure(0, weight=1)
-
-    app.lobby_chat_entry = ctk.CTkEntry(
-        chat_input_frame,
-        placeholder_text="Type a message...",
-    )
-    app.lobby_chat_entry.grid(row=0, column=0, padx=(0, 5), sticky="ew")
-    app.lobby_chat_entry.bind("<Return>", lambda e: send_lobby_chat(app))
-
-    lobby_chat_send = ctk.CTkButton(
-        chat_input_frame,
-        text="Send",
+    app.lobby_type_var = ctk.StringVar(value="All")
+    ctk.CTkOptionMenu(
+        filter_frame,
+        values=["All", "Skirmish", "Campaign"],
+        variable=app.lobby_type_var,
+        command=lambda _v: _apply_lobby_map_filters(app),
         width=60,
-        command=lambda: send_lobby_chat(app),
+        height=22,
+    ).grid(row=1, column=0, padx=(0, 2), sticky="ew")
+
+    app.lobby_players_var = ctk.StringVar(value="Any")
+    app.lobby_players_menu = ctk.CTkOptionMenu(
+        filter_frame,
+        values=["Any"],
+        variable=app.lobby_players_var,
+        command=lambda _v: _apply_lobby_map_filters(app),
+        width=45,
+        height=22,
     )
-    lobby_chat_send.grid(row=0, column=1)
+    app.lobby_players_menu.grid(row=1, column=1, padx=(0, 2), sticky="ew")
 
-    # --- Action Bar (bottom, spanning both columns) ---
-    action_bar = ctk.CTkFrame(app.lobby_screen, fg_color="transparent")
-    action_bar.grid(row=2, column=0, columnspan=2, padx=20, pady=(5, 20), sticky="ew")
-    action_bar.grid_columnconfigure(1, weight=1)
+    app.lobby_size_var = ctk.StringVar(value="Any")
+    app.lobby_size_menu = ctk.CTkOptionMenu(
+        filter_frame,
+        values=["Any"],
+        variable=app.lobby_size_var,
+        command=lambda _v: _apply_lobby_map_filters(app),
+        width=45,
+        height=22,
+    )
+    app.lobby_size_menu.grid(row=1, column=2, sticky="ew")
 
+    app.lobby_map_scroll = ctk.CTkScrollableFrame(col, fg_color="transparent")
+    app.lobby_map_scroll.grid(row=2, column=0, sticky="nsew", pady=(2, 0))
+    app.lobby_map_buttons: list[Any] = []
+
+
+def _build_lobby_bottom_bar(app: Any) -> None:
+    """Bottom bar: LEAVE button | Chat | LAUNCH button."""
+    bottom = ctk.CTkFrame(app.lobby_screen, fg_color=COLOR_SURFACE)
+    bottom.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+    bottom.grid_columnconfigure(1, weight=1)  # chat expands
+
+    # LEAVE button
     app.lobby_leave_btn = ctk.CTkButton(
-        action_bar,
+        bottom,
         text="LEAVE",
-        width=100,
-        height=44,
+        width=80,
+        height=36,
         fg_color=COLOR_DANGER,
         hover_color="#BF3040",
         text_color=COLOR_TEXT_PRIMARY,
-        font=ctk.CTkFont(size=14, weight="bold"),
+        font=ctk.CTkFont(size=12, weight="bold"),
         corner_radius=4,
         border_width=1,
         border_color="#FF6B75",
         command=lambda: on_leave_lobby(app),
     )
-    app.lobby_leave_btn.grid(row=0, column=0, sticky="w")
+    app.lobby_leave_btn.grid(row=0, column=0, padx=(10, 5), pady=8, sticky="w")
 
+    # Chat area (entry + send)
+    chat_frame = ctk.CTkFrame(bottom, fg_color="transparent")
+    chat_frame.grid(row=0, column=1, sticky="ew", padx=5, pady=8)
+    chat_frame.grid_columnconfigure(0, weight=1)
+
+    app.lobby_chat_textbox = ctk.CTkTextbox(
+        chat_frame,
+        height=50,
+        fg_color=COLOR_BG,
+        text_color=COLOR_TEXT_MUTED,
+        font=ctk.CTkFont(size=12),
+        state="disabled",
+    )
+    app.lobby_chat_textbox.grid(row=0, column=0, columnspan=2, sticky="ew")
+
+    app.lobby_chat_entry = ctk.CTkEntry(
+        chat_frame,
+        placeholder_text="Type a message...",
+        height=28,
+    )
+    app.lobby_chat_entry.grid(row=1, column=0, sticky="ew", padx=(0, 5), pady=(3, 0))
+    app.lobby_chat_entry.bind("<Return>", lambda e: send_lobby_chat(app))
+
+    ctk.CTkButton(
+        chat_frame,
+        text="Send",
+        width=60,
+        height=28,
+        command=lambda: send_lobby_chat(app),
+    ).grid(row=1, column=1, pady=(3, 0))
+
+    # LAUNCH button
     app.lobby_launch_btn = ctk.CTkButton(
-        action_bar,
+        bottom,
         text="\u25b6  LAUNCH GAME",
-        width=180,
-        height=44,
+        width=160,
+        height=36,
         fg_color=COLOR_LAUNCH,
         hover_color="#35A8D8",
         text_color=COLOR_BG,
-        font=ctk.CTkFont(size=16, weight="bold"),
+        font=ctk.CTkFont(size=14, weight="bold"),
         corner_radius=4,
         border_width=1,
         border_color="#6CD4FF",
         command=lambda: on_lobby_launch_click(app),
     )
-    app.lobby_launch_btn.grid(row=0, column=2, sticky="e")
+    app.lobby_launch_btn.grid(row=0, column=2, padx=(5, 10), pady=8, sticky="e")
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +369,6 @@ def build_lobby_screen(app: Any) -> None:
 
 def update_lobby_for_host(app: Any) -> None:
     """Configure lobby screen widgets for hosting."""
-    app.lobby_change_map_btn.grid()
     app.lobby_add_ai_btn.grid()
     app.lobby_launch_btn.configure(
         text="\u25b6  LAUNCH GAME", fg_color=COLOR_LAUNCH, state="normal"
@@ -313,9 +377,12 @@ def update_lobby_for_host(app: Any) -> None:
     for w in app.lobby_option_widgets:
         if hasattr(w, "configure") and isinstance(w, ctk.CTkOptionMenu):
             w.configure(state="normal")
-    # Update map label
+    # Populate the lobby map list
+    _populate_lobby_map_list(app)
+    # Update map canvas with current map
     active_map = prefs.get_active_map()
-    app.lobby_map_label.configure(text=active_map or "No map selected")
+    if active_map:
+        _update_lobby_map_preview(app, active_map)
     # Initialize lobby player slots with host row + one default AI
     app._clear_lobby_player_slots()
     name = app.name_entry.get() if hasattr(app, "name_entry") else "Player"
@@ -333,13 +400,14 @@ def update_lobby_for_host(app: Any) -> None:
 
 def update_lobby_for_joiner(app: Any) -> None:
     """Configure lobby screen widgets for joining."""
-    app.lobby_change_map_btn.grid_remove()
     app.lobby_add_ai_btn.grid_remove()
     app.lobby_launch_btn.configure(text="READY", fg_color=COLOR_ACCENT, state="disabled")
     # Disable option dropdowns (host controls)
     for w in app.lobby_option_widgets:
         if hasattr(w, "configure") and isinstance(w, ctk.CTkOptionMenu):
             w.configure(state="disabled")
+    # Show map list but disable interaction (joiner can't change map)
+    _populate_lobby_map_list(app, read_only=True)
 
 
 # ---------------------------------------------------------------------------
@@ -376,80 +444,107 @@ def append_lobby_chat(app: Any, sender: str, text: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def on_lobby_change_map(app: Any) -> None:
-    """Open map picker dialog for the host in lobby mode."""
+def _populate_lobby_map_list(app: Any, *, read_only: bool = False) -> None:
+    """Fill the lobby map list column with available maps."""
     if not getattr(app, "_all_maps", None):
         app._all_maps = map_scanner.scan_all_maps()
+    app._lobby_map_read_only = read_only
+    _apply_lobby_map_filters(app)
 
-    dialog = ctk.CTkToplevel(app)
-    dialog.title("Select Map")
-    dialog.geometry("400x500")
-    dialog.transient(app)
-    dialog.grab_set()
-    dialog.configure(fg_color=COLOR_BG)
 
-    # Search bar
-    search_var = ctk.StringVar()
-    search_entry = ctk.CTkEntry(
-        dialog,
-        placeholder_text="Search maps...",
-        textvariable=search_var,
-        height=32,
-        fg_color=COLOR_MOD_PANEL,
-    )
-    search_entry.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="ew")
-    dialog.grid_columnconfigure(0, weight=1)
-    dialog.grid_rowconfigure(1, weight=1)
+def _apply_lobby_map_filters(app: Any, *_args: Any) -> None:
+    """Rebuild the lobby map list based on search/filter state."""
+    for btn in getattr(app, "lobby_map_buttons", []):
+        btn.destroy()
+    app.lobby_map_buttons = []
 
-    # Scrollable map list
-    scroll = ctk.CTkScrollableFrame(dialog, fg_color=COLOR_PANEL)
-    scroll.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="nsew")
-    scroll.grid_columnconfigure(0, weight=1)
+    maps = getattr(app, "_all_maps", [])
+    if not maps:
+        return
 
-    map_buttons: list[Any] = []
+    search_text = app.lobby_search_var.get().lower() if hasattr(app, "lobby_search_var") else ""
+    type_filter = app.lobby_type_var.get() if hasattr(app, "lobby_type_var") else "All"
+    players_filter = app.lobby_players_var.get() if hasattr(app, "lobby_players_var") else "Any"
+    size_filter = app.lobby_size_var.get() if hasattr(app, "lobby_size_var") else "Any"
     active_map = prefs.get_active_map()
+    read_only = getattr(app, "_lobby_map_read_only", False)
 
-    def populate(filter_text: str = "") -> None:
-        for btn in map_buttons:
-            btn.destroy()
-        map_buttons.clear()
+    for idx, info in enumerate(maps):
+        # Search filter
+        if (
+            search_text
+            and search_text not in info.display_name.lower()
+            and search_text not in info.folder_name.lower()
+        ):
+            continue
+        # Type filter
+        if type_filter != "All" and getattr(info, "map_type", "Skirmish") != type_filter:
+            continue
+        # Players filter
+        if players_filter != "Any":
+            try:
+                if info.max_players != int(players_filter.rstrip("p")):
+                    continue
+            except (ValueError, AttributeError):
+                pass
+        # Size filter
+        if size_filter != "Any" and getattr(info, "size_label", "?") != size_filter:
+            continue
 
-        for idx, info in enumerate(app._all_maps):
-            name_match = filter_text in info.display_name.lower()
-            folder_match = filter_text in info.folder_name.lower()
-            if filter_text and not name_match and not folder_match:
-                continue
+        parts = [info.display_name]
+        if info.max_players:
+            parts.append(f"{info.max_players}p")
+        if info.size_label != "?":
+            parts.append(info.size_label)
+        label = f"{parts[0]} \u2014 {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
 
-            parts = [info.display_name]
-            if info.max_players:
-                parts.append(f"{info.max_players}p")
-            if info.size_label != "?":
-                parts.append(info.size_label)
-            label = f"{parts[0]} \u2014 {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
+        is_active = info.folder_name == active_map
 
-            is_active = info.folder_name == active_map
+        def on_pick(name: str = info.folder_name, disp: str = info.display_name) -> None:
+            if read_only:
+                return
+            prefs.set_active_map(name)
+            _update_lobby_map_preview(app, name)
+            broadcast_game_state(app)
+            _apply_lobby_map_filters(app)  # refresh highlight
 
-            def on_pick(name: str = info.folder_name, disp: str = info.display_name) -> None:
-                prefs.set_active_map(name)
-                app.lobby_map_label.configure(text=disp)
-                broadcast_game_state(app)
-                dialog.destroy()
+        btn = ctk.CTkButton(
+            app.lobby_map_scroll,
+            text=label,
+            anchor="w",
+            height=28,
+            fg_color=COLOR_ACCENT if is_active else "transparent",
+            text_color=COLOR_BG if is_active else COLOR_TEXT_PRIMARY,
+            hover_color=COLOR_ACCENT_HOVER if not read_only else "transparent",
+            command=on_pick,
+        )
+        btn.grid(row=idx, column=0, pady=1, sticky="ew")
+        app.lobby_map_buttons.append(btn)
 
-            btn = ctk.CTkButton(
-                scroll,
-                text=label,
-                anchor="w",
-                height=30,
-                fg_color=COLOR_ACCENT if is_active else "transparent",
-                text_color=COLOR_BG if is_active else COLOR_TEXT_PRIMARY,
-                hover_color=COLOR_ACCENT_HOVER,
-                command=on_pick,
-            )
-            btn.grid(row=idx, column=0, pady=1, sticky="ew")
-            map_buttons.append(btn)
 
-    populate()
-    search_var.trace_add("write", lambda *_a: populate(search_var.get().lower()))
+def _update_lobby_map_preview(app: Any, map_folder: str) -> None:
+    """Update the lobby map canvas and label for a selected map."""
+    maps = getattr(app, "_all_maps", [])
+    info = None
+    for m in maps:
+        if m.folder_name == map_folder:
+            info = m
+            break
+
+    display_name = info.display_name if info else map_folder
+    app.lobby_map_label.configure(text=display_name)
+
+    # Update the map canvas if available
+    if hasattr(app, "_lobby_map_canvas_widget") and info:
+        raw_preview = None
+        try:
+            from PIL import Image as PilImage
+
+            if info.preview_path and info.preview_path.exists():
+                raw_preview = PilImage.open(info.preview_path).convert("RGB")
+        except Exception:
+            pass
+        app._lobby_map_canvas_widget.set_map(info, raw_preview)
 
 
 def on_lobby_option_change(app: Any, key: str) -> None:
@@ -927,6 +1022,9 @@ def on_game_state_received(app: Any, state: dict[str, Any]) -> None:
             app.header_label.configure(text=f"Map: {map_name}")
         if hasattr(app, "lobby_map_label"):
             app.lobby_map_label.configure(text=map_name)
+        # Update lobby map canvas for joiner
+        if map_folder:
+            _update_lobby_map_preview(app, map_folder)
         # Persist host's map so cmd_launch() picks it up
         if map_folder:
             prefs.set_active_map(map_folder)
