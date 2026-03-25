@@ -213,12 +213,19 @@ def apply_update(tmp_path: Path) -> bool:
         tmp_path.rename(exe_path)
         LOG.info("Moved update into %s", exe_path.name)
 
-        # Restart with the new exe.
-        # On Windows, os.execv doesn't truly replace the process — it spawns
-        # a child and the parent continues.  Use subprocess + sys.exit instead.
-        LOG.info("Restarting launcher ...")
-        subprocess.Popen([str(exe_path)])
-        LOG.info("New process launched, exiting old process.")
+        # Restart with the new exe after a brief delay.
+        # os._exit(0) skips atexit handlers, so PyInstaller can't clean up
+        # our _MEI temp dir. If the new exe starts before the old process
+        # fully exits, the bootloader finds the locked _MEI dir and shows a
+        # "Failed to remove temporary directory" warning dialog.
+        # Fix: launch via cmd with a 3-second delay so the old process is
+        # fully dead and its _MEI dir released before the new bootloader runs.
+        LOG.info("Restarting launcher (with 3s delay for MEI cleanup) ...")
+        subprocess.Popen(
+            f'cmd /c timeout /t 3 /nobreak >nul & "{exe_path}"',
+            shell=True,
+        )
+        LOG.info("Delayed restart scheduled, exiting old process.")
         os._exit(0)  # Hard exit — avoid tkinter cleanup issues
 
         return True  # pragma: no cover

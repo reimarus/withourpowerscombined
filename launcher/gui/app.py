@@ -325,7 +325,8 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _bind_hotkeys(self) -> None:
         """Bind global keyboard shortcuts."""
-        self.bind("<Return>", lambda e: self._on_primary_click())
+        # Enter is NOT bound to game launch — too easy to trigger accidentally.
+        # The lobby chat entry has its own <Return> binding for sending messages.
         self.bind("<Escape>", lambda e: self.destroy())
 
     def _show_screen(self, screen: str) -> None:
@@ -1027,6 +1028,25 @@ class WopcApp(BaseApp):  # type: ignore
             raw[key] = var.get()
         return game_options_to_engine(raw)
 
+    def _sync_bundled_mods(self) -> None:
+        """Copy bundled mods/usermods from the exe bundle to WOPC deployment.
+
+        Runs on every startup so new mods from updates appear without re-setup.
+        """
+        import shutil
+
+        for kind, dest in [
+            ("mods", config.WOPC_MODS),
+            ("usermods", config.WOPC_USERMODS),
+        ]:
+            src = config.REPO_BUNDLED / kind
+            if not src.exists():
+                continue
+            dest.mkdir(parents=True, exist_ok=True)
+            for mod_dir in sorted(src.iterdir()):
+                if mod_dir.is_dir():
+                    shutil.copytree(mod_dir, dest / mod_dir.name, dirs_exist_ok=True)
+
     def _refresh_mods_list(self) -> None:
         """Read available mods and content packs from disk and update the UI."""
         # --- Content Packs ---
@@ -1576,6 +1596,8 @@ class WopcApp(BaseApp):  # type: ignore
                 self.log("WOPC not deployed — starting automatic installation...")
             self._start_install()
         elif scfa_ok and wopc_ok and assets_ok:
+            # Sync bundled mods on every startup — picks up new mods from updates
+            self._sync_bundled_mods()
             mode = self.mode_var.get()
             label = self._PLAY_LABELS.get(mode, "PLAY MATCH")
             self.primary_btn.configure(
@@ -1820,7 +1842,9 @@ class WopcApp(BaseApp):  # type: ignore
             self.log("Game failed to launch.")
 
         # Give peers a moment to receive the Launch message, then stop server
+        # Bug #67: Also stop beacon broadcaster so stale game listing disappears
         time.sleep(3)
+        self.after(0, self._stop_beacon_broadcaster)
         self.after(0, self._stop_relay_registration)
         self.after(0, self._stop_lobby_server)
         self.after(

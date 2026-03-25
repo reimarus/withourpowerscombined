@@ -85,15 +85,16 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Multiplayer Bugs (Reported 2026-03-25)
 
-61. **Multiplayer: Can't select spawn slot on map** — clicking spawn markers in the multiplayer lobby doesn't assign the player to that slot. Works in solo mode but not in multiplayer. Likely the MapCanvas click handler isn't wired in lobby_screen.py.
+61. ~~**Multiplayer: Can't select spawn slot on map**~~ ✅ — Wired `on_spawn_select` and `on_spawn_swap` callbacks in lobby MapCanvas. Host slot and AI slots now get `start_spot` assignments. Lobby canvas accessor synced on map change, slot add/remove.
 62. **Multiplayer: Color picker not rendering correctly** — color picker widget has visual issues in the multiplayer lobby. Needs investigation.
 63. **Multiplayer: Player options missing in multiplayer** — players can't configure the same options (faction, team, color, spawn) in multiplayer as they can in solo. The lobby screen needs the same player settings widgets.
-64. **Multiplayer: AI slots don't show on map** — when adding AI in multiplayer, they don't appear as markers on the map canvas. Solo mode shows them correctly.
-65. **Multiplayer: Enter key launches game instead of sending chat** — Enter key is bound to LAUNCH instead of submitting chat messages. In the lobby, Enter should send the chat message; a separate button or Ctrl+Enter should launch.
-66. **Multiplayer: Friend can't join game** — connection fails for remote players. Friend's log shows wopc_core.scd is MISSING, which means the quickstart system can't function. Root cause: setup completed (bin/ exists) but wopc_core.scd download failed or was never triggered. Installation check needs to verify wopc_core.scd exists, not just bin/.
-67. **Multiplayer: Game not cleaned from lobby on launch** — when a game starts, the game listing should be removed from the Firebase relay and LAN beacon so other players don't see a stale game in the browser.
-68. **Friend's wopc_core.scd missing** — Critical deployment gap: the installation check only verifies `WOPC/bin/` exists but doesn't check for `wopc_core.scd`. If the download failed, the game launches without core Lua code. Need: (a) verify wopc_core.scd in health check, (b) auto-repair if missing, (c) better error when content download fails.
+64. ~~**Multiplayer: AI slots don't show on map**~~ ✅ — Lobby AI slots now assigned sequential `start_spot` values. `_redraw_lobby_canvas()` syncs the slot accessor and redraws after add/remove. Canvas shows colored markers for all lobby slots.
+65. ~~**Multiplayer: Enter key launches game instead of sending chat**~~ ✅ — Removed global `<Return>` → launch binding entirely. Enter only sends chat via the lobby chat entry's own `<Return>` binding. Game launch is button-only.
+66. ~~**Multiplayer: Friend can't join game**~~ ✅ — wopc_core.scd health check + auto-repair shipped in v2.01.0045. Friend needs to restart launcher to auto-update.
+67. ~~**Multiplayer: Game not cleaned from lobby on launch**~~ ✅ — `_launch_game_and_cleanup` now stops beacon broadcaster + relay registration + lobby server after launch, removing the game listing from both LAN and internet browsers.
+68. ~~**Friend's wopc_core.scd missing**~~ ✅ — Fixed in v2.01.0045: health check verifies wopc_core.scd exists, auto-repair re-runs setup if missing.
 69. **Send Logs should include WOPC.log from game directory** — the engine log at `SCFA\WOPC\bin\WOPC.log` should be attached to log reports. Currently captured but path may not resolve for all installations. Verify the log path works for Steam library on different drives (e.g., D:\SteamLibrary\).
+70. **MEI temp directory warning on update** — ~~PyInstaller `--onefile` _MEI cleanup race condition~~ ✅ — Fixed by launching new exe with 3-second delay via `cmd /c timeout` so old process fully exits before new bootloader runs.
 
 ## Platform Support
 
