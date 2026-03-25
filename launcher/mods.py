@@ -141,7 +141,11 @@ def get_toggleable_scds() -> list[str]:
 
 
 def get_enabled_packs() -> list[str]:
-    """Return list of currently enabled content pack SCD names."""
+    """Return list of currently enabled content pack SCD names.
+
+    Automatically includes dependency SCDs (lua.scd, loc_US.scd) when any
+    unit pack is enabled, ensuring base classes are available.
+    """
     parser = prefs.load_prefs()
     if not parser.has_section("ContentPacks"):
         return []  # no content packs enabled
@@ -149,15 +153,35 @@ def get_enabled_packs() -> list[str]:
     for scd_name in get_toggleable_scds():
         if parser.getboolean("ContentPacks", scd_name, fallback=True):
             enabled.append(scd_name)
+
+    # Auto-include dependencies if any unit pack is active
+    has_unit_pack = any(s in config.UNIT_PACK_SCDS for s in enabled)
+    if has_unit_pack:
+        available = set(get_toggleable_scds())
+        for dep in sorted(config.UNIT_PACK_DEPENDENCIES):
+            if dep in available and dep not in enabled:
+                enabled.append(dep)
+                logger.info("Auto-enabled dependency: %s", dep)
+
     return enabled
 
 
 def set_pack_state(scd_name: str, enabled: bool) -> None:
-    """Enable or disable a content pack SCD. Persists to prefs."""
+    """Enable or disable a content pack SCD. Persists to prefs.
+
+    When enabling a unit pack, automatically enables dependency SCDs.
+    """
     parser = prefs.load_prefs()
     if not parser.has_section("ContentPacks"):
         parser.add_section("ContentPacks")
     parser.set("ContentPacks", scd_name, str(enabled))
+
+    # Auto-enable dependencies when activating a unit pack
+    if enabled and scd_name in config.UNIT_PACK_SCDS:
+        for dep in sorted(config.UNIT_PACK_DEPENDENCIES):
+            parser.set("ContentPacks", dep, "True")
+            logger.info("Auto-enabled dependency: %s (required by %s)", dep, scd_name)
+
     prefs.save_prefs(parser)
 
 
