@@ -166,10 +166,18 @@ class WopcApp(BaseApp):  # type: ignore
         threading.Thread(target=self._check_for_update, daemon=True).start()
 
     def _set_window_icon(self) -> None:
-        """Set the application window icon if it exists."""
+        """Set the application window icon (title bar + taskbar)."""
+
+        # Set Windows AppUserModelID so the taskbar shows our icon
+        # instead of the default Python interpreter icon.
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("wopc.launcher")  # type: ignore[union-attr]
+        except Exception:
+            pass
 
         if getattr(sys, "frozen", False):
-            # PyInstaller extracts bundled data to _MEIPASS
             base_dir = Path(sys._MEIPASS)  # type: ignore[attr-defined]
         else:
             base_dir = Path(__file__).parent.parent.parent.resolve()
@@ -178,6 +186,9 @@ class WopcApp(BaseApp):  # type: ignore
         if icon_path.exists():
             try:
                 self.iconbitmap(str(icon_path))
+                # Defer a second call — CustomTkinter can override the icon
+                # during its own init, so re-apply after the event loop starts.
+                self.after(100, lambda: self.iconbitmap(str(icon_path)))
             except Exception as exc:
                 logger.warning("Failed to set window icon: %s", exc)
 
@@ -1221,10 +1232,19 @@ class WopcApp(BaseApp):  # type: ignore
             self.player_slots[0]["widgets"][1].configure(text=name)
 
     def _on_faction_change(self, choice: str) -> None:
-        """Persist faction preference when dropdown changes."""
+        """Persist faction preference and update the human slot label."""
         parser = prefs.load_prefs()
         parser.set("Game", "player_faction", choice.lower())
         prefs.save_prefs(parser)
+        # Update the human slot faction label + icon (widget index 2)
+        if hasattr(self, "player_slots") and self.player_slots:
+            from launcher.gui.slot_widget import _get_faction_icon
+
+            faction_lbl = self.player_slots[0]["widgets"][2]
+            faction_lbl.configure(text=choice.capitalize())
+            icon = _get_faction_icon(choice)
+            if icon:
+                faction_lbl.configure(image=icon)
 
     def _on_minimap_toggle(self) -> None:
         """Persist minimap visibility preference when checkbox is toggled."""

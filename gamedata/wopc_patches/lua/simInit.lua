@@ -348,16 +348,6 @@ function BeginSession()
     -- keep track of units off map
     OnStartOffMapPreventionThread()
 
-    -- =========================================================================
-    -- WOPC: Apply movement tuning (Phase 1 navigator + Phase 1.5 experiments)
-    -- This runs in the sim state after armies exist but before gameplay begins.
-    -- The TuneNavigator() call is safe for all players (uses existing SimRegFunc).
-    -- Zero-collision experiment is NOT auto-enabled — call from sim console:
-    --   import('/lua/wopc/movement_tuning.lua').EnableZeroCollision()
-    -- =========================================================================
-    local wopcMovement = import('/lua/wopc/movement_tuning.lua')
-    wopcMovement.TuneNavigator()
-
     -- trigger event for brains
     for k, brain in ArmyBrains do
         brain:OnBeginSession()
