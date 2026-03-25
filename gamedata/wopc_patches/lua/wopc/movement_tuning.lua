@@ -6,7 +6,9 @@
 -- Phase 1: Navigator distance tuning (safe, ships to all players)
 -- Phase 1.5: Zero-collision experiment (dev-only, for testing)
 
-local WopcMovement = {}
+-- NOTE: Must be global (not local) — SCFA's import() returns the module's
+-- global environment, so local tables are invisible to callers.
+WopcMovement = {}
 
 -- Internal state
 local zeroCollisionEnabled = false
@@ -83,4 +85,4 @@ function WopcMovement.RevertCollision(unit)
     end
 end
 
-return WopcMovement
+-- No explicit return needed — SCFA import() returns the module's global env.
