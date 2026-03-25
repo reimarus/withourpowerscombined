@@ -19,8 +19,8 @@ function BeginSession()
     -- Navigator personal position distance: how close a unit must be to its
     -- formation slot to be considered "in position". Lower = tighter groups.
     if SetNavigatorPersonalPosMaxDistance then
-        SetNavigatorPersonalPosMaxDistance(20.0)
-        LOG('WOPC Pathing: Navigator personal pos max distance = 20.0 (vanilla 50.0)')
+        SetNavigatorPersonalPosMaxDistance(10.0)
+        LOG('WOPC Pathing: Navigator personal pos max distance = 10.0 (vanilla 50.0)')
     end
 
     -- Log stats for diagnostics
