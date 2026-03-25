@@ -213,19 +213,31 @@ def apply_update(tmp_path: Path) -> bool:
         tmp_path.rename(exe_path)
         LOG.info("Moved update into %s", exe_path.name)
 
-        # Restart with the new exe after a brief delay.
-        # os._exit(0) skips atexit handlers, so PyInstaller can't clean up
-        # our _MEI temp dir. If the new exe starts before the old process
-        # fully exits, the bootloader finds the locked _MEI dir and shows a
-        # "Failed to remove temporary directory" warning dialog.
-        # Fix: launch via cmd with a 3-second delay so the old process is
-        # fully dead and its _MEI dir released before the new bootloader runs.
-        LOG.info("Restarting launcher (with 3s delay for MEI cleanup) ...")
-        subprocess.Popen(
-            f'cmd /c timeout /t 3 /nobreak >nul & "{exe_path}"',
-            shell=True,
-        )
-        LOG.info("Delayed restart scheduled, exiting old process.")
+        # Restart with the new exe after cleaning up our _MEI temp dir.
+        # os._exit(0) skips Python's atexit handlers, so PyInstaller never
+        # removes the _MEIPASS extraction directory. On next launch, the
+        # bootloader finds the stale _MEI dir and shows a warning dialog.
+        # Fix: spawn a cmd script that (1) waits for this process to die,
+        # (2) deletes the stale _MEI dir, (3) launches the new exe.
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            LOG.info("Scheduling _MEI cleanup + restart: %s", meipass)
+            # Use ``ping`` for delay — ``timeout`` requires an interactive
+            # console and silently fails inside ``cmd /c``, leaving the
+            # stale _MEI directory behind.  Retry rmdir in case the first
+            # attempt races with process teardown.
+            subprocess.Popen(
+                f"cmd /c ping -n 4 127.0.0.1 >nul"
+                f' & rmdir /s /q "{meipass}" 2>nul'
+                f" & ping -n 2 127.0.0.1 >nul"
+                f' & rmdir /s /q "{meipass}" 2>nul'
+                f' & "{exe_path}"',
+                shell=True,
+            )
+        else:
+            LOG.info("Restarting launcher (non-frozen) ...")
+            subprocess.Popen([str(exe_path)])
+        LOG.info("Restart scheduled, exiting old process.")
         os._exit(0)  # Hard exit — avoid tkinter cleanup issues
 
         return True  # pragma: no cover

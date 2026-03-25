@@ -87,14 +87,14 @@ Items to tackle over time, roughly grouped by priority.
 
 61. ~~**Multiplayer: Can't select spawn slot on map**~~ ✅ — Wired `on_spawn_select` and `on_spawn_swap` callbacks in lobby MapCanvas. Host slot and AI slots now get `start_spot` assignments. Lobby canvas accessor synced on map change, slot add/remove.
 62. **Multiplayer: Color picker not rendering correctly** — color picker widget has visual issues in the multiplayer lobby. Needs investigation.
-63. **Multiplayer: Player options missing in multiplayer** — players can't configure the same options (faction, team, color, spawn) in multiplayer as they can in solo. The lobby screen needs the same player settings widgets.
+63. ~~**Multiplayer: Player options missing in multiplayer**~~ ✅ — Host slot now has the same structure as solo (team_var, color_var, faction label, color indicator). Map canvas renders spawn colors and teams for host + AI slots. Faction/name/color changes in lobby settings sync to the host slot row.
 64. ~~**Multiplayer: AI slots don't show on map**~~ ✅ — Lobby AI slots now assigned sequential `start_spot` values. `_redraw_lobby_canvas()` syncs the slot accessor and redraws after add/remove. Canvas shows colored markers for all lobby slots.
 65. ~~**Multiplayer: Enter key launches game instead of sending chat**~~ ✅ — Removed global `<Return>` → launch binding entirely. Enter only sends chat via the lobby chat entry's own `<Return>` binding. Game launch is button-only.
 66. ~~**Multiplayer: Friend can't join game**~~ ✅ — wopc_core.scd health check + auto-repair shipped in v2.01.0045. Friend needs to restart launcher to auto-update.
-67. ~~**Multiplayer: Game not cleaned from lobby on launch**~~ ✅ — `_launch_game_and_cleanup` now stops beacon broadcaster + relay registration + lobby server after launch, removing the game listing from both LAN and internet browsers.
+67. ~~**Multiplayer: Game not cleaned from lobby on launch**~~ ✅ — `_launch_game_and_cleanup` now stops server, clears lobby slots, and returns to browser screen after launch. Beacon/relay discovery restarts so the player can immediately create or join a new game.
 68. ~~**Friend's wopc_core.scd missing**~~ ✅ — Fixed in v2.01.0045: health check verifies wopc_core.scd exists, auto-repair re-runs setup if missing.
 69. **Send Logs should include WOPC.log from game directory** — the engine log at `SCFA\WOPC\bin\WOPC.log` should be attached to log reports. Currently captured but path may not resolve for all installations. Verify the log path works for Steam library on different drives (e.g., D:\SteamLibrary\).
-70. **MEI temp directory warning on update** — ~~PyInstaller `--onefile` _MEI cleanup race condition~~ ✅ — Fixed by launching new exe with 3-second delay via `cmd /c timeout` so old process fully exits before new bootloader runs.
+70. ~~**MEI temp directory warning on update**~~ ✅ — Fixed: `cmd /c timeout` doesn't work in non-interactive shells. Replaced with `ping -n` delay + retry `rmdir` to reliably clean up old _MEI dir before launching new exe. Also added 8s final deferred retry for map canvas rendering after update restart.
 
 ## Platform Support
 

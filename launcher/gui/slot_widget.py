@@ -278,7 +278,7 @@ def add_lobby_ai_slot(app: Any) -> None:
         app,
         parent=app.lobby_slots_scroll,
         slot_list=app.lobby_player_slots,
-        use_swatch=False,
+        use_swatch=True,
         track_spawn=False,
     )
     # Assign sequential spawn to the new slot and redraw lobby canvas
@@ -659,20 +659,34 @@ def on_color_change(app: Any, _val: str) -> None:
     """Broadcast state and redraw map when a color changes."""
     if hasattr(app, "_map_canvas_widget"):
         app._map_canvas_widget.invalidate_tint_cache()
+    if hasattr(app, "_lobby_map_canvas_widget"):
+        app._lobby_map_canvas_widget.invalidate_tint_cache()
     if hasattr(app, "player_color_var"):
         hex_color = app.player_color_var.get()
         prefs.set_player_color(hex_color)
         indicator = getattr(app, "_human_color_indicator", None)
         if indicator:
             indicator.configure(bg=hex_color)
+        lobby_indicator = getattr(app, "_lobby_host_color_indicator", None)
+        if lobby_indicator:
+            lobby_indicator.configure(bg=hex_color)
     app._broadcast_game_state()
     app._redraw_canvas()
+    # Also redraw the lobby canvas so multiplayer map markers update
+    if hasattr(app, "_lobby_map_canvas_widget"):
+        from launcher.gui import lobby_screen
+
+        lobby_screen._redraw_lobby_canvas(app)
 
 
 def on_team_change(app: Any, _val: str) -> None:
     """Broadcast state and redraw map when a team assignment changes."""
     app._broadcast_game_state()
     app._redraw_canvas()
+    if hasattr(app, "_lobby_map_canvas_widget"):
+        from launcher.gui import lobby_screen
+
+        lobby_screen._redraw_lobby_canvas(app)
 
 
 def create_color_swatch(app: Any, parent: Any, color_var: Any, row: int, col: int) -> Any:
