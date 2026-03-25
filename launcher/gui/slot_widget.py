@@ -281,6 +281,14 @@ def add_lobby_ai_slot(app: Any) -> None:
         use_swatch=False,
         track_spawn=False,
     )
+    # Assign sequential spawn to the new slot and redraw lobby canvas
+    new_slot = app.lobby_player_slots[-1] if app.lobby_player_slots else None
+    if new_slot and "start_spot" not in new_slot:
+        new_slot["start_spot"] = len(app.lobby_player_slots) - 1
+    # Lazy import to avoid circular dependency
+    from launcher.gui import lobby_screen
+
+    lobby_screen._redraw_lobby_canvas(app)
 
 
 def add_ai_slot_to(
@@ -440,6 +448,11 @@ def remove_slot_from(
     app._broadcast_game_state()
     if redraw:
         app._redraw_canvas()
+    # Redraw lobby canvas when removing lobby slots
+    if slot_list is app.lobby_player_slots:
+        from launcher.gui import lobby_screen
+
+        lobby_screen._redraw_lobby_canvas(app)
 
 
 def clear_lobby_player_slots(app: Any) -> None:

@@ -209,8 +209,8 @@ def _build_lobby_map_canvas(app: Any, parent: Any) -> None:
     app._lobby_map_canvas_widget = MapCanvas(
         parent=map_frame,
         slot_accessor=app._lobby_slot_accessor,
-        on_spawn_select=lambda idx: None,  # host overrides in update_lobby_for_host
-        on_spawn_swap=lambda a, b: None,
+        on_spawn_select=lambda idx: _lobby_select_spawn(app, idx),
+        on_spawn_swap=lambda a, b: _lobby_swap_spawns(app, a, b),
         after_fn=app.after,
         cancel_fn=app.after_cancel,
     )
@@ -394,8 +394,13 @@ def update_lobby_for_host(app: Any) -> None:
         anchor="w",
     )
     host_lbl.grid(row=0, column=0, columnspan=6, padx=(0, 5), pady=2, sticky="w")
-    app.lobby_player_slots.append({"type": "host", "widgets": [host_lbl]})
+    app.lobby_player_slots.append({"type": "host", "widgets": [host_lbl], "start_spot": 0})
     app._add_lobby_ai_slot()
+    # Assign sequential spawns to all slots and sync the map canvas
+    for si, slot in enumerate(app.lobby_player_slots):
+        if "start_spot" not in slot:
+            slot["start_spot"] = si
+    _redraw_lobby_canvas(app)
 
 
 def update_lobby_for_joiner(app: Any) -> None:
@@ -544,7 +549,65 @@ def _update_lobby_map_preview(app: Any, map_folder: str) -> None:
                 raw_preview = PilImage.open(info.preview_path).convert("RGB")
         except Exception:
             pass
+        app._lobby_slot_accessor._slots = app.lobby_player_slots
         app._lobby_map_canvas_widget.set_map(info, raw_preview)
+
+
+def _lobby_select_spawn(app: Any, spawn_index: int) -> None:
+    """Select a spawn position for the host (slot 0) on the lobby map."""
+    slots = app.lobby_player_slots
+    if not slots:
+        return
+    info = app._current_map_info
+    if info is None or info.markers is None:
+        return
+    if spawn_index >= len(info.markers.armies):
+        return
+    # Find the host slot (first slot with type "host")
+    host_idx = None
+    for i, s in enumerate(slots):
+        if s.get("type") == "host":
+            host_idx = i
+            break
+    if host_idx is None:
+        return
+    old_spawn = slots[host_idx].get("start_spot", 0)
+    if old_spawn != spawn_index:
+        for si, slot in enumerate(slots):
+            if si == host_idx:
+                continue
+            if slot.get("start_spot", si) == spawn_index:
+                slot["start_spot"] = old_spawn
+                break
+    slots[host_idx]["start_spot"] = spawn_index
+    _redraw_lobby_canvas(app)
+    broadcast_game_state(app)
+
+
+def _lobby_swap_spawns(app: Any, src_spawn: int, dst_spawn: int) -> None:
+    """Swap slot assignments between two spawn positions on the lobby map."""
+    slots = app.lobby_player_slots
+    if not slots:
+        return
+    spawn_to_slot: dict[int, int] = {}
+    for si, slot in enumerate(slots):
+        spawn_to_slot[slot.get("start_spot", si)] = si
+    src_slot = spawn_to_slot.get(src_spawn)
+    dst_slot = spawn_to_slot.get(dst_spawn)
+    if src_slot is not None:
+        slots[src_slot]["start_spot"] = dst_spawn
+    if dst_slot is not None:
+        slots[dst_slot]["start_spot"] = src_spawn
+    _redraw_lobby_canvas(app)
+    broadcast_game_state(app)
+
+
+def _redraw_lobby_canvas(app: Any) -> None:
+    """Sync the lobby slot accessor and redraw the lobby map canvas."""
+    if not hasattr(app, "_lobby_map_canvas_widget"):
+        return
+    app._lobby_slot_accessor._slots = app.lobby_player_slots
+    app._lobby_map_canvas_widget.redraw()
 
 
 def on_lobby_option_change(app: Any, key: str) -> None:
