@@ -70,16 +70,19 @@ def main() -> int:
         # Bundle GUI icon assets (map markers, faction icons, chrome)
         "--add-data",
         f"{repo_root / 'launcher' / 'gui' / 'icons'}{os.pathsep}launcher/gui/icons",
-        # Bundle server mods and user mods (deployed to WOPC/ during setup)
-        "--add-data",
-        f"{repo_root / 'bundled' / 'mods'}{os.pathsep}bundled/mods",
-        "--add-data",
-        f"{repo_root / 'bundled' / 'usermods'}{os.pathsep}bundled/usermods",
         # Output directly to repo root (not dist/)
         "--distpath",
         str(repo_root),
         str(entry_point),
     ]
+
+    # Bundle server mods and user mods (deployed to WOPC/ during setup).
+    # Only include directories that exist — bundled/mods/ may not exist yet.
+    for mod_dir in ["mods", "usermods"]:
+        mod_path = repo_root / "bundled" / mod_dir
+        if mod_path.exists():
+            cmd.insert(-1, "--add-data")
+            cmd.insert(-1, f"{mod_path}{os.pathsep}bundled/{mod_dir}")
 
     print(f"  Entry point: {entry_point}")
     print(f"  Command:     {' '.join(cmd)}")
