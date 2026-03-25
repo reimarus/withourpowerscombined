@@ -111,6 +111,7 @@ REPO_BUNDLED_BIN = REPO_BUNDLED / "bin"
 REPO_BUNDLED_GAMEDATA = REPO_BUNDLED / "gamedata"
 REPO_BUNDLED_MAPS = REPO_BUNDLED / "maps"
 REPO_BUNDLED_SOUNDS = REPO_BUNDLED / "sounds"
+REPO_BUNDLED_MODS = REPO_BUNDLED / "mods"
 REPO_BUNDLED_USERMODS = REPO_BUNDLED / "usermods"
 
 # WOPC Overlay Content (consolidated into wopc_core.scd during build)

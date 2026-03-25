@@ -528,19 +528,25 @@ def run_setup(
     if config.REPO_BUNDLED_SOUNDS.exists():
         shutil.copytree(config.REPO_BUNDLED_SOUNDS, config.WOPC_SOUNDS, dirs_exist_ok=True)
 
-    # --- Step 5: Sync usermods (merge shipped mods into existing dir) ---
-    _report("[5/6] Syncing user mods", 5)
+    # --- Step 5: Sync mods (server + user) ---
+    _report("[5/6] Syncing mods", 5)
+    # Server mods (always active, gameplay-affecting — e.g. pathing tuning)
+    config.WOPC_MODS.mkdir(parents=True, exist_ok=True)
+    if config.REPO_BUNDLED_MODS.exists():
+        for mod_dir in sorted(config.REPO_BUNDLED_MODS.iterdir()):
+            if mod_dir.is_dir():
+                dest = config.WOPC_MODS / mod_dir.name
+                shutil.copytree(mod_dir, dest, dirs_exist_ok=True)
+                logger.info("  synced server mod: %s", mod_dir.name)
+
+    # User mods (optional, cosmetic — player toggles in GUI)
     config.WOPC_USERMODS.mkdir(parents=True, exist_ok=True)
     if config.REPO_BUNDLED_USERMODS.exists():
-        # Merge each shipped mod into usermods — overwrites shipped mod files
-        # but preserves any user-installed mods not in the bundle.
         for mod_dir in sorted(config.REPO_BUNDLED_USERMODS.iterdir()):
             if mod_dir.is_dir():
                 dest = config.WOPC_USERMODS / mod_dir.name
                 shutil.copytree(mod_dir, dest, dirs_exist_ok=True)
-                logger.info("  synced mod: %s", mod_dir.name)
-    else:
-        logger.info("  no bundled usermods to sync")
+                logger.info("  synced user mod: %s", mod_dir.name)
 
     # --- Step 6: Setup user maps ---
     _report("[6/6] Setting up user maps", 6)
