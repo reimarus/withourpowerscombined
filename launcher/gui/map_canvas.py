@@ -199,7 +199,7 @@ class MapCanvas:
         if self.canvas.winfo_width() < 10:
             self._schedule_deferred_redraw(attempt=0)
 
-    _REDRAW_DELAYS = (100, 200, 500, 1000, 2000)  # escalating retry delays (ms)
+    _REDRAW_DELAYS = (100, 200, 500, 1000, 2000, 4000, 8000)  # escalating retry delays (ms)
 
     def _schedule_deferred_redraw(self, attempt: int = 0) -> None:
         """Schedule a deferred redraw with escalating delays."""

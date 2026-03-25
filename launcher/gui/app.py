@@ -1609,6 +1609,12 @@ class WopcApp(BaseApp):  # type: ignore
             )
             self.log("All systems ready.")
 
+        # Force tkinter to compute widget geometry before rendering maps.
+        # After an auto-update restart, the canvas may not be laid out yet
+        # when _refresh_map_list() triggers set_map() → redraw(), causing a
+        # blank map preview (winfo_width() < 10 → bail out).
+        self.update_idletasks()
+
         # Always populate maps and mods regardless of setup status
         self._refresh_mods_list()
         self._refresh_map_list()
@@ -1841,12 +1847,16 @@ class WopcApp(BaseApp):  # type: ignore
         else:
             self.log("Game failed to launch.")
 
-        # Give peers a moment to receive the Launch message, then stop server
-        # Bug #67: Also stop beacon broadcaster so stale game listing disappears
+        # Give peers a moment to receive the Launch message, then clean up
         time.sleep(3)
         self.after(0, self._stop_beacon_broadcaster)
         self.after(0, self._stop_relay_registration)
         self.after(0, self._stop_lobby_server)
+        # Return to browser screen so the lobby doesn't sit with stale state
+        self.after(0, self._clear_lobby_player_slots)
+        self.after(0, lambda: self._show_screen("browser"))
+        self.after(0, self._start_beacon_listener)
+        self.after(0, self._start_relay_polling)
         self.after(
             0,
             lambda: self.lobby_launch_btn.configure(

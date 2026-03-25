@@ -158,19 +158,105 @@ def _build_lobby_options_column(app: Any, parent: Any) -> None:
 
 
 def _build_lobby_players_column(app: Any, parent: Any) -> None:
-    """Col 1: Players — host row, remote humans, AI slots."""
+    """Col 1: Player Settings + Players — mirrors solo _build_players_column."""
+    from launcher.gui.slot_widget import create_color_swatch
+
     col = ctk.CTkFrame(parent, fg_color="transparent")
     col.grid(row=0, column=1, sticky="nsew", padx=5, pady=10)
     col.grid_columnconfigure(0, weight=1)
-    col.grid_rowconfigure(1, weight=1)
+    col.grid_rowconfigure(3, weight=1)  # slots scroll expands
 
+    # --- Row 0: "PLAYER" header ---
+    ctk.CTkLabel(
+        col,
+        text="PLAYER",
+        text_color=COLOR_TEXT_GOLD,
+        font=ctk.CTkFont(size=12, weight="bold"),
+    ).grid(row=0, column=0, sticky="w", pady=(0, 5))
+
+    # --- Row 1: Host player settings (name, faction, color) ---
+    settings = ctk.CTkFrame(col, fg_color="transparent")
+    settings.grid(row=1, column=0, sticky="ew")
+
+    ctk.CTkLabel(
+        settings, text="Name:", text_color=COLOR_TEXT_MUTED, font=ctk.CTkFont(size=11)
+    ).grid(row=0, column=0, sticky="w", padx=(0, 5))
+    app.lobby_name_entry = ctk.CTkEntry(settings, width=100, height=22, placeholder_text="Player")
+    saved_name = prefs.get_player_name()
+    app.lobby_name_entry.insert(0, saved_name)
+
+    def _on_lobby_name_change(*_a: Any) -> None:
+        name = app.lobby_name_entry.get() or "Player"
+        prefs.set_player_name(name)
+        # Sync the solo name entry too
+        if hasattr(app, "name_entry"):
+            app.name_entry.delete(0, "end")
+            app.name_entry.insert(0, name)
+        # Update host slot name label
+        if app.lobby_player_slots:
+            host = app.lobby_player_slots[0]
+            name_lbl = host["widgets"][1] if len(host["widgets"]) > 1 else None
+            if name_lbl and hasattr(name_lbl, "configure"):
+                name_lbl.configure(text=name)
+        broadcast_game_state(app)
+
+    app.lobby_name_entry.bind("<FocusOut>", _on_lobby_name_change)
+    app.lobby_name_entry.grid(row=0, column=1, sticky="w")
+
+    ctk.CTkLabel(
+        settings, text="Faction:", text_color=COLOR_TEXT_MUTED, font=ctk.CTkFont(size=11)
+    ).grid(row=1, column=0, sticky="w", padx=(0, 5), pady=(3, 0))
+    saved_faction = prefs.get_player_faction()
+    display_faction = "UEF" if saved_faction == "uef" else saved_faction.capitalize()
+    app.lobby_faction_var = ctk.StringVar(value=display_faction)
+
+    def _on_lobby_faction_change(choice: str) -> None:
+        parser = prefs.load_prefs()
+        parser.set("Game", "player_faction", choice.lower())
+        prefs.save_prefs(parser)
+        # Sync the solo faction var too
+        if hasattr(app, "faction_var"):
+            app.faction_var.set(choice)
+        # Update host slot faction label in lobby
+        if app.lobby_player_slots:
+            host = app.lobby_player_slots[0]
+            faction_lbl = host["widgets"][2] if len(host["widgets"]) > 2 else None
+            if faction_lbl and hasattr(faction_lbl, "configure"):
+                from launcher.gui.slot_widget import _get_faction_icon
+
+                faction_lbl.configure(text=choice, image=_get_faction_icon(choice.lower()))
+        broadcast_game_state(app)
+
+    app.lobby_faction_menu = ctk.CTkOptionMenu(
+        settings,
+        values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
+        variable=app.lobby_faction_var,
+        command=_on_lobby_faction_change,
+        width=100,
+        height=22,
+    )
+    app.lobby_faction_menu.grid(row=1, column=1, sticky="w", pady=(3, 0))
+
+    ctk.CTkLabel(
+        settings, text="Color:", text_color=COLOR_TEXT_MUTED, font=ctk.CTkFont(size=11)
+    ).grid(row=2, column=0, sticky="w", padx=(0, 5), pady=(3, 0))
+    saved_color = prefs.get_player_color()
+    from launcher.gui.constants import PLAYER_COLORS
+
+    initial_color = saved_color if saved_color else PLAYER_COLORS[0][0]
+    # Reuse the existing player_color_var so color changes propagate everywhere
+    if not hasattr(app, "player_color_var"):
+        app.player_color_var = ctk.StringVar(value=initial_color)
+    app.lobby_color_swatch = create_color_swatch(app, settings, app.player_color_var, 2, 1)
+
+    # --- Row 2: Header + Add AI ---
     header_frame = ctk.CTkFrame(col, fg_color="transparent")
-    header_frame.grid(row=0, column=0, sticky="ew")
+    header_frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
     header_frame.grid_columnconfigure(0, weight=1)
 
     ctk.CTkLabel(
         header_frame,
-        text="PLAYERS",
+        text="SLOTS",
         text_color=COLOR_TEXT_GOLD,
         font=ctk.CTkFont(size=12, weight="bold"),
     ).grid(row=0, column=0, sticky="w")
@@ -189,11 +275,12 @@ def _build_lobby_players_column(app: Any, parent: Any) -> None:
     )
     app.lobby_add_ai_btn.grid(row=0, column=1, sticky="e")
 
+    # --- Row 3: Scrollable slot list ---
     app.lobby_slots_scroll = ctk.CTkScrollableFrame(
         col,
         fg_color="transparent",
     )
-    app.lobby_slots_scroll.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
+    app.lobby_slots_scroll.grid(row=3, column=0, sticky="nsew", pady=(5, 0))
     app.lobby_slots_scroll.grid_columnconfigure(1, weight=1)
     app.lobby_player_slots = []
 
@@ -334,7 +421,7 @@ def _build_lobby_bottom_bar(app: Any) -> None:
         height=28,
     )
     app.lobby_chat_entry.grid(row=1, column=0, sticky="ew", padx=(0, 5), pady=(3, 0))
-    app.lobby_chat_entry.bind("<Return>", lambda e: send_lobby_chat(app))
+    app.lobby_chat_entry.bind("<Return>", lambda e: (send_lobby_chat(app), "break")[-1])
 
     ctk.CTkButton(
         chat_frame,
@@ -383,18 +470,89 @@ def update_lobby_for_host(app: Any) -> None:
     active_map = prefs.get_active_map()
     if active_map:
         _update_lobby_map_preview(app, active_map)
-    # Initialize lobby player slots with host row + one default AI
+    # Initialize lobby player slots with host row + one default AI.
+    # The host slot mirrors solo's human slot structure (color_var, team_var)
+    # so the map canvas can render spawn colors and teams correctly.
     app._clear_lobby_player_slots()
     name = app.name_entry.get() if hasattr(app, "name_entry") else "Player"
-    host_lbl = ctk.CTkLabel(
+    row = 0
+    host_widgets: list[Any] = []
+
+    lbl = ctk.CTkLabel(
         app.lobby_slots_scroll,
-        text=f"Host: {name or 'Player'}",
+        text="1",
+        width=20,
+        text_color=COLOR_TEXT_MUTED,
+        font=ctk.CTkFont(size=12),
+    )
+    lbl.grid(row=row, column=0, padx=(0, 5), pady=2)
+    host_widgets.append(lbl)
+
+    name_lbl = ctk.CTkLabel(
+        app.lobby_slots_scroll,
+        text=name or "Player",
         text_color=COLOR_ACCENT,
         font=ctk.CTkFont(size=12, weight="bold"),
         anchor="w",
     )
-    host_lbl.grid(row=0, column=0, columnspan=6, padx=(0, 5), pady=2, sticky="w")
-    app.lobby_player_slots.append({"type": "host", "widgets": [host_lbl], "start_spot": 0})
+    name_lbl.grid(row=row, column=1, sticky="w", pady=2)
+    host_widgets.append(name_lbl)
+
+    # Faction display (reads from lobby settings)
+    faction_text = app.lobby_faction_var.get() if hasattr(app, "lobby_faction_var") else "Random"
+    from launcher.gui.slot_widget import _get_faction_icon
+
+    faction_icon = _get_faction_icon(faction_text.lower())
+    host_faction_lbl = ctk.CTkLabel(
+        app.lobby_slots_scroll,
+        text=faction_text,
+        text_color=COLOR_TEXT_MUTED,
+        font=ctk.CTkFont(size=11),
+        image=faction_icon,
+        compound="left",
+    )
+    host_faction_lbl.grid(row=row, column=2, padx=5, pady=2)
+    host_widgets.append(host_faction_lbl)
+
+    host_team_var = ctk.StringVar(value="1")
+    host_team_menu = ctk.CTkOptionMenu(
+        app.lobby_slots_scroll,
+        values=["1", "2", "3", "4"],
+        variable=host_team_var,
+        command=lambda _val: _on_lobby_host_change(app),
+        width=50,
+        height=24,
+    )
+    host_team_menu.grid(row=row, column=3, padx=5, pady=2)
+    host_widgets.append(host_team_menu)
+
+    import tkinter as tk
+
+    host_color_indicator = tk.Canvas(
+        app.lobby_slots_scroll,
+        width=22,
+        height=22,
+        highlightthickness=1,
+        highlightbackground=COLOR_TEXT_MUTED,
+        bg=app.player_color_var.get(),
+    )
+    host_color_indicator.grid(row=row, column=4, padx=5, pady=2)
+    host_widgets.append(host_color_indicator)
+    app._lobby_host_color_indicator = host_color_indicator
+
+    spacer = ctk.CTkLabel(app.lobby_slots_scroll, text="", width=24)
+    spacer.grid(row=row, column=5, pady=2)
+    host_widgets.append(spacer)
+
+    app.lobby_player_slots.append(
+        {
+            "type": "host",
+            "team_var": host_team_var,
+            "color_var": app.player_color_var,
+            "widgets": host_widgets,
+            "start_spot": 0,
+        }
+    )
     app._add_lobby_ai_slot()
     # Assign sequential spawns to all slots and sync the map canvas
     for si, slot in enumerate(app.lobby_player_slots):
@@ -608,6 +766,12 @@ def _redraw_lobby_canvas(app: Any) -> None:
         return
     app._lobby_slot_accessor._slots = app.lobby_player_slots
     app._lobby_map_canvas_widget.redraw()
+
+
+def _on_lobby_host_change(app: Any) -> None:
+    """Redraw lobby canvas and broadcast when host's team/color changes."""
+    _redraw_lobby_canvas(app)
+    broadcast_game_state(app)
 
 
 def on_lobby_option_change(app: Any, key: str) -> None:
