@@ -223,17 +223,13 @@ def _build_lobby_players_column(app: Any, parent: Any) -> None:
     ctk.CTkLabel(
         settings, text="Faction:", text_color=COLOR_TEXT_MUTED, font=ctk.CTkFont(size=11)
     ).grid(row=1, column=0, sticky="w", padx=(0, 5), pady=(3, 0))
-    saved_faction = prefs.get_player_faction()
-    display_faction = "UEF" if saved_faction == "uef" else saved_faction.capitalize()
-    app.lobby_faction_var = ctk.StringVar(value=display_faction)
+    # Reuse the global faction_var (initialized in app.__init__)
+    app.lobby_faction_var = app.faction_var  # alias for backward compat
 
     def _on_lobby_faction_change(choice: str) -> None:
         parser = prefs.load_prefs()
         parser.set("Game", "player_faction", choice.lower())
         prefs.save_prefs(parser)
-        # Sync the solo faction var too
-        if hasattr(app, "faction_var"):
-            app.faction_var.set(choice)
         # Update host slot faction label in lobby
         if app.lobby_player_slots:
             host = app.lobby_player_slots[0]
@@ -247,7 +243,7 @@ def _build_lobby_players_column(app: Any, parent: Any) -> None:
     app.lobby_faction_menu = ctk.CTkOptionMenu(
         settings,
         values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
-        variable=app.lobby_faction_var,
+        variable=app.faction_var,
         command=_on_lobby_faction_change,
         width=100,
         height=22,
@@ -257,13 +253,7 @@ def _build_lobby_players_column(app: Any, parent: Any) -> None:
     ctk.CTkLabel(
         settings, text="Color:", text_color=COLOR_TEXT_MUTED, font=ctk.CTkFont(size=11)
     ).grid(row=2, column=0, sticky="w", padx=(0, 5), pady=(3, 0))
-    saved_color = prefs.get_player_color()
-    from launcher.gui.constants import PLAYER_COLORS
-
-    initial_color = saved_color if saved_color else PLAYER_COLORS[0][0]
-    # Reuse the existing player_color_var so color changes propagate everywhere
-    if not hasattr(app, "player_color_var"):
-        app.player_color_var = ctk.StringVar(value=initial_color)
+    # Reuse the global player_color_var (initialized in app.__init__)
     app.lobby_color_swatch = create_color_swatch(app, settings, app.player_color_var, 2, 1)
 
     # --- Row 2: Header + Add AI ---
@@ -714,6 +704,11 @@ def _update_lobby_map_preview(app: Any, map_folder: str) -> None:
     display_name = info.display_name if info else map_folder
     app.lobby_map_label.configure(text=display_name)
 
+    # Sync _current_map_info so AI slot limit checks and spawn selection
+    # use the lobby's selected map (not the solo screen's map).
+    if info:
+        app._current_map_info = info
+
     # Update the map canvas if available
     if hasattr(app, "_lobby_map_canvas_widget") and info:
         raw_preview = None
@@ -802,14 +797,41 @@ def on_lobby_option_change(app: Any, key: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _clear_game_name_error(app: Any) -> None:
+    """Remove the red border and error label from the game name entry."""
+    entry = getattr(app, "game_name_entry", None)
+    if entry:
+        entry.configure(border_color=COLOR_PANEL)
+    lbl = getattr(app, "_game_name_error_label", None)
+    if lbl:
+        lbl.grid_remove()
+
+
 def on_create_game(app: Any) -> None:
     """Handle CREATE GAME click on browser screen."""
     from launcher import upnp
 
-    # Require a game name before creating
+    # Require a game name before creating — show visual feedback
     game_name = getattr(app, "game_name_entry", None)
     if game_name and not game_name.get().strip():
         app.log("Enter a game name before creating a lobby.")
+        # Highlight the entry with a red border so it's obvious
+        game_name.configure(border_color="#FF4444")
+        # Show error label if not already present
+        if not hasattr(app, "_game_name_error_label"):
+            app._game_name_error_label = ctk.CTkLabel(
+                game_name.master,
+                text="⚠ Game name is required",
+                text_color="#FF4444",
+                font=ctk.CTkFont(size=11),
+            )
+        app._game_name_error_label.grid(row=1, column=0, sticky="w")
+        # Clear error on next keystroke
+        game_name.bind(
+            "<Key>",
+            lambda e: _clear_game_name_error(app),
+            add=True,
+        )
         return
 
     app._is_hosting = True
