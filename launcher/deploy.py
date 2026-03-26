@@ -560,6 +560,11 @@ def run_setup(
     config.WOPC_USERMAPS.mkdir(parents=True, exist_ok=True)
     logger.info("  ensured empty usermaps/ exists")
 
+    # Write content build marker so the launcher can detect stale content.
+    marker = config.WOPC_ROOT / "content_build.txt"
+    marker.write_text(str(config.CONTENT_BUILD), encoding="utf-8")
+    logger.info("  wrote content_build.txt (build %s)", config.CONTENT_BUILD)
+
     logger.info("\n=== Setup complete ===")
     logger.info("Game directory: %s", config.WOPC_ROOT)
     logger.info("Launch with:    wopc launch")

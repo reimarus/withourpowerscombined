@@ -1076,9 +1076,12 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _refresh_mods_list(self) -> None:
         """Rebuild the mod panel from current disk state."""
-        if hasattr(self, "_mod_panel"):
-            self._mod_panel.refresh()
-        self._update_play_summary()
+        try:
+            if hasattr(self, "_mod_panel"):
+                self._mod_panel.refresh()
+            self._update_play_summary()
+        except Exception:
+            logger.exception("Mod list refresh failed")
 
     def _refresh_map_list(self) -> None:
         """Scan the maps directory and populate the list + filters.
@@ -1091,8 +1094,12 @@ class WopcApp(BaseApp):  # type: ignore
         except Exception:
             logger.exception("Map scan failed — map list will be empty")
             self._all_maps = []
+            self.log("ERROR: Map scan failed — check launcher.log for details")
+            return
 
-        logger.info("Map scan found %d maps", len(self._all_maps))
+        logger.info("Map scan: %d maps in %s", len(self._all_maps), config.WOPC_MAPS)
+        if not self._all_maps:
+            self.log(f"WARNING: No maps found in {config.WOPC_MAPS}")
 
         # Auto-select the first map if none is set in prefs.
         if self._all_maps and not prefs.get_active_map():
@@ -1560,6 +1567,28 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _finalize_status(self, scfa_ok: bool, assets_ok: bool, wopc_ok: bool) -> None:
         """Update primary button and populate lists after all checks complete."""
+        # Check content freshness — stale wopc_core.scd causes BrewLANLOUDPath
+        # crashes and other issues.  Force re-download if content_build.txt is
+        # missing or doesn't match the expected CONTENT_BUILD.
+        if assets_ok and wopc_ok:
+            marker = config.WOPC_ROOT / "content_build.txt"
+            try:
+                current = marker.read_text(encoding="utf-8").strip()
+            except (OSError, ValueError):
+                current = ""
+            expected = str(config.CONTENT_BUILD)
+            if current != expected:
+                logger.info(
+                    "Content outdated (have=%r, need=%r) — forcing re-download",
+                    current,
+                    expected,
+                )
+                self.log("Content update available — re-downloading...")
+                scd = config.WOPC_GAMEDATA / config.WOPC_CORE_SCD
+                if scd.exists():
+                    scd.unlink()
+                assets_ok = False
+
         if not scfa_ok:
             self.primary_btn.configure(
                 text="MISSING GAME FILES",

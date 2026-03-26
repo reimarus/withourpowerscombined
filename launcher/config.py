@@ -206,6 +206,11 @@ UNIT_PACK_SCDS: frozenset[str] = frozenset(
 # deploy.py downloads these from GitHub Releases when not building from source.
 CONTENT_VERSION = "v2"
 
+# Bump this integer when content-v2 is rebuilt to force users to re-download.
+# The launcher writes this to WOPC/content_build.txt during setup and checks
+# it on startup.  A mismatch triggers automatic re-setup.
+CONTENT_BUILD = 1
+
 _RELEASE_BASE = "https://github.com/reimarus/withourpowerscombined/releases/download"
 
 CORE_CONTENT_ASSETS: dict[str, dict[str, str | bool]] = {
