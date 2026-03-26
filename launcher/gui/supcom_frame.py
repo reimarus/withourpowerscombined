@@ -135,6 +135,8 @@ class SupComFrame:
             highlightthickness=0,
             bg=fg_color,
             bd=0,
+            width=0,
+            height=0,
         )
         self._canvas.grid(row=0, column=0, sticky="nsew")
 
