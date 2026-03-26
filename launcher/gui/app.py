@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import sys
 import threading
@@ -134,6 +135,17 @@ class WopcApp(BaseApp):  # type: ignore
 
         # Map preview state (canvas rendering is in MapCanvas)
         self._current_map_info: map_scanner.MapInfo | None = None
+
+        # Global player state — shared across solo and multiplayer screens.
+        # Initialized here so both screens always read/write the same vars.
+        saved_color = prefs.get_player_color()
+        initial_color = saved_color if saved_color else PLAYER_COLORS[0][0]
+        self.player_color_var = ctk.StringVar(value=initial_color)
+        saved_faction = prefs.get_player_faction()
+        display_faction = "UEF" if saved_faction == "uef" else saved_faction.capitalize()
+        self.faction_var = ctk.StringVar(value=display_faction)
+        # Trace color changes to sync lobby host indicator widget
+        self.player_color_var.trace_add("write", self._on_global_color_change)
 
         self.title("WOPC - Match Lobby")
         self._restore_window_size()
@@ -796,9 +808,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=11),
         ).grid(row=1, column=0, sticky="w", padx=(0, 5), pady=(3, 0))
-        saved_faction = prefs.get_player_faction()
-        display_faction = "UEF" if saved_faction == "uef" else saved_faction.capitalize()
-        self.faction_var = ctk.StringVar(value=display_faction)
+        # Reuse the global faction_var (initialized in __init__)
         self.faction_menu = ctk.CTkOptionMenu(
             settings,
             values=["Random", "UEF", "Aeon", "Cybran", "Seraphim"],
@@ -816,9 +826,7 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=COLOR_TEXT_MUTED,
             font=ctk.CTkFont(size=11),
         ).grid(row=2, column=0, sticky="w", padx=(0, 5), pady=(3, 0))
-        saved_color = prefs.get_player_color()
-        initial_color = saved_color if saved_color else PLAYER_COLORS[0][0]
-        self.player_color_var = ctk.StringVar(value=initial_color)
+        # Reuse the global player_color_var (initialized in __init__)
         self.player_color_swatch = self._create_color_swatch(settings, self.player_color_var, 2, 1)
 
         self.minimap_var = ctk.BooleanVar(value=prefs.get_minimap_enabled())
@@ -919,6 +927,14 @@ class WopcApp(BaseApp):  # type: ignore
 
     def _next_free_color(self) -> str:
         return slot_widget.next_free_color(self.player_slots)
+
+    def _on_global_color_change(self, *_args: Any) -> None:
+        """Trace callback: sync lobby host color indicator when color changes."""
+        hex_color = self.player_color_var.get()
+        indicator = getattr(self, "_lobby_host_color_indicator", None)
+        if indicator:
+            with contextlib.suppress(Exception):
+                indicator.configure(bg=hex_color)
 
     def _on_color_change(self, _val: str) -> None:
         slot_widget.on_color_change(self, _val)
@@ -1783,11 +1799,17 @@ class WopcApp(BaseApp):  # type: ignore
     def _launch_game_and_cleanup(self) -> None:
         """Run the game in a background thread (host mode), then stop lobby server."""
         self._persist_widget_values()
-        ai_opponents = self.get_ai_opponents() if hasattr(self, "player_slots") else None
+        # CRITICAL: Use LOBBY slots for multiplayer, not solo player_slots.
+        # The host's AI opponents, spawn, and team come from lobby_player_slots.
+        lobby_slots = getattr(self, "lobby_player_slots", [])
+        ai_opponents = slot_widget.get_ai_opponents_from(self, lobby_slots, engine_offset=True)
         game_options = self.get_game_options() if hasattr(self, "game_option_vars") else None
         color = self.get_human_color_index()
-        start_spot = self.get_human_start_spot() if hasattr(self, "player_slots") else 1
-        team = self.get_human_team() if hasattr(self, "player_slots") else 1
+        # Host spawn and team from lobby slot 0
+        host_slot = lobby_slots[0] if lobby_slots else {}
+        start_spot = int(host_slot.get("start_spot", 0)) + 1  # engine offset
+        team_var = host_slot.get("team_var")
+        team = int(team_var.get()) + 1 if team_var else 2  # engine offset
 
         ret = cmd_launch(
             ai_opponents=ai_opponents,

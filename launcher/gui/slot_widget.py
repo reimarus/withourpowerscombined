@@ -302,7 +302,10 @@ def add_ai_slot_to(
     """Unified AI slot builder for both solo and lobby screens."""
     info = app._current_map_info
     max_armies = len(info.markers.armies) if info and info.markers else _MAX_SLOTS
-    if len(slot_list) >= min(_MAX_SLOTS, max_armies):
+    # Account for remote players in multiplayer (they don't appear in slot_list)
+    remote_count = len(getattr(app, "_remote_players", {}))
+    total_occupied = len(slot_list) + remote_count
+    if total_occupied >= min(_MAX_SLOTS, max_armies):
         return
 
     free_spawn = first_free_spawn(app) if track_spawn else -1
