@@ -106,8 +106,6 @@ class WopcApp(BaseApp):  # type: ignore
     map_canvas: Any
     map_preview_name: Any
     log_textbox: Any
-    mods_scroll: Any
-    mod_checkboxes: dict[str, Any]
     play_summary: Any
 
     def __init__(self) -> None:
@@ -747,12 +745,11 @@ class WopcApp(BaseApp):  # type: ignore
             font=ctk.CTkFont(size=12, weight="bold"),
         ).grid(row=3, column=0, sticky="w", pady=(0, 3))
 
-        # Content packs + user mods in one scrollable area
-        self.packs_scroll = ctk.CTkScrollableFrame(col, fg_color="transparent", height=60)
-        self.packs_scroll.grid(row=4, column=0, sticky="nsew")
-        self.pack_checkboxes: dict[str, Any] = {}
-        self.mods_scroll = self.packs_scroll  # unified scroll
-        self.mod_checkboxes: dict[str, Any] = {}
+        # Mod panel — collapsible categories with content packs + user mods
+        from launcher.gui.mod_panel import ModPanel
+
+        self._mod_panel = ModPanel(col, on_change=self._on_mod_change)
+        self._mod_panel.grid(row=4, column=0, sticky="nsew")
 
         self.play_summary = ctk.CTkLabel(
             col,
@@ -1047,60 +1044,14 @@ class WopcApp(BaseApp):  # type: ignore
                 if mod_dir.is_dir():
                     shutil.copytree(mod_dir, dest / mod_dir.name, dirs_exist_ok=True)
 
+    def _on_mod_change(self, _entry: Any, _enabled: bool) -> None:
+        """Called when any mod checkbox is toggled in the ModPanel."""
+        self._update_play_summary()
+
     def _refresh_mods_list(self) -> None:
-        """Read available mods and content packs from disk and update the UI."""
-        # --- Content Packs ---
-        for cb in self.pack_checkboxes.values():
-            cb.destroy()
-        self.pack_checkboxes.clear()
-
-        toggleable = mods.get_toggleable_scds()
-        enabled_packs = mods.get_enabled_packs()
-
-        for idx, scd_name in enumerate(toggleable):
-            label = mods.CONTENT_PACK_LABELS.get(scd_name, scd_name)
-            scd_path = config.WOPC_GAMEDATA / scd_name
-            if scd_path.exists():
-                size_mb = scd_path.stat().st_size / 1_048_576
-                label = f"{label}  ({size_mb:.0f} MB)"
-
-            is_enabled = scd_name in enabled_packs
-
-            def on_pack_toggle(name=scd_name) -> None:
-                cb = self.pack_checkboxes[name]
-                mods.set_pack_state(name, bool(cb.get()))
-                self._update_play_summary()
-
-            cb = ctk.CTkCheckBox(self.packs_scroll, text=label, command=on_pack_toggle)
-            if is_enabled:
-                cb.select()
-            cb.grid(row=idx, column=0, pady=3, padx=10, sticky="w")
-            self.pack_checkboxes[scd_name] = cb
-
-        # --- User Mods ---
-        for cb in self.mod_checkboxes.values():
-            cb.destroy()
-        self.mod_checkboxes.clear()
-
-        user_mods_on_disk = mods.discover_user_mods()
-        enabled_uids = mods.get_enabled_user_mod_uids()
-
-        # Offset user mod rows past content packs
-        mod_row_offset = len(toggleable) + 1
-        for idx, mod_info in enumerate(user_mods_on_disk):
-            is_enabled = mod_info.uid in enabled_uids
-
-            def on_toggle(uid=mod_info.uid) -> None:
-                cb = self.mod_checkboxes[uid]
-                mods.set_user_mod_enabled(uid, bool(cb.get()))
-                self._update_play_summary()
-
-            cb = ctk.CTkCheckBox(self.mods_scroll, text=mod_info.name, command=on_toggle)
-            if is_enabled:
-                cb.select()
-            cb.grid(row=mod_row_offset + idx, column=0, pady=3, padx=10, sticky="w")
-            self.mod_checkboxes[mod_info.uid] = cb
-
+        """Rebuild the mod panel from current disk state."""
+        if hasattr(self, "_mod_panel"):
+            self._mod_panel.refresh()
         self._update_play_summary()
 
     def _refresh_map_list(self) -> None:

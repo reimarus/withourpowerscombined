@@ -148,13 +148,24 @@ def _build_lobby_options_column(app: Any, parent: Any) -> None:
         font=ctk.CTkFont(size=10, slant="italic"),
         wraplength=170,
     )
-    app.lobby_victory_desc.grid(row=2, column=0, sticky="w", pady=(2, 8))
+    app.lobby_victory_desc.grid(row=2, column=0, sticky="w", pady=(2, 4))
 
     def _update_lobby_victory_desc(*_a: Any) -> None:
         desc = VICTORY_DESCRIPTIONS.get(app.lobby_option_vars["Victory"].get(), "")
         app.lobby_victory_desc.configure(text=desc)
 
     app.lobby_option_vars["Victory"].trace_add("write", _update_lobby_victory_desc)
+
+    # Mod panel — reuses the same ModPanel widget as solo screen
+    from launcher.gui.mod_panel import ModPanel
+
+    col.grid_rowconfigure(3, weight=1)
+
+    def _on_lobby_mod_change(_entry: Any, _enabled: bool) -> None:
+        refresh_cached_game_state(app)
+
+    app._lobby_mod_panel = ModPanel(col, on_change=_on_lobby_mod_change)
+    app._lobby_mod_panel.grid(row=3, column=0, sticky="nsew")
 
 
 def _build_lobby_players_column(app: Any, parent: Any) -> None:
@@ -1281,19 +1292,31 @@ def on_game_state_received(app: Any, state: dict[str, Any]) -> None:
     if "ai_slots" in state:
         app._apply_remote_ai_slots(state["ai_slots"])
 
-    # Check content packs — warn about missing ones
-    if "content_packs" in state:
-        host_packs = state["content_packs"]
+    # Sync mods — apply host's mod state to joiner's lobby mod panel
+    if "content_packs" in state or "user_mods" in state:
+        host_packs = set(state.get("content_packs", []))
+        host_user_mods = set(state.get("user_mods", []))
+
+        # Build state dict for mod panel sync
+        mod_state: dict[str, bool] = {}
+        for pack in host_packs:
+            mod_state[pack] = True
+        for uid in host_user_mods:
+            mod_state[uid] = True
+
+        lobby_mod_panel = getattr(app, "_lobby_mod_panel", None)
+        if lobby_mod_panel:
+            # Set joiner panel to match host state and make it read-only
+            lobby_mod_panel.apply_state(mod_state)
+            lobby_mod_panel.set_readonly(True)
+
+        # Warn about missing packs
         local_packs = mods.get_enabled_packs()
         missing = [p for p in host_packs if p not in local_packs]
-        extra = [p for p in local_packs if p not in host_packs]
         if missing:
             names = [mods.CONTENT_PACK_LABELS.get(p, p) for p in missing]
             app.log(f"WARNING: Host has content packs you don't: {', '.join(names)}")
             app.log("Enable them in the Mods panel to avoid desyncs!")
-        if extra:
-            names = [mods.CONTENT_PACK_LABELS.get(p, p) for p in extra]
-            app.log(f"NOTE: You have extra packs not on host: {', '.join(names)}")
 
     # Update player list
     if "players" in state:
@@ -1326,6 +1349,7 @@ def build_game_state(app: Any) -> dict[str, Any] | None:
         ),
         "players": app._lobby_server.connected_players if app._lobby_server else [],
         "content_packs": mods.get_enabled_packs(),
+        "user_mods": mods.get_enabled_user_mod_uids(),
     }
     logger.debug(
         "Built game state: map=%s, players=%d, ai=%d",

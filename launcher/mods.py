@@ -6,6 +6,7 @@ All mod identification uses UIDs (from mod_info.lua), never folder names.
 
 from __future__ import annotations
 
+import collections
 import dataclasses
 import logging
 import re
@@ -56,6 +57,107 @@ def parse_mod_info(mod_info_path: Path, location: str = "server") -> ModInfo | N
         location=location,
         mod_info_path=mod_info_path,
     )
+
+
+# ---------------------------------------------------------------------------
+# Mod categories and unified mod entries
+# ---------------------------------------------------------------------------
+
+MOD_CATEGORIES = collections.OrderedDict(
+    [
+        ("unit_packs", "Unit Packs"),
+        ("gameplay", "Gameplay"),
+        ("visual", "Visual"),
+        ("other", "Other"),
+    ]
+)
+
+# Maps SCD filenames and user mod UIDs to category keys.
+MOD_CATEGORY_MAP: dict[str, str] = {
+    # Content pack SCDs
+    "blackops.scd": "unit_packs",
+    "TotalMayhem.scd": "unit_packs",
+    "brewlan.scd": "unit_packs",
+    "loud_units.scd": "unit_packs",
+    "WyvernBattlePack.scd": "unit_packs",
+    "4D-CompatibilityPack.scd": "unit_packs",
+    "lua.scd": "unit_packs",
+    "loc_US.scd": "unit_packs",
+    # User mod UIDs
+    "wopc-pathing": "gameplay",
+    "wopc-artillery": "gameplay",
+}
+
+
+@dataclasses.dataclass
+class ModEntry:
+    """Unified representation of any mod (content pack or user mod)."""
+
+    key: str  # SCD filename or mod UID
+    name: str  # Display name
+    category: str  # Key into MOD_CATEGORIES
+    enabled: bool  # Currently active
+    on_disk: bool  # Downloaded / exists on filesystem
+    mod_type: str  # "content_pack" or "user_mod"
+    description: str = ""
+
+
+def get_all_mods() -> list[ModEntry]:
+    """Return a unified list of all known mods (content packs + user mods).
+
+    Content packs are listed even when not downloaded (on_disk=False).
+    Results are sorted by category order, then alphabetically within category.
+    """
+    entries: list[ModEntry] = []
+
+    # --- Content packs (all known, not just on-disk) ---
+    enabled_packs = set(get_enabled_packs())
+    non_toggleable = CORE_SCDS | FIXED_POSITION_SCDS
+
+    for scd_name in config.CONTENT_PACK_ASSETS:
+        if scd_name in non_toggleable:
+            continue
+        scd_path = config.WOPC_GAMEDATA / scd_name
+        on_disk = scd_path.exists()
+        label = CONTENT_PACK_LABELS.get(scd_name, scd_name)
+        category = MOD_CATEGORY_MAP.get(scd_name, "other")
+        entries.append(
+            ModEntry(
+                key=scd_name,
+                name=label,
+                category=category,
+                enabled=scd_name in enabled_packs,
+                on_disk=on_disk,
+                mod_type="content_pack",
+            )
+        )
+
+    # --- User mods (always on disk) ---
+    user_mods_on_disk = discover_user_mods()
+    enabled_uids = set(get_enabled_user_mod_uids())
+
+    for mod_info in user_mods_on_disk:
+        category = MOD_CATEGORY_MAP.get(mod_info.uid, "other")
+        entries.append(
+            ModEntry(
+                key=mod_info.uid,
+                name=mod_info.name,
+                category=category,
+                enabled=mod_info.uid in enabled_uids,
+                on_disk=True,
+                mod_type="user_mod",
+            )
+        )
+
+    # Sort by category order, then alphabetically within category
+    category_order = list(MOD_CATEGORIES.keys())
+
+    def sort_key(entry: ModEntry) -> tuple[int, str]:
+        idx = category_order.index(entry.category) if entry.category in category_order else 999
+        return (idx, entry.name.lower())
+
+    entries.sort(key=sort_key)
+    return entries
 
 
 # ---------------------------------------------------------------------------

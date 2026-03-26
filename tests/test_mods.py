@@ -413,3 +413,147 @@ class TestMigration:
             mods.migrate_prefs_folder_to_uid()
             content_after_second = prefs_file.read_text()
         assert content_after_first == content_after_second
+
+
+# ---------------------------------------------------------------------------
+# TestModCategories
+# ---------------------------------------------------------------------------
+
+
+class TestModCategories:
+    """Tests for MOD_CATEGORIES and MOD_CATEGORY_MAP."""
+
+    def test_categories_ordered(self) -> None:
+        keys = list(mods.MOD_CATEGORIES.keys())
+        assert keys == ["unit_packs", "gameplay", "visual", "other"]
+
+    def test_all_unit_pack_scds_categorized(self) -> None:
+        """Every SCD in UNIT_PACK_SCDS has a category mapping."""
+        for scd in config.UNIT_PACK_SCDS:
+            assert scd in mods.MOD_CATEGORY_MAP, f"{scd} missing from MOD_CATEGORY_MAP"
+
+
+# ---------------------------------------------------------------------------
+# TestModEntry
+# ---------------------------------------------------------------------------
+
+
+class TestModEntry:
+    """Tests for ModEntry dataclass."""
+
+    def test_create(self) -> None:
+        entry = mods.ModEntry(
+            key="blackops.scd",
+            name="BlackOps Units",
+            category="unit_packs",
+            enabled=True,
+            on_disk=True,
+            mod_type="content_pack",
+        )
+        assert entry.key == "blackops.scd"
+        assert entry.mod_type == "content_pack"
+        assert entry.description == ""
+
+
+# ---------------------------------------------------------------------------
+# TestGetAllMods
+# ---------------------------------------------------------------------------
+
+
+class TestGetAllMods:
+    """Tests for get_all_mods()."""
+
+    def test_includes_on_disk_content_packs(
+        self, gamedata_dir: Path, prefs_file: Path, tmp_path: Path
+    ) -> None:
+        """Content packs on disk appear with on_disk=True."""
+        with (
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_USERMODS", tmp_path / "nousermods"),
+            patch.object(prefs, "PREFS_FILE", prefs_file),
+        ):
+            entries = mods.get_all_mods()
+
+        keys = [e.key for e in entries]
+        assert "brewlan.scd" in keys
+        assert "blackops.scd" in keys
+
+        brewlan = next(e for e in entries if e.key == "brewlan.scd")
+        assert brewlan.on_disk is True
+        assert brewlan.mod_type == "content_pack"
+        assert brewlan.category == "unit_packs"
+
+    def test_includes_missing_content_packs(self, tmp_path: Path, prefs_file: Path) -> None:
+        """Content packs NOT on disk still appear with on_disk=False."""
+        empty_gamedata = tmp_path / "gamedata"
+        empty_gamedata.mkdir()
+        with (
+            patch.object(config, "WOPC_GAMEDATA", empty_gamedata),
+            patch.object(config, "WOPC_USERMODS", tmp_path / "nousermods"),
+            patch.object(prefs, "PREFS_FILE", prefs_file),
+        ):
+            entries = mods.get_all_mods()
+
+        # Should still list known packs from CONTENT_PACK_ASSETS
+        keys = [e.key for e in entries]
+        assert "blackops.scd" in keys
+        blackops = next(e for e in entries if e.key == "blackops.scd")
+        assert blackops.on_disk is False
+
+    def test_includes_user_mods(self, tmp_path: Path, usermods_dir: Path, prefs_file: Path) -> None:
+        """User mods from disk appear in the list."""
+        empty_gamedata = tmp_path / "gamedata"
+        empty_gamedata.mkdir()
+        prefs_file.write_text("[Mods]\nbrew-lan-uid-1234 = True\n")
+        with (
+            patch.object(config, "WOPC_GAMEDATA", empty_gamedata),
+            patch.object(config, "WOPC_USERMODS", usermods_dir),
+            patch.object(prefs, "PREFS_FILE", prefs_file),
+        ):
+            entries = mods.get_all_mods()
+
+        user_entries = [e for e in entries if e.mod_type == "user_mod"]
+        assert len(user_entries) == 1
+        assert user_entries[0].key == "brew-lan-uid-1234"
+        assert user_entries[0].on_disk is True
+        assert user_entries[0].enabled is True
+
+    def test_excludes_fixed_position_scds(
+        self, gamedata_dir: Path, prefs_file: Path, tmp_path: Path
+    ) -> None:
+        """wopc_core.scd and other fixed SCDs are not in the list."""
+        with (
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_USERMODS", tmp_path / "nousermods"),
+            patch.object(prefs, "PREFS_FILE", prefs_file),
+        ):
+            entries = mods.get_all_mods()
+        keys = [e.key for e in entries]
+        assert "wopc_core.scd" not in keys
+
+    def test_sorted_by_category_then_name(
+        self, gamedata_dir: Path, usermods_dir: Path, prefs_file: Path
+    ) -> None:
+        """Entries are sorted: unit_packs first, then gameplay, etc."""
+        # Create a gameplay user mod
+        pathing = usermods_dir / "wopc_pathing"
+        pathing.mkdir()
+        (pathing / "mod_info.lua").write_text('name = "WOPC Pathing"\nuid = "wopc-pathing"\n')
+
+        with (
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_USERMODS", usermods_dir),
+            patch.object(prefs, "PREFS_FILE", prefs_file),
+        ):
+            entries = mods.get_all_mods()
+
+        categories = [e.category for e in entries]
+        # All unit_packs should come before gameplay
+        unit_indices = [i for i, c in enumerate(categories) if c == "unit_packs"]
+        gameplay_indices = [i for i, c in enumerate(categories) if c == "gameplay"]
+        other_indices = [i for i, c in enumerate(categories) if c == "other"]
+
+        if unit_indices and gameplay_indices:
+            assert max(unit_indices) < min(gameplay_indices)
+        if gameplay_indices and other_indices:
+            assert max(gameplay_indices) < min(other_indices)
