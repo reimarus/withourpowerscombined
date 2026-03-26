@@ -394,12 +394,26 @@ class RelayClient:
         except Exception:
             pass
 
+        # Collect file-based launcher log (has Python logger output — map scan
+        # errors, mod compat patches, content staleness checks, etc.)
+        launcher_file_log = ""
+        try:
+            launcher_log_path = config.WOPC_ROOT / "launcher.log"
+            if launcher_log_path.exists():
+                fl_lines = launcher_log_path.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
+                launcher_file_log = "\n".join(fl_lines[-300:])
+        except Exception:
+            pass
+
         payload: dict[str, Any] = {
             "timestamp": time.time(),
             "host_name": host_name,
             "version": config.VERSION,
             "system": system_info,
             "launcher_log": "\n".join(log_lines[-500:]),
+            "launcher_file_log": launcher_file_log,
             "engine_log": engine_log,
             "engine_errors": engine_errors,
             "scfa_log": sclog,
