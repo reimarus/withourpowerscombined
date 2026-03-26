@@ -44,3 +44,21 @@ def test_constants() -> None:
     assert supcom_frame._CORNER > 0
     assert supcom_frame._EDGE_THICKNESS > 0
     assert supcom_frame._CORNER > supcom_frame._EDGE_THICKNESS
+
+
+def test_interior_never_uses_place_with_size() -> None:
+    """Guard against CTkFrame.place(width=...) regression.
+
+    CTkFrame rejects width/height in place(). This broke 3 times:
+    1. Mixed place()+grid() on same parent → blank canvas
+    2. place(width=...) on CTkFrame → ValueError
+    3. Fixed with grid()+tkraise() — this test prevents regression.
+    """
+    import inspect
+
+    source = inspect.getsource(supcom_frame.SupComFrame.__init__)
+    # Interior must use grid(), never place() with width/height
+    assert "self.interior.grid(" in source, "interior must use grid(), not place()"
+    assert "self.interior.place(" not in source, (
+        "interior must NOT use place() — CTkFrame rejects width/height in place()"
+    )
