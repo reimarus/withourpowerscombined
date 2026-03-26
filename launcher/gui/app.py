@@ -655,7 +655,6 @@ class WopcApp(BaseApp):  # type: ignore
         self._log_sf.frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
         self.log_chat_frame = self._log_sf.interior
         self.log_chat_frame.grid_columnconfigure(0, weight=1)
-        self.log_chat_frame.grid_rowconfigure(0, weight=1)
 
         self.log_textbox = ctk.CTkTextbox(
             self.log_chat_frame,
@@ -906,6 +905,7 @@ class WopcApp(BaseApp):  # type: ignore
 
         self.map_scroll = ctk.CTkScrollableFrame(col, fg_color="transparent")
         self.map_scroll.grid(row=2, column=0, sticky="nsew", pady=(2, 0))
+        self.map_scroll.grid_columnconfigure(0, weight=1)
         self.map_buttons: list[Any] = []
 
     # ------------------------------------------------------------------
@@ -1060,6 +1060,12 @@ class WopcApp(BaseApp):  # type: ignore
                 if mod_dir.is_dir():
                     shutil.copytree(mod_dir, dest / mod_dir.name, dirs_exist_ok=True)
 
+        # Patch LOUD-era mod files on every startup (safety net for installs
+        # that ran setup before the mod_compat fix existed).
+        from launcher.mod_compat import apply_mod_compat_patches
+
+        apply_mod_compat_patches(config.WOPC_MODS)
+
     def _on_mod_change(self, _entry: Any, _enabled: bool) -> None:
         """Called when any mod checkbox is toggled in the solo ModPanel."""
         self._update_play_summary()
@@ -1080,7 +1086,13 @@ class WopcApp(BaseApp):  # type: ignore
         Always rescans the filesystem — stale caches caused black map
         previews after setup/update (backlog #50, #53).
         """
-        self._all_maps = map_scanner.scan_all_maps()
+        try:
+            self._all_maps = map_scanner.scan_all_maps()
+        except Exception:
+            logger.exception("Map scan failed — map list will be empty")
+            self._all_maps = []
+
+        logger.info("Map scan found %d maps", len(self._all_maps))
 
         # Auto-select the first map if none is set in prefs.
         if self._all_maps and not prefs.get_active_map():
