@@ -1045,8 +1045,12 @@ class WopcApp(BaseApp):  # type: ignore
                     shutil.copytree(mod_dir, dest / mod_dir.name, dirs_exist_ok=True)
 
     def _on_mod_change(self, _entry: Any, _enabled: bool) -> None:
-        """Called when any mod checkbox is toggled in the ModPanel."""
+        """Called when any mod checkbox is toggled in the solo ModPanel."""
         self._update_play_summary()
+        # Sync the lobby panel so downloads/toggles propagate across screens
+        lobby_panel = getattr(self, "_lobby_mod_panel", None)
+        if lobby_panel:
+            lobby_panel.refresh()
 
     def _refresh_mods_list(self) -> None:
         """Rebuild the mod panel from current disk state."""

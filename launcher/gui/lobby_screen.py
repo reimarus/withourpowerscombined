@@ -79,7 +79,7 @@ def build_lobby_screen(app: Any) -> None:
     _lobby_config_sf.frame.grid(row=1, column=0, sticky="nsew")
     lobby_panel = _lobby_config_sf.interior
     lobby_panel.grid_columnconfigure(0, weight=0, minsize=180)
-    lobby_panel.grid_columnconfigure(1, weight=1, minsize=280)
+    lobby_panel.grid_columnconfigure(1, weight=1, minsize=320)
     lobby_panel.grid_columnconfigure(2, weight=4)  # map hero
     lobby_panel.grid_columnconfigure(3, weight=0, minsize=200)
     lobby_panel.grid_rowconfigure(0, weight=1)
@@ -163,6 +163,12 @@ def _build_lobby_options_column(app: Any, parent: Any) -> None:
 
     def _on_lobby_mod_change(_entry: Any, _enabled: bool) -> None:
         refresh_cached_game_state(app)
+        # Sync the solo panel so downloads/toggles propagate across screens
+        solo_panel = getattr(app, "_mod_panel", None)
+        if solo_panel:
+            solo_panel.refresh()
+        if hasattr(app, "_update_play_summary"):
+            app._update_play_summary()
 
     app._lobby_mod_panel = ModPanel(col, on_change=_on_lobby_mod_change)
     app._lobby_mod_panel.grid(row=3, column=0, sticky="nsew")
@@ -799,6 +805,12 @@ def on_lobby_option_change(app: Any, key: str) -> None:
 def on_create_game(app: Any) -> None:
     """Handle CREATE GAME click on browser screen."""
     from launcher import upnp
+
+    # Require a game name before creating
+    game_name = getattr(app, "game_name_entry", None)
+    if game_name and not game_name.get().strip():
+        app.log("Enter a game name before creating a lobby.")
+        return
 
     app._is_hosting = True
     refresh_cached_game_state(app)
