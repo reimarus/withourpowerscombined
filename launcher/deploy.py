@@ -270,6 +270,13 @@ def _acquire_content_packs() -> None:
             shutil.rmtree(excluded_path)
             logger.info("  removed excluded mod: %s", excluded)
 
+    # Apply compatibility patches for LOUD-era mods (e.g. BrewLAN
+    # references import('/lua/game.lua').BrewLANLOUDPath() which doesn't
+    # exist in WOPC).  See launcher/mod_compat.py for the registry.
+    from launcher.mod_compat import apply_mod_compat_patches
+
+    apply_mod_compat_patches(config.WOPC_MODS)
+
 
 def run_setup(
     repo_init_dir: Path,

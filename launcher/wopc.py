@@ -19,6 +19,7 @@ from launcher.config import (
     WOPC_BIN,
     WOPC_GAMEDATA,
     WOPC_MAPS,
+    WOPC_MODS,
     WOPC_ROOT,
     WOPC_SOUNDS,
     WOPC_USERMODS,
@@ -180,6 +181,13 @@ def cmd_launch(
     if repairs:
         for r in repairs:
             logger.warning("Pre-launch repair: %s", r)
+
+    # Patch LOUD-era mod compatibility issues (e.g. BrewLAN's
+    # BrewLANLOUDPath references).  Runs at launch as a safety net
+    # for installations that ran setup before this fix existed.
+    from launcher.mod_compat import apply_mod_compat_patches
+
+    apply_mod_compat_patches(WOPC_MODS)
 
     # Regenerate init_wopc.lua from current preferences (content packs, mods)
     from launcher.init_generator import generate_init_lua

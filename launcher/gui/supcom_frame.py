@@ -121,31 +121,32 @@ class SupComFrame:
         # Outer frame holds the canvas
         self.frame = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
 
+        # Both canvas and interior use grid() in the same cell.
+        # The canvas sits behind (lower z-order) and fills the cell;
+        # the interior sits on top with padding for the chrome border.
+        # We must NOT mix place() and grid() on the same parent —
+        # tkinter silently fails.  CTkFrame.place() also rejects
+        # width/height kwargs, so grid is the only safe option.
+        self.frame.grid_rowconfigure(0, weight=1)
+        self.frame.grid_columnconfigure(0, weight=1)
+
         self._canvas = tk.Canvas(
             self.frame,
             highlightthickness=0,
             bg=fg_color,
             bd=0,
         )
-        self._canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._canvas.grid(row=0, column=0, sticky="nsew")
 
         # Interior frame for child widgets — inset by edge thickness
+        pad = _EDGE_THICKNESS
         self.interior = ctk.CTkFrame(
             self.frame,
             fg_color=fg_color,
             corner_radius=0,
         )
-        pad = _EDGE_THICKNESS
-        # Both canvas and interior must use place() — mixing geometry managers
-        # (place + grid) on the same parent causes tkinter to silently fail.
-        self.interior.place(
-            x=pad,
-            y=pad,
-            relwidth=1.0,
-            relheight=1.0,
-            width=-2 * pad,
-            height=-2 * pad,
-        )
+        self.interior.grid(row=0, column=0, padx=pad, pady=pad, sticky="nsew")
+        self.interior.tkraise()  # Bring interior above canvas
 
         self._fg_color = fg_color
         self._corner = corner
