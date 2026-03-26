@@ -30,6 +30,10 @@ from launcher.gui.constants import (
 
 logger = logging.getLogger("wopc.gui.mod_panel")
 
+# Braille spinner frames for download animation
+_SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+_SPINNER_INTERVAL_MS = 100
+
 
 # ---------------------------------------------------------------------------
 # CollapsibleCategory
@@ -90,6 +94,10 @@ class CollapsibleCategory(ctk.CTkFrame):
         self._body.grid_columnconfigure(0, weight=1)
         if expanded:
             self._body.grid(row=1, column=0, sticky="ew", padx=(12, 0))
+        else:
+            # grid then immediately remove — preserves grid options for fast toggle
+            self._body.grid(row=1, column=0, sticky="ew", padx=(12, 0))
+            self._body.grid_remove()
 
         # Click header to toggle
         for widget in (self._header, self._arrow, self._label, self._count):
@@ -99,9 +107,9 @@ class CollapsibleCategory(ctk.CTkFrame):
         self._expanded = not self._expanded
         self._arrow.configure(text="▾" if self._expanded else "▸")
         if self._expanded:
-            self._body.grid(row=1, column=0, sticky="ew", padx=(12, 0))
+            self._body.grid()  # grid_remove preserved options — no args needed
         else:
-            self._body.grid_forget()
+            self._body.grid_remove()
 
     def add_row(self, row: ModRow) -> None:
         """Add a mod row to this category's body."""
@@ -133,6 +141,8 @@ class ModRow(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.entry = entry
         self._on_change = on_change
+        self._spinner_after_id: str | None = None
+        self._spinner_idx = 0
         self.grid_columnconfigure(0, weight=1)
 
         self._var = ctk.StringVar(value="on" if entry.enabled else "off")
@@ -171,16 +181,36 @@ class ModRow(ctk.CTkFrame):
         enabled = self._var.get() == "on"
         self._on_change(self.entry, enabled)
 
+    # --- Spinner animation for download ---
+
+    def _animate_spinner(self) -> None:
+        """Cycle through braille spinner frames on the download button."""
+        if self._download_btn is None:
+            return
+        frame = _SPINNER_FRAMES[self._spinner_idx % len(_SPINNER_FRAMES)]
+        self._download_btn.configure(text=frame)
+        self._spinner_idx += 1
+        self._spinner_after_id = self.after(_SPINNER_INTERVAL_MS, self._animate_spinner)
+
+    def _stop_spinner(self) -> None:
+        """Cancel the spinner animation."""
+        if self._spinner_after_id is not None:
+            self.after_cancel(self._spinner_after_id)
+            self._spinner_after_id = None
+        self._spinner_idx = 0
+
     def _start_download(self) -> None:
         """Download a missing content pack SCD in a background thread."""
         if self._download_btn is None:
             return
 
-        self._download_btn.configure(text="...", state="disabled")
+        self._download_btn.configure(state="disabled")
+        self._animate_spinner()
         scd_name = self.entry.key
         asset_info = config.CONTENT_PACK_ASSETS.get(scd_name)
         if not asset_info:
             logger.warning("No download URL for %s", scd_name)
+            self._stop_spinner()
             self._download_btn.configure(text="Error", state="disabled")
             return
 
@@ -208,6 +238,7 @@ class ModRow(ctk.CTkFrame):
 
     def _download_complete(self, success: bool) -> None:
         """Called on main thread after download finishes."""
+        self._stop_spinner()
         if success:
             self.entry = mods.ModEntry(
                 key=self.entry.key,
@@ -222,6 +253,8 @@ class ModRow(ctk.CTkFrame):
                 self._download_btn.destroy()
                 self._download_btn = None
             logger.info("Downloaded %s", self.entry.key)
+            # Notify parent so the other panel (solo/lobby) can refresh
+            self._on_change(self.entry, self.entry.enabled)
         else:
             if self._download_btn:
                 self._download_btn.configure(text="Retry", state="normal")
@@ -243,7 +276,7 @@ class ModRow(ctk.CTkFrame):
 
 
 class ModPanel(ctk.CTkFrame):
-    """Grouped mod list with collapsible categories.
+    """Grouped mod list with collapsible categories and scrollbar.
 
     Shared between solo and multiplayer screens.
     """
@@ -262,12 +295,19 @@ class ModPanel(ctk.CTkFrame):
         self._rows: dict[str, ModRow] = {}  # key -> ModRow
 
         self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # Scrollable container for all categories
+        self._scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._scroll.grid(row=0, column=0, sticky="nsew")
+        self._scroll.grid_columnconfigure(0, weight=1)
+
         self.refresh()
 
     def refresh(self) -> None:
         """Rebuild the panel from current mod state."""
-        # Destroy existing widgets
-        for widget in self.winfo_children():
+        # Destroy existing widgets inside the scroll frame
+        for widget in self._scroll.winfo_children():
             widget.destroy()
         self._categories.clear()
         self._rows.clear()
@@ -285,7 +325,7 @@ class ModPanel(ctk.CTkFrame):
             if not cat_entries:
                 continue
 
-            cat_widget = CollapsibleCategory(self, cat_key, cat_label, expanded=True)
+            cat_widget = CollapsibleCategory(self._scroll, cat_key, cat_label, expanded=True)
             cat_widget.grid(row=grid_row, column=0, sticky="ew", pady=(2, 0))
             self._categories[cat_key] = cat_widget
 

@@ -326,7 +326,7 @@ def add_ai_slot_to(
         parent,
         values=list(_AI_NAMES),
         variable=ai_var,
-        width=90,
+        width=70,
         height=24,
     )
     ai_menu.grid(row=row, column=1, sticky="w", pady=2)
@@ -354,7 +354,7 @@ def add_ai_slot_to(
         values=list(_FACTIONS),
         variable=faction_var,
         command=_on_faction_change,
-        width=90,
+        width=70,
         height=24,
     )
     faction_menu.grid(row=0, column=1)

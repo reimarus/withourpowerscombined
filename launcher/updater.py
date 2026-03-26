@@ -224,12 +224,15 @@ def apply_update(tmp_path: Path) -> bool:
             LOG.info("Scheduling _MEI cleanup + restart: %s", meipass)
             # Use ``ping`` for delay — ``timeout`` requires an interactive
             # console and silently fails inside ``cmd /c``, leaving the
-            # stale _MEI directory behind.  Retry rmdir in case the first
-            # attempt races with process teardown.
+            # stale _MEI directory behind.  Triple retry rmdir with longer
+            # delays to handle Windows Defender file locks and slow process
+            # teardown.  Total delay ~11s before relaunch.
             subprocess.Popen(
-                f"cmd /c ping -n 4 127.0.0.1 >nul"
+                f"cmd /c ping -n 6 127.0.0.1 >nul"
                 f' & rmdir /s /q "{meipass}" 2>nul'
-                f" & ping -n 2 127.0.0.1 >nul"
+                f" & ping -n 3 127.0.0.1 >nul"
+                f' & rmdir /s /q "{meipass}" 2>nul'
+                f" & ping -n 3 127.0.0.1 >nul"
                 f' & rmdir /s /q "{meipass}" 2>nul'
                 f' & "{exe_path}"',
                 shell=True,
