@@ -95,6 +95,8 @@ Items to tackle over time, roughly grouped by priority.
 68. ~~**Friend's wopc_core.scd missing**~~ ✅ — Fixed in v2.01.0045: health check verifies wopc_core.scd exists, auto-repair re-runs setup if missing.
 69. **Send Logs should include WOPC.log from game directory** — the engine log at `SCFA\WOPC\bin\WOPC.log` should be attached to log reports. Currently captured but path may not resolve for all installations. Verify the log path works for Steam library on different drives (e.g., D:\SteamLibrary\).
 70. ~~**MEI temp directory warning on update**~~ ✅ — Fixed: `cmd /c timeout` doesn't work in non-interactive shells. Replaced with `ping -n` delay + retry `rmdir` to reliably clean up old _MEI dir before launching new exe. Also added 8s final deferred retry for map canvas rendering after update restart.
+71. **Failed to load Python DLL on auto-update restart** — `Failed to load Python DLL 'C:\...\Temp\_MEI#####\python312.dll' LoadLibrary: The specified module could not be found.` during auto-update restart. PyInstaller extracts the new exe to a temp _MEI dir but python312.dll isn't found. Likely causes: Windows Defender quarantining the DLL during extraction, or extraction interrupted by a race. May need to add a Windows Defender exclusion hint, retry logic, or switch from `--onefile` to `--onedir` mode (avoids temp extraction entirely).
+72. **Global player settings** — Move player settings (name, faction, color, team) to a global scope that carries across solo and multiplayer modes. Currently each screen has its own settings widgets that are synced manually. A unified player profile model would reduce duplication and ensure consistency. Settings should persist in `wopc_prefs.ini` and auto-apply when entering any game mode.
 
 ## Platform Support
 
