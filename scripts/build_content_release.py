@@ -113,6 +113,13 @@ def build_wopc_core_scd() -> Path:
         _patch_scd(dst, "lua/sim/units/structureunit.lua", structure_src)
         print("  Patched wopc_core.scd with fixed StructureUnit.lua")
 
+    siminit_src = wopc_patches / "lua" / "simInit.lua"
+    if siminit_src.exists():
+        from launcher.deploy import _patch_scd
+
+        _patch_scd(dst, "lua/siminit.lua", siminit_src)
+        print("  Patched wopc_core.scd with WOPC simInit.lua")
+
     size_mb = dst.stat().st_size / 1e6
     print(f"  Output: {dst} ({size_mb:.1f} MB)")
     return dst

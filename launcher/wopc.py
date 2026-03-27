@@ -17,6 +17,7 @@ from launcher.config import (
     SCFA_STEAM,
     VERSION,
     WOPC_BIN,
+    WOPC_CORE_SCD,
     WOPC_GAMEDATA,
     WOPC_MAPS,
     WOPC_MODS,
@@ -172,6 +173,14 @@ def cmd_launch(
     if not exe_path.exists():
         logger.error("ERROR: Game exe not found at %s", exe_path)
         logger.error("Run 'wopc setup' first.")
+        return 1
+
+    # Validate wopc_core.scd — without it, the engine loads vanilla uimain.lua
+    # and the quickstart bypass won't work (user sees the vanilla SCFA lobby).
+    scd_path = WOPC_GAMEDATA / WOPC_CORE_SCD
+    if not scd_path.exists():
+        logger.error("ERROR: %s not found at %s", WOPC_CORE_SCD, scd_path)
+        logger.error("Game content is missing — run setup to re-download.")
         return 1
 
     # Repair corrupted Game.prefs before launch (e.g. active_mods = true)

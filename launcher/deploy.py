@@ -450,26 +450,35 @@ def run_setup(
             else:
                 logger.warning("  WARNING: WOPC patches not found at %s", wopc_patches_src)
     else:
-        # Standalone mode: no source tree available — migrate or download
-        if not wopc_core_dst.exists():
-            # Try migrating from the old ProgramData location first
-            old_gamedata = Path(r"C:\ProgramData\WOPC\gamedata")
-            old_scd = old_gamedata / "faf_ui.scd"  # pre-rename name
-            if not old_scd.exists():
-                old_scd = old_gamedata / config.WOPC_CORE_SCD
-            if old_scd.exists():
-                logger.info("  migrating %s from old install", config.WOPC_CORE_SCD)
-                shutil.copy2(old_scd, wopc_core_dst)
-            else:
-                # Download pre-built wopc_core.scd.zip from GitHub release
-                logger.info("  downloading %s", config.WOPC_CORE_SCD)
-                asset_info = config.CORE_CONTENT_ASSETS["wopc_core.scd.zip"]
-                zip_dst = config.WOPC_GAMEDATA / "wopc_core.scd.zip"
-                if not _download_file(str(asset_info["url"]), zip_dst):
+        # Standalone mode: no source tree available — migrate or download.
+        # Always (re-)download during setup.  Setup only runs when the content
+        # marker is stale/missing or on first install, so re-downloading is
+        # intentional.  The old SCD is kept on disk as a fallback — if the
+        # download fails the game can still launch with the previous version.
+        old_gamedata = Path(r"C:\ProgramData\WOPC\gamedata")
+        old_scd = old_gamedata / "faf_ui.scd"  # pre-rename name
+        if not old_scd.exists():
+            old_scd = old_gamedata / config.WOPC_CORE_SCD
+        if not wopc_core_dst.exists() and old_scd.exists():
+            logger.info("  migrating %s from old install", config.WOPC_CORE_SCD)
+            shutil.copy2(old_scd, wopc_core_dst)
+        else:
+            # Download pre-built wopc_core.scd.zip from GitHub release
+            logger.info("  downloading %s", config.WOPC_CORE_SCD)
+            asset_info = config.CORE_CONTENT_ASSETS["wopc_core.scd.zip"]
+            zip_dst = config.WOPC_GAMEDATA / "wopc_core.scd.zip"
+            if not _download_file(str(asset_info["url"]), zip_dst):
+                if wopc_core_dst.exists():
+                    logger.warning(
+                        "  Download failed — keeping existing %s as fallback",
+                        config.WOPC_CORE_SCD,
+                    )
+                else:
                     raise RuntimeError(
                         f"Failed to download {config.WOPC_CORE_SCD} — "
                         "check your internet connection and try again."
                     )
+            else:
                 with zipfile.ZipFile(zip_dst, "r") as zf:
                     zf.extractall(config.WOPC_GAMEDATA)
                 zip_dst.unlink()
@@ -487,24 +496,30 @@ def run_setup(
     if wopc_patches_src.exists():
         uimain_src = wopc_patches_src / "lua" / "ui" / "uimain.lua"
         if uimain_src.exists() and wopc_core_dst.exists():
-            _patch_scd(wopc_core_dst, "lua/ui/uimain.lua", uimain_src)
-            logger.info("  patched wopc_core.scd with WOPC uimain.lua")
+            if _patch_scd(wopc_core_dst, "lua/ui/uimain.lua", uimain_src):
+                logger.info("  patched wopc_core.scd with WOPC uimain.lua")
+            else:
+                logger.error("  FAILED to patch uimain.lua — quickstart will not work")
 
         # Patch any other files that the engine C++ loads via doscript
         # (first-added priority). These have bugs we fix.
         # Arcname must be lowercase to match our normalized SCD contents.
         structure_src = wopc_patches_src / "lua" / "sim" / "units" / "StructureUnit.lua"
         if structure_src.exists() and wopc_core_dst.exists():
-            _patch_scd(wopc_core_dst, "lua/sim/units/structureunit.lua", structure_src)
-            logger.info("  patched wopc_core.scd with fixed StructureUnit.lua")
+            if _patch_scd(wopc_core_dst, "lua/sim/units/structureunit.lua", structure_src):
+                logger.info("  patched wopc_core.scd with fixed StructureUnit.lua")
+            else:
+                logger.warning("  WARNING: failed to patch StructureUnit.lua")
 
         # simInit.lua — WOPC movement tuning hook (Phase 7).
         # The engine loads simInit.lua via C++ doscript (first-added priority),
         # so we must patch the first entry in the SCD just like uimain.lua.
         siminit_src = wopc_patches_src / "lua" / "simInit.lua"
         if siminit_src.exists() and wopc_core_dst.exists():
-            _patch_scd(wopc_core_dst, "lua/siminit.lua", siminit_src)
-            logger.info("  patched wopc_core.scd with WOPC simInit.lua")
+            if _patch_scd(wopc_core_dst, "lua/siminit.lua", siminit_src):
+                logger.info("  patched wopc_core.scd with WOPC simInit.lua")
+            else:
+                logger.warning("  WARNING: failed to patch simInit.lua")
 
     # --- Step 4b: Acquire content packs ---
     _report("[4/6] Downloading content packs", 4)
