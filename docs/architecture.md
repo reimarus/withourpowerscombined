@@ -2,7 +2,7 @@
 
 ## Overview
 
-WOPC (With Our Powers Combined) is a standalone Supreme Commander: Forged Alliance game distribution. It combines engine patches, extended UI, and curated gameplay content into a single launcher. The game deploys to `C:\ProgramData\WOPC\` leaving Steam SCFA untouched.
+WOPC (With Our Powers Combined) is a standalone Supreme Commander: Forged Alliance game distribution. It combines engine patches, extended UI, and curated gameplay content into a single launcher. The game deploys to `SCFA\WOPC\` (inside the Steam install folder).
 
 ## Repository Layout
 
@@ -12,7 +12,7 @@ withourpowerscombined/
     wopc.py                     Entry point (status/setup/launch/validate/patch)
     config.py                   Path constants, file lists, version
     mods.py                     Mod system — discovery, activation, content packs
-    deploy.py                   Creates C:\ProgramData\WOPC\ game directory
+    deploy.py                   Creates SCFA\WOPC\ game directory
     game_config.py              Generates wopc_game_config.lua (quickstart config)
     init_generator.py           Dynamic init_wopc.lua generation (delegates to mods.py)
     prefs.py                    User preferences (INI infrastructure, map, player, launch mode)
@@ -65,7 +65,7 @@ withourpowerscombined/
 ## Deployed Game Directory
 
 ```
-C:\ProgramData\WOPC\
+SCFA\WOPC\
   bin\
     ForgedAlliance.exe          Stock (Phase 0) or patched (Phase 2+)
     init_wopc.lua               Generated per-launch by init_generator.py
@@ -146,7 +146,7 @@ The built executable is a single-file PyInstaller bundle (~18 MB) that includes:
 **How it works at runtime:**
 1. PyInstaller extracts bundled assets to a temp directory (`sys._MEIPASS`)
 2. The launcher code references `_MEIPASS` to find init/ and gamedata/ assets
-3. `deploy.py` copies these bundled assets to `C:\ProgramData\WOPC\` during setup
+3. `deploy.py` copies these bundled assets to `SCFA\WOPC\` during setup
 4. The exe is fully self-contained — no Python installation needed on the player's machine
 
 **When to rebuild:** After ANY change to `launcher/`, `init/`, or `gamedata/`. The exe bundles code at build time — a stale exe runs old code. During development, use dev mode instead to skip rebuilds.
@@ -196,6 +196,71 @@ Game runtime (quickstart.lua)
 | `prefs.py` | Pure INI infrastructure (load/save), map/player/display prefs |
 | `quickstart.lua` | Runtime UID → ModInfo resolution via mods.lua |
 
+## Logging & Observability
+
+WOPC has three independent log streams. All three are captured in Firebase reports when the user clicks "Send Logs."
+
+### Log Streams
+
+| Stream | Written by | Location | Contains |
+|--------|-----------|----------|----------|
+| **Launcher log** | Python `logging` (`wopc.*` namespace) | `WOPC/launcher.log` | Map scans, mod discovery, deploy steps, launch commands, GUI errors, network events |
+| **Engine log** | SCFA C++ engine | `WOPC/bin/WOPC.log` | VFS mounts, Lua errors, shader compilation, lobby state, sim warnings |
+| **SCFA log** | SCFA C++ engine (boot) | `%LOCALAPPDATA%\Gas Powered Games\SupCom.sclog` | Early boot failures before WOPC.log is created |
+
+### Launcher Logging (`launcher/log.py`)
+
+```
+logging.getLogger("wopc")          # root logger — all launcher modules
+logging.getLogger("wopc.deploy")   # deploy.py
+logging.getLogger("wopc.gui")      # app.py
+logging.getLogger("wopc.cli")      # wopc.py
+logging.getLogger("wopc.relay")    # relay.py
+...etc
+```
+
+**Two handlers:**
+- `StreamHandler(stdout)` — visible in dev mode, invisible in frozen exe (no console)
+- `RotatingFileHandler("WOPC/launcher.log")` — always persists to disk (1 MB, 2 backups)
+
+**Pattern:** All modules use `from launcher import config` then `logging.getLogger("wopc.<module>")`. Never `print()` (enforced by ruff T201).
+
+### Engine Log (`WOPC/bin/WOPC.log`)
+
+Written by the SCFA engine C++ code. Controlled by the `/log <path>` command-line argument passed in `wopc.py`. Key line prefixes: `info:`, `warning:`, `error:`, `debug:`, `ASSERT`.
+
+**Dev utility:** `python .claude/utils/read_game_log.py --errors` (or `--mounts`, `--all`, `--tail N`)
+
+### Firebase Remote Diagnostics (`launcher/relay.py`)
+
+The "Send Logs" button uploads a comprehensive report to `{RELAY_URL}/reports/{uuid}.json`:
+
+| Field | Source | Lines |
+|-------|--------|-------|
+| `launcher_log` | GUI textbox messages (`self._log_lines`) | Last 500 |
+| `launcher_file_log` | `WOPC/launcher.log` (Python logger output) | Last 300 |
+| `engine_log` | `WOPC/bin/WOPC.log` | Last 300 |
+| `engine_errors` | Filtered `warning:`/`error:`/`ASSERT` lines from engine log | Last 50 |
+| `scfa_log` | `SupCom.sclog` (early boot log) | Last 200 |
+| `system` | OS, Python version, WOPC version, commit hash, paths | — |
+| `game_prefs_active_mods` | `active_mods` line from Game.prefs | — |
+
+**Audit events** are also logged to `{RELAY_URL}/logs/{uuid}.json` on game create/close.
+
+### Crash Handling
+
+- **`launch_gui()`** wrapped in try/except — logs traceback, shows error dialog, auto-uploads to Firebase
+- **`report_callback_exception`** overridden in WopcApp — catches silent tkinter callback failures, logs to launcher.log and GUI textbox
+- **Launch validation** — after `Popen()`, polls for 1.5s to detect instant exe crashes (missing DLLs, bad init)
+
+### Content Staleness
+
+`CONTENT_BUILD` integer in `config.py` tracks the content-v2 build version. `deploy.py` writes it to `WOPC/content_build.txt` after setup. On startup, `app.py` compares the marker — if stale or missing, forces re-download of `wopc_core.scd`. Bump `CONTENT_BUILD` when content-v2 is rebuilt.
+
+### Build Provenance
+
+`COMMIT_HASH` in `launcher/__version__.py` is written by `scripts/release.py` at release time (short git hash). Displayed in the GUI sidebar version label and included in Firebase `system` info. Answers "which exact build is this user running?"
+
 ## Key Design Decisions
 
 ### Why Python?
@@ -204,10 +269,10 @@ Game runtime (quickstart.lua)
 - The binary patcher (`fa-python-binary-patcher`) is also Python
 - GUI via CustomTkinter (bundled in exe via PyInstaller)
 
-### Why C:\ProgramData\WOPC?
-- Standard Windows app data location
-- Non-destructive to Steam SCFA
-- Writable without admin on Windows 10/11
+### Why SCFA\WOPC\?
+- Inside the Steam install folder — launcher exe sits in SCFA root
+- Non-destructive to vanilla SCFA (separate subdirectory)
+- No admin needed — Steam folders are user-writable
 
 ### Why base game first, content packs optional?
 - The core Lua codebase is a complete, tested game
