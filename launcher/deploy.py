@@ -67,7 +67,10 @@ def copy_file(src: Path, dst: Path) -> None:
 
 
 _DL_MAX_RETRIES = 3
-_DL_TIMEOUT = 30  # seconds
+_DL_TIMEOUT = 120  # seconds — default socket timeout
+_DL_LARGE_TIMEOUT = 300  # seconds — for files > 100 MB
+_DL_LARGE_RETRIES = 5  # more retries for large files
+_DL_LARGE_THRESHOLD = 100 * 1024 * 1024  # 100 MB
 
 
 def _download_file(
@@ -78,9 +81,13 @@ def _download_file(
     max_retries: int = _DL_MAX_RETRIES,
     timeout: int = _DL_TIMEOUT,
 ) -> bool:
-    """Download a file from *url* to *dst* with retry and progress.
+    """Download a file from *url* to *dst* with retry, resume, and progress.
 
-    Retries up to *max_retries* times with exponential backoff (1s, 2s, 4s).
+    Supports HTTP Range resume: if a ``.tmp`` file exists from a previous
+    failed attempt and the server supports ``Accept-Ranges: bytes``, the
+    download resumes from where it left off.
+
+    Retries up to *max_retries* times with exponential backoff.
     Returns True on success, False on failure.
     """
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -88,16 +95,58 @@ def _download_file(
 
     for attempt in range(1, max_retries + 1):
         try:
-            logger.info("  downloading %s (attempt %d/%d) ...", dst.name, attempt, max_retries)
-            req = urllib.request.urlopen(url, timeout=timeout)
-            total = int(req.headers.get("Content-Length", 0))
-            downloaded = 0
+            # Check for partial download from a previous attempt
+            resume_offset = 0
+            if tmp.exists():
+                resume_offset = tmp.stat().st_size
+
+            # Build request — add Range header if resuming
+            req_obj = urllib.request.Request(url)
+            if resume_offset > 0:
+                req_obj.add_header("Range", f"bytes={resume_offset}-")
+                logger.info(
+                    "  downloading %s (attempt %d/%d, resuming from %.1f MB) ...",
+                    dst.name,
+                    attempt,
+                    max_retries,
+                    resume_offset / 1e6,
+                )
+            else:
+                logger.info(
+                    "  downloading %s (attempt %d/%d) ...",
+                    dst.name,
+                    attempt,
+                    max_retries,
+                )
+
+            resp = urllib.request.urlopen(req_obj, timeout=timeout)
+            status = resp.status
+
+            # Server returned 206 Partial Content — resume is supported
+            if status == 206 and resume_offset > 0:
+                content_range = resp.headers.get("Content-Range", "")
+                # Content-Range: bytes 12345-99999/100000
+                total = 0
+                if "/" in content_range:
+                    try:
+                        total = int(content_range.rsplit("/", 1)[1])
+                    except ValueError:
+                        total = 0
+                downloaded = resume_offset
+                mode = "ab"  # append to existing tmp
+            else:
+                # Full download (200 OK or server ignoring Range)
+                total = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                resume_offset = 0
+                mode = "wb"  # overwrite tmp
+
             chunk_size = 256 * 1024  # 256 KB chunks
             last_pct = -1
 
-            with tmp.open("wb") as f:
+            with tmp.open(mode) as f:
                 while True:
-                    chunk = req.read(chunk_size)
+                    chunk = resp.read(chunk_size)
                     if not chunk:
                         break
                     f.write(chunk)
@@ -118,6 +167,17 @@ def _download_file(
                             if progress_cb:
                                 progress_cb(downloaded, total)
 
+            # Validate file size if server told us the total
+            if total > 0 and tmp.stat().st_size != total:
+                logger.warning(
+                    "  WARNING: %s size mismatch (got %d, expected %d)",
+                    dst.name,
+                    tmp.stat().st_size,
+                    total,
+                )
+                # Don't delete tmp — next attempt can resume from here
+                raise OSError(f"Size mismatch for {dst.name}")
+
             tmp.replace(dst)
             size_mb = dst.stat().st_size / 1e6
             logger.info("  saved %s (%.1f MB)", dst.name, size_mb)
@@ -130,13 +190,15 @@ def _download_file(
                 dst.name,
                 exc,
             )
-            if tmp.exists():
-                tmp.unlink()
+            # Keep tmp for resume on next attempt (don't delete it)
             if attempt < max_retries:
-                backoff = 2 ** (attempt - 1)  # 1s, 2s, 4s
+                backoff = 2 ** (attempt - 1)  # 1s, 2s, 4s, ...
                 logger.info("  retrying in %ds ...", backoff)
                 time.sleep(backoff)
 
+    # All attempts exhausted — clean up tmp
+    if tmp.exists():
+        tmp.unlink()
     logger.error(
         "  FAILED: could not download %s after %d attempts from %s",
         dst.name,
@@ -467,7 +529,24 @@ def run_setup(
             logger.info("  downloading %s", config.WOPC_CORE_SCD)
             asset_info = config.CORE_CONTENT_ASSETS["wopc_core.scd.zip"]
             zip_dst = config.WOPC_GAMEDATA / "wopc_core.scd.zip"
-            if not _download_file(str(asset_info["url"]), zip_dst):
+
+            def _dl_progress(downloaded: int, total: int) -> None:
+                pct = int(downloaded * 100 / total) if total else 0
+                mb_done = downloaded / 1e6
+                mb_total = total / 1e6
+                _report(
+                    f"[4/6] Downloading {config.WOPC_CORE_SCD}... "
+                    f"{pct}% ({mb_done:.0f}/{mb_total:.0f} MB)",
+                    4,
+                )
+
+            if not _download_file(
+                str(asset_info["url"]),
+                zip_dst,
+                progress_cb=_dl_progress,
+                max_retries=_DL_LARGE_RETRIES,
+                timeout=_DL_LARGE_TIMEOUT,
+            ):
                 if wopc_core_dst.exists():
                     logger.warning(
                         "  Download failed — keeping existing %s as fallback",
@@ -574,6 +653,20 @@ def run_setup(
     _report("[6/6] Setting up user maps", 6)
     config.WOPC_USERMAPS.mkdir(parents=True, exist_ok=True)
     logger.info("  ensured empty usermaps/ exists")
+
+    # Validate critical content before marking setup complete.
+    wopc_scd_final = config.WOPC_GAMEDATA / config.WOPC_CORE_SCD
+    if not wopc_scd_final.exists():
+        raise RuntimeError(
+            f"{config.WOPC_CORE_SCD} is missing after setup — "
+            "download may have failed. Check your internet connection and try again."
+        )
+    scd_size = wopc_scd_final.stat().st_size
+    if scd_size < _DL_LARGE_THRESHOLD:
+        raise RuntimeError(
+            f"{config.WOPC_CORE_SCD} is only {scd_size / 1e6:.1f} MB — "
+            "file appears truncated. Delete it and re-run setup."
+        )
 
     # Write content build marker so the launcher can detect stale content.
     marker = config.WOPC_ROOT / "content_build.txt"
