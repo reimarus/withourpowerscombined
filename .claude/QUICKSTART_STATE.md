@@ -1,8 +1,8 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-24 (v2.01.0042)
+> Last updated: 2026-03-26 (v2.01.0055 released)
 > If session runs out of tokens, a new session can pick up from here.
 
-## Current State: Phase 7 — Pathfinding + Stability
+## Current State: Phase 7 — Pathfinding + Stability + Diagnostic Visibility
 
 ### What works now:
 1. **Solo mode** (quickstart bypass): GUI → select map/players/options → PLAY MATCH → game enters sim
@@ -14,6 +14,7 @@
 7. **Player slot management**: Add/remove AI, color picker (HSV wheel), team assignment, faction selection, spawn position selection on minimap
 8. **Auto-updater**: GitHub Releases → download → exe replace → restart
 9. **Spawn position mapping**: Players array index == ARMY_N, gap-filling with civilian entries (v2.01.0032)
+10. **Mod sync on startup**: Bundled mods copied from exe bundle to WOPC deployment on every launch
 
 ### CRITICAL ARCHITECTURE NOTE:
 **Our launcher IS the lobby.** ALL launch modes (solo, host, join) use `/wopcquickstart`. The in-game lobby UI is NEVER shown. All multiplayer coordination (player list, game options, map selection, chat, ready state, file transfer) happens in the Python launcher over TCP. The engine just receives the final config and starts the match.
@@ -35,16 +36,17 @@
 |--------|-----------|-------------|
 | **Solo** | SOLO mode selected | Map canvas (icon markers, spawn selection), player slots, game options, PLAY MATCH button |
 | **Browser** | MULTIPLAYER selected | LAN + internet game list, CREATE GAME, Direct Connect (collapsed) |
-| **Lobby** | After creating/joining game | Map panel, player list, game options, chat + action bar (LEAVE / LAUNCH) |
+| **Lobby** | After creating/joining game | Map panel, player list (host slot with color/team/faction), game options, chat + action bar (LEAVE / LAUNCH) |
 
-### GUI module structure (refactored in PR #68, v2.01.0037):
+### GUI module structure:
 | Module | Lines | Role |
 |--------|-------|------|
-| `launcher/gui/app.py` | 1,913 | WopcApp main window, solo screen, sidebar, settings — delegates to other modules |
-| `launcher/gui/lobby_screen.py` | 1,070 | Lobby room UI + full multiplayer networking (TCP callbacks, file transfer, game state) |
-| `launcher/gui/slot_widget.py` | 832 | Player slot builders, color picker, team/spawn/color utilities |
-| `launcher/gui/map_canvas.py` | 578 | Canvas rendering, zoom/pan, markers, spawn interaction |
-| `launcher/gui/browser_screen.py` | 458 | Game browser UI + LAN/relay discovery lifecycle |
+| `launcher/gui/app.py` | ~1,930 | WopcApp main window, solo screen, sidebar, settings — delegates to other modules |
+| `launcher/gui/lobby_screen.py` | ~1,250 | Lobby room UI + full multiplayer networking (TCP callbacks, file transfer, game state) |
+| `launcher/gui/slot_widget.py` | ~840 | Player slot builders, color picker, team/spawn/color utilities |
+| `launcher/gui/map_canvas.py` | ~600 | Canvas rendering, zoom/pan, markers, spawn interaction |
+| `launcher/gui/browser_screen.py` | ~460 | Game browser UI + LAN/relay discovery lifecycle |
+| `launcher/gui/mod_panel.py` | ~330 | Collapsible mod categories, ModRow with download, shared solo/lobby |
 | `launcher/gui/models.py` | 226 | `PlayerSlot` + `PlayerSlotManager`, zero widget deps |
 | `launcher/gui/constants.py` | 205 | All shared constants: colors, player palette, faction names, AI names, game option defs |
 
@@ -58,25 +60,31 @@
 - `launcher/updater.py` — GitHub Releases auto-update (subprocess + os._exit on Windows)
 - `launcher/prefs.py` — INI-based preferences (player name, faction, color, map, display)
 
-### Active work: Phase 7 — Pathfinding + Multiplayer Fixes
+### Active work: Phase 7 — Pathfinding + Multiplayer Polish
 - `bundled/usermods/wopc_pathing/` — toggleable mod with blocked timer capping, soft collision, engineer zero collision
 - `vendor/FA-Binary-Patches/section/WopcPathfinding.cpp` — C++ API: `SetBlockedTimerTuning()`, `GetPathfindingStats()`, `WopcSetZeroCollisionEnabled()`, `unit:WopcMarkZeroCollision()`, `unit:WopcIsZeroCollision()`
 - `vendor/FA-Binary-Patches/hooks/WayPointArrive.cpp` — inline ASM for blocked timer clamping
 - `bundled/usermods/wopc_artillery/` — T3 artillery range/cost reduction mod
-- Next: multiplayer UX bugs (#61-#69), A* improvements
+- Next: color picker rendering (#62), A* improvements, remaining multiplayer polish
 
 ### Known bugs (see backlog):
+- Color picker rendering in multiplayer (#62)
 - Civilian filler armies — investigate idle commander spawns (#54)
 - AI reclaim grid reference missing (#33 in Architecture Refactors)
-- 9 multiplayer UX bugs (#61-#69): spawn selection, color picker, player options, AI on map, Enter key, friend join, game cleanup
+- Send Logs should include WOPC.log (#69)
+- Python DLL load failure on auto-update restart (#71)
+- Global player settings (#72)
 
 ### Recent merges:
-- **PR #83**: MEI cleanup, bundle mods in exe, engineer zero collision C++, wopc_core.scd auto-repair
-- **PR #82**: Converge multiplayer lobby to 4-column layout matching solo
-- **PR #81**: Soft collision, T3 artillery, LOUD unit packs
-- **PR #80**: SC2 movement system research for Phase 7 pathfinding
+- **PR #93**: Diagnostic visibility — file logging, content staleness detection, Firebase diagnostics
+- **PR #92**: Solo screen fixes — Canvas height, map scan logging, mod compat at startup
+- **PR #91**: Mod compat system + SupComFrame geometry fix
 
 ### Recent releases:
-- **v2.01.0045**: MEI fix, bundle mods in exe, engineer zero collision, wopc_core.scd auto-repair
-- **v2.01.0044**: Multiplayer lobby 4-column layout convergence
-- **v2.01.0042**: Phase 7 pathing mod, Game.prefs three-layer corruption fix, release script speedup
+- **v2.01.0055**: File-based launcher.log, CONTENT_BUILD marker (forces stale content re-download), launcher.log in Firebase reports, protected _refresh_mods_list, GUI map scan diagnostics, Rule #24
+- **v2.01.0054**: Canvas height fix (chat bar), map scan logging, mod compat patches at startup
+- **v2.01.0053**: Mod compat system + SupComFrame geometry fix
+
+### Pending investigation:
+- **Map list empty in frozen exe** — v2.01.0055 adds diagnostic logging. After user updates, check `WOPC/launcher.log` and Firebase reports for the actual map scan failure. The root cause is still unknown — the diagnostics release should reveal it.
+- **Content staleness** — v2.01.0055 forces re-download of wopc_core.scd for users without `content_build.txt`. This should fix the BrewLANLOUDPath crash from stale content.
