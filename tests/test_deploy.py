@@ -477,8 +477,10 @@ class TestWopcCoreMigration:
             "CONTENT_ICONS_URL": "https://example.com/content_icons.scd",
         }
 
-    def test_standalone_skips_when_wopc_core_exists(self, fake_scfa_tree, tmp_path, repo_init_dir):
-        """In standalone mode, if wopc_core.scd already exists, skip migration/download."""
+    def test_standalone_redownloads_when_wopc_core_exists(
+        self, fake_scfa_tree, tmp_path, repo_init_dir
+    ):
+        """In standalone mode, always re-download wopc_core.scd (content may be stale)."""
         from launcher.deploy import run_setup
 
         config_patches = self._standalone_config(fake_scfa_tree, tmp_path)
@@ -487,16 +489,12 @@ class TestWopcCoreMigration:
         (wopc_gd / "wopc_core.scd").write_bytes(b"\x00" * 64)
 
         with patch.multiple("launcher.config", **config_patches):
-            mock_dl = MagicMock()
-            mock_copy = MagicMock()
-            with (
-                patch("launcher.deploy._download_file", mock_dl),
-                patch("launcher.deploy.shutil.copy2", mock_copy),
-            ):
+            mock_dl = MagicMock(return_value=False)  # download fails
+            with patch("launcher.deploy._download_file", mock_dl):
                 run_setup(repo_init_dir)
 
-            # wopc_core.scd download should NOT have been triggered
+            # Download should have been attempted even though SCD exists
             wopc_core_calls = [c for c in mock_dl.call_args_list if "wopc_core" in str(c)]
-            assert wopc_core_calls == [], "wopc_core.scd should not be downloaded when it exists"
-            # wopc_core.scd should not have been overwritten
+            assert len(wopc_core_calls) == 1, "should attempt download even when SCD exists"
+            # Old SCD kept as fallback when download fails
             assert (wopc_gd / "wopc_core.scd").read_bytes() == b"\x00" * 64

@@ -1590,9 +1590,11 @@ class WopcApp(BaseApp):  # type: ignore
                     expected,
                 )
                 self.log("Content update available — re-downloading...")
-                scd = config.WOPC_GAMEDATA / config.WOPC_CORE_SCD
-                if scd.exists():
-                    scd.unlink()
+                # Don't delete the existing SCD — it's the only working copy.
+                # Instead, remove the staleness marker so setup re-runs.
+                # deploy.py will overwrite the SCD atomically on success.
+                if marker.exists():
+                    marker.unlink()
                 assets_ok = False
 
         if not scfa_ok:

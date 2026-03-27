@@ -117,6 +117,26 @@ class TestCmdLaunch:
             result = cmd_launch()
             assert result == 1
 
+    def test_scd_missing_returns_1(self, tmp_path):
+        """Returns 1 when wopc_core.scd not found."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin = tmp_path / "bin"
+        wopc_bin.mkdir()
+        (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
+        gamedata = tmp_path / "gamedata"
+        gamedata.mkdir()
+        # No wopc_core.scd created
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+        ):
+            result = cmd_launch()
+            assert result == 1
+
     @patch("subprocess.Popen")
     def test_launch_calls_popen(self, mock_popen, tmp_path):
         """Launches game with correct arguments including quickstart."""
@@ -127,6 +147,10 @@ class TestCmdLaunch:
         (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
         (wopc_bin / "init_wopc.lua").write_text("-- init")
 
+        wopc_gamedata = tmp_path / "gamedata"
+        wopc_gamedata.mkdir()
+        (wopc_gamedata / "wopc_core.scd").write_bytes(b"\x00")
+
         wopc_maps = tmp_path / "maps"
         (wopc_maps / "SCMP_002").mkdir(parents=True)
         (wopc_maps / "SCMP_002" / "SCMP_002_scenario.lua").write_text("-- scenario")
@@ -135,6 +159,8 @@ class TestCmdLaunch:
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -173,9 +199,14 @@ class TestCmdLaunch:
         wopc_bin.mkdir()
         (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
         (wopc_bin / "init_wopc.lua").write_text("-- init")
+        wopc_gamedata = tmp_path / "gamedata"
+        wopc_gamedata.mkdir()
+        (wopc_gamedata / "wopc_core.scd").write_bytes(b"\x00")
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
             patch("launcher.wopc.prefs.get_launch_mode", return_value="solo"),
@@ -190,26 +221,31 @@ class TestCmdLaunchModes:
     """Test the three launch modes: solo, host, join."""
 
     def _setup_wopc_tree(self, tmp_path):
-        """Create a minimal WOPC tree with exe, init, and a map."""
+        """Create a minimal WOPC tree with exe, init, SCD, and a map."""
         wopc_bin = tmp_path / "bin"
         wopc_bin.mkdir()
         (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
         (wopc_bin / "init_wopc.lua").write_text("-- init")
+        wopc_gamedata = tmp_path / "gamedata"
+        wopc_gamedata.mkdir()
+        (wopc_gamedata / "wopc_core.scd").write_bytes(b"\x00")
         wopc_maps = tmp_path / "maps"
         (wopc_maps / "TestMap").mkdir(parents=True)
         (wopc_maps / "TestMap" / "TestMap_scenario.lua").write_text("-- scen")
-        return wopc_bin, wopc_maps
+        return wopc_bin, wopc_maps, wopc_gamedata
 
     @patch("subprocess.Popen")
     def test_solo_mode_has_quickstart(self, mock_popen, tmp_path):
         """Solo mode includes /wopcquickstart and /wopcconfig flags."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -232,11 +268,13 @@ class TestCmdLaunchModes:
         """Host mode uses /hostgame WITH /wopcquickstart and /wopcconfig."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -268,11 +306,13 @@ class TestCmdLaunchModes:
         """Host mode uses the configured port from prefs."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -296,11 +336,13 @@ class TestCmdLaunchModes:
         """Join mode uses /joingame with address and /wopcquickstart."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -335,10 +377,12 @@ class TestCmdLaunchModes:
         """Join mode returns error when no address is configured."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -355,7 +399,7 @@ class TestCmdLaunchModes:
         """Solo mode passes AI opponents list to write_game_config."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         ai_opponents = [
@@ -365,6 +409,8 @@ class TestCmdLaunchModes:
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -387,13 +433,15 @@ class TestCmdLaunchModes:
         """Solo mode merges game options with minimap pref."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         game_options = {"Victory": "supremacy", "UnitCap": "2000"}
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -419,26 +467,31 @@ class TestLaunchModeNormalization:
     """Test that invalid/legacy launch_mode values are normalized to 'solo'."""
 
     def _setup_wopc_tree(self, tmp_path):
-        """Create a minimal WOPC tree with exe, init, and a map."""
+        """Create a minimal WOPC tree with exe, init, SCD, and a map."""
         wopc_bin = tmp_path / "bin"
         wopc_bin.mkdir()
         (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
         (wopc_bin / "init_wopc.lua").write_text("-- init")
+        wopc_gamedata = tmp_path / "gamedata"
+        wopc_gamedata.mkdir()
+        (wopc_gamedata / "wopc_core.scd").write_bytes(b"\x00")
         wopc_maps = tmp_path / "maps"
         (wopc_maps / "TestMap").mkdir(parents=True)
         (wopc_maps / "TestMap" / "TestMap_scenario.lua").write_text("-- scen")
-        return wopc_bin, wopc_maps
+        return wopc_bin, wopc_maps, wopc_gamedata
 
     @patch("subprocess.Popen")
     def test_invalid_mode_defaults_to_solo(self, mock_popen, tmp_path):
         """Stale pref value like 'multiplayer' normalizes to 'solo'."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -461,11 +514,13 @@ class TestLaunchModeNormalization:
         """launch_mode=None reads from prefs, then normalizes."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -488,11 +543,13 @@ class TestLaunchModeNormalization:
         """Empty string launch_mode normalizes to solo."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
@@ -514,11 +571,13 @@ class TestLaunchModeNormalization:
         """Valid launch modes are not altered by normalization."""
         from launcher.wopc import cmd_launch
 
-        wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
+        wopc_bin, wopc_maps, wopc_gamedata = self._setup_wopc_tree(tmp_path)
         mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         patches = [
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", wopc_maps),
             patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
             patch("launcher.wopc.GAME_LOG", "WOPC.log"),
