@@ -143,6 +143,43 @@ class TestGenerateInitLua:
         wopc_core_mount_pos = content.index("mount_dir(wopc_core, '/')")
         assert wopc_core_mount_pos < vanilla_pos
 
+    def test_wopc_core_mounts_before_content_packs(
+        self, gamedata_dir: Path, tmp_path: Path
+    ) -> None:
+        """wopc_core.scd must mount BEFORE content packs (first-added = C++ priority).
+
+        The engine's C++ file loader uses first-added priority.  If lua.scd
+        (a content pack containing vanilla uimain.lua) mounts before wopc_core.scd,
+        our patched uimain.lua never loads and quickstart breaks — players see
+        the LOUD lobby instead of a direct match launch.
+        """
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+
+        # Enable content packs so lua.scd and others appear in the mount list
+        parser = configparser.ConfigParser()
+        parser.add_section("ContentPacks")
+
+        with (
+            patch.object(config, "WOPC_GAMEDATA", gamedata_dir),
+            patch.object(config, "WOPC_BIN", bin_dir),
+            patch.object(prefs, "load_prefs", return_value=parser),
+        ):
+            result = init_generator.generate_init_lua()
+
+        content = result.read_text()
+        wopc_core_pos = content.index("mount_dir(wopc_core, '/')")
+
+        # Every content pack mount must appear AFTER wopc_core
+        for scd in ["lua.scd", "brewlan.scd", "blackops.scd", "TotalMayhem.scd"]:
+            mount_line = f"mount_dir(WOPCRoot .. '\\\\gamedata\\\\{scd}', '/')"
+            if mount_line in content:
+                scd_pos = content.index(mount_line)
+                assert scd_pos > wopc_core_pos, (
+                    f"{scd} must mount AFTER wopc_core.scd (C++ first-added priority), "
+                    f"but {scd} is at position {scd_pos} and wopc_core at {wopc_core_pos}"
+                )
+
     def test_wopc_patches_not_separately_mounted(self, gamedata_dir: Path, tmp_path: Path) -> None:
         """wopc_patches.scd is consolidated into wopc_core.scd — no separate mount."""
         bin_dir = tmp_path / "bin"
