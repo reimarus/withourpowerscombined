@@ -118,7 +118,10 @@ def patched_config(fake_scfa_tree: Path, tmp_path: Path):
         "CONTENT_ICONS_URL": "https://example.com/content_icons.scd",
     }
 
-    with patch.multiple("launcher.config", **config_patches):  # type: ignore[call-overload]
+    with (
+        patch.multiple("launcher.config", **config_patches),  # type: ignore[call-overload]
+        patch("launcher.deploy._DL_LARGE_THRESHOLD", 0),  # disable size check in tests
+    ):
         yield config_patches
 
 

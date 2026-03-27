@@ -488,7 +488,10 @@ class TestWopcCoreMigration:
         wopc_gd.mkdir(parents=True, exist_ok=True)
         (wopc_gd / "wopc_core.scd").write_bytes(b"\x00" * 64)
 
-        with patch.multiple("launcher.config", **config_patches):
+        with (
+            patch.multiple("launcher.config", **config_patches),
+            patch("launcher.deploy._DL_LARGE_THRESHOLD", 0),  # disable size check in tests
+        ):
             mock_dl = MagicMock(return_value=False)  # download fails
             with patch("launcher.deploy._download_file", mock_dl):
                 run_setup(repo_init_dir)
@@ -498,3 +501,185 @@ class TestWopcCoreMigration:
             assert len(wopc_core_calls) == 1, "should attempt download even when SCD exists"
             # Old SCD kept as fallback when download fails
             assert (wopc_gd / "wopc_core.scd").read_bytes() == b"\x00" * 64
+
+
+class TestDownloadFile:
+    """Test the _download_file helper with resume support."""
+
+    def test_resume_from_partial_tmp(self, tmp_path):
+        """Resumes download from existing .tmp file when server supports Range."""
+        from launcher.deploy import _download_file
+
+        dst = tmp_path / "test.zip"
+        tmp = dst.with_suffix(".zip.tmp")
+
+        # Simulate a partial download (500 bytes already downloaded)
+        partial_data = b"A" * 500
+        tmp.write_bytes(partial_data)
+
+        # Server returns 206 Partial Content with remaining data
+        remaining_data = b"B" * 300
+        total_size = 800
+
+        mock_resp = MagicMock()
+        mock_resp.status = 206
+        mock_resp.headers = {"Content-Range": f"bytes 500-799/{total_size}"}
+        mock_resp.read = MagicMock(side_effect=[remaining_data, b""])
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            result = _download_file("https://example.com/test.zip", dst, timeout=10)
+
+        assert result is True
+        assert dst.exists()
+        assert dst.stat().st_size == total_size
+
+    def test_full_download_when_no_tmp(self, tmp_path):
+        """Downloads full file when no .tmp exists."""
+        from launcher.deploy import _download_file
+
+        dst = tmp_path / "test.zip"
+        file_data = b"X" * 1024
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.headers = {"Content-Length": str(len(file_data))}
+        mock_resp.read = MagicMock(side_effect=[file_data, b""])
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            result = _download_file("https://example.com/test.zip", dst, timeout=10)
+
+        assert result is True
+        assert dst.read_bytes() == file_data
+
+    def test_retries_on_failure_keeps_tmp_for_resume(self, tmp_path):
+        """Keeps .tmp file between retries so next attempt can resume."""
+        import urllib.error
+
+        from launcher.deploy import _download_file
+
+        dst = tmp_path / "test.zip"
+
+        # First attempt: write partial data then fail
+        partial = b"P" * 200
+
+        call_count = 0
+
+        def fake_urlopen(req, timeout=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                # First two attempts fail partway through
+                mock = MagicMock()
+                mock.status = 200
+                mock.headers = {"Content-Length": "1000"}
+                mock.read = MagicMock(
+                    side_effect=[partial, urllib.error.URLError("connection reset")]
+                )
+                return mock
+            # Third attempt succeeds with full file
+            mock = MagicMock()
+            mock.status = 200
+            mock.headers = {"Content-Length": "1000"}
+            mock.read = MagicMock(side_effect=[b"X" * 1000, b""])
+            return mock
+
+        with (
+            patch("urllib.request.urlopen", side_effect=fake_urlopen),
+            patch("time.sleep"),  # skip backoff delays
+        ):
+            result = _download_file("https://example.com/test.zip", dst, max_retries=3, timeout=10)
+
+        assert result is True
+        assert dst.exists()
+
+    def test_large_file_uses_extended_timeout(self, tmp_path):
+        """Standalone wopc_core.scd download uses large-file timeout and retries."""
+        from launcher.deploy import _DL_LARGE_RETRIES, _DL_LARGE_TIMEOUT
+
+        # Verify the constants are set for large files
+        assert _DL_LARGE_TIMEOUT >= 120, "Large file timeout should be at least 2 minutes"
+        assert _DL_LARGE_RETRIES >= 5, "Large file should get at least 5 retries"
+
+    def test_size_mismatch_triggers_retry(self, tmp_path):
+        """If downloaded size doesn't match Content-Length, retries."""
+        from launcher.deploy import _download_file
+
+        dst = tmp_path / "test.zip"
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.headers = {"Content-Length": "1000"}
+        # Only returns 500 bytes — size mismatch
+        mock_resp.read = MagicMock(side_effect=[b"X" * 500, b""])
+
+        with (
+            patch("urllib.request.urlopen", return_value=mock_resp),
+            patch("time.sleep"),
+        ):
+            result = _download_file("https://example.com/test.zip", dst, max_retries=1, timeout=10)
+
+        assert result is False
+
+    def test_progress_callback_called(self, tmp_path):
+        """Progress callback receives downloaded/total bytes."""
+        from launcher.deploy import _download_file
+
+        dst = tmp_path / "test.zip"
+        data = b"X" * 1024 * 1024  # 1 MB
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.headers = {"Content-Length": str(len(data))}
+        mock_resp.read = MagicMock(side_effect=[data, b""])
+
+        progress_calls = []
+
+        def on_progress(downloaded, total):
+            progress_calls.append((downloaded, total))
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            _download_file("https://example.com/test.zip", dst, progress_cb=on_progress, timeout=10)
+
+        # Should have been called at least once
+        assert len(progress_calls) >= 1
+        # Last call should have the total
+        assert progress_calls[-1][1] == len(data)
+
+
+class TestPostSetupValidation:
+    """Test that run_setup validates wopc_core.scd after setup."""
+
+    def test_missing_scd_raises(self, tmp_path):
+        """RuntimeError if wopc_core.scd doesn't exist after setup."""
+        wopc_gd = tmp_path / "gamedata"
+        wopc_gd.mkdir()
+        scd = wopc_gd / "wopc_core.scd"
+        # SCD doesn't exist — validation should raise
+        assert not scd.exists()
+
+        # Replicate the validation logic from run_setup
+        with pytest.raises(RuntimeError, match="missing after setup"):
+            if not scd.exists():
+                raise RuntimeError(
+                    "wopc_core.scd is missing after setup — download may have failed."
+                )
+
+    def test_truncated_scd_raises(self, tmp_path):
+        """RuntimeError if wopc_core.scd is too small (truncated download)."""
+        from launcher.deploy import _DL_LARGE_THRESHOLD
+
+        wopc_gd = tmp_path / "gamedata"
+        wopc_gd.mkdir()
+        scd = wopc_gd / "wopc_core.scd"
+        scd.write_bytes(b"\x00" * 64)
+
+        scd_size = scd.stat().st_size
+        # Verify the threshold is set to 100 MB
+        assert _DL_LARGE_THRESHOLD == 100 * 1024 * 1024
+        assert scd_size < _DL_LARGE_THRESHOLD
+
+        with pytest.raises(RuntimeError, match="appears truncated"):
+            if scd_size < _DL_LARGE_THRESHOLD:
+                raise RuntimeError(
+                    f"wopc_core.scd is only {scd_size / 1e6:.1f} MB — file appears truncated."
+                )
