@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from launcher import updater
 
 # ---------------------------------------------------------------------------
@@ -145,6 +147,43 @@ class TestCheckForUpdate:
 
 
 # ---------------------------------------------------------------------------
+# Exe verification
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyExe:
+    """Tests for _verify_exe() — size + PE header checks."""
+
+    def test_valid_exe(self, tmp_path: Path) -> None:
+        """A file >10 MB with MZ header passes verification."""
+        exe = tmp_path / "WOPC-Launcher.exe"
+        # Write MZ header + padding to exceed _MIN_EXE_SIZE
+        exe.write_bytes(b"MZ" + b"\x00" * (updater._MIN_EXE_SIZE + 100))
+        updater._verify_exe(exe)  # Should not raise
+
+    def test_rejects_truncated_file(self, tmp_path: Path) -> None:
+        """A file smaller than _MIN_EXE_SIZE is rejected."""
+        exe = tmp_path / "small.exe"
+        exe.write_bytes(b"MZ" + b"\x00" * 1000)
+        with pytest.raises(updater.VerificationError, match="truncated"):
+            updater._verify_exe(exe)
+
+    def test_rejects_invalid_pe_header(self, tmp_path: Path) -> None:
+        """A large file without MZ magic bytes is rejected."""
+        exe = tmp_path / "not-a-pe.exe"
+        exe.write_bytes(b"PK" + b"\x00" * (updater._MIN_EXE_SIZE + 100))
+        with pytest.raises(updater.VerificationError, match="invalid PE header"):
+            updater._verify_exe(exe)
+
+    def test_rejects_empty_file(self, tmp_path: Path) -> None:
+        """An empty file is rejected (too small)."""
+        exe = tmp_path / "empty.exe"
+        exe.write_bytes(b"")
+        with pytest.raises(updater.VerificationError, match="truncated"):
+            updater._verify_exe(exe)
+
+
+# ---------------------------------------------------------------------------
 # Download
 # ---------------------------------------------------------------------------
 
@@ -190,3 +229,36 @@ class TestCleanup:
     def test_cleanup_noop_non_frozen(self) -> None:
         # Should silently do nothing
         updater.cleanup_old_exe()
+
+    def test_cleanup_reads_restart_log(self, tmp_path: Path) -> None:
+        """restart.log from cmd script is read, logged, and deleted."""
+        restart_log = tmp_path / "restart.log"
+        restart_log.write_text(
+            "[03/27/2026 15:44:49] Starting update restart\n"
+            "[03/27/2026 15:44:52] Deleting _MEI: C:\\Temp\\_MEI172122\n"
+            "[03/27/2026 15:44:53] Launching new exe\n"
+            "[03/27/2026 15:44:53] Launch command issued\n",
+            encoding="utf-8",
+        )
+
+        with (
+            patch.object(updater.sys, "frozen", True, create=True),
+            patch.object(updater.sys, "executable", str(tmp_path / "WOPC-Launcher.exe")),
+        ):
+            updater.cleanup_old_exe()
+
+        assert not restart_log.exists(), "restart.log should be deleted after reading"
+
+    def test_cleanup_logs_old_file_failure(self, tmp_path: Path, caplog) -> None:
+        """Failed .old cleanup is logged as a warning, not silently swallowed."""
+        old_file = tmp_path / "WOPC-Launcher.old"
+        old_file.write_bytes(b"OLD")
+
+        with (
+            patch.object(updater.sys, "frozen", True, create=True),
+            patch.object(updater.sys, "executable", str(tmp_path / "WOPC-Launcher.exe")),
+            patch.object(Path, "unlink", side_effect=OSError("Permission denied")),
+        ):
+            updater.cleanup_old_exe()
+
+        assert any("Failed to clean up" in r.message for r in caplog.records)
