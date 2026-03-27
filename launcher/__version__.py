@@ -8,3 +8,4 @@ Updated automatically by ``scripts/release.py``.
 """
 
 VERSION = "2.01.0055"
+COMMIT_HASH = ""  # Written by scripts/release.py at release time

@@ -39,7 +39,7 @@ class ModInfo:
 def parse_mod_info(mod_info_path: Path, location: str = "server") -> ModInfo | None:
     """Parse a mod_info.lua file and return a ModInfo, or None if invalid."""
     try:
-        text = mod_info_path.read_text(encoding="utf-8")
+        text = mod_info_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
 

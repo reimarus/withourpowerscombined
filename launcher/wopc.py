@@ -353,11 +353,21 @@ def cmd_launch(
     logger.info("-------------------")
 
     try:
-        subprocess.Popen(cmd, cwd=str(WOPC_BIN))
-        logger.info("  Game process started successfully.")
+        proc = subprocess.Popen(cmd, cwd=str(WOPC_BIN))
+        logger.info("  Game process started (PID %d).", proc.pid)
     except Exception:
         logger.exception("ERROR: Failed to launch")
         return 1
+
+    # Poll briefly to detect instant crashes (exe missing DLLs, bad init, etc.)
+    import time
+
+    time.sleep(1.5)
+    exit_code = proc.poll()
+    if exit_code is not None:
+        logger.error("  Game exited immediately with code %d.", exit_code)
+        return 1
+    logger.info("  Game process still running after 1.5 s — launch OK.")
     return 0
 
 

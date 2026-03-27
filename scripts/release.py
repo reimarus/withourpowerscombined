@@ -76,6 +76,19 @@ def _write_version(new_ver: str) -> None:
         count=1,
         flags=re.MULTILINE,
     )
+    # Embed the short commit hash for build provenance
+    commit = (
+        subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT)
+        .decode()
+        .strip()
+    )
+    ver_updated = re.sub(
+        r'^(COMMIT_HASH\s*=\s*)"[^"]*"',
+        rf'\1"{commit}"',
+        ver_updated,
+        count=1,
+        flags=re.MULTILINE,
+    )
     ver_file.write_text(ver_updated, encoding="utf-8")
 
 

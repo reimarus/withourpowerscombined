@@ -131,7 +131,7 @@ class TestCmdLaunch:
         (wopc_maps / "SCMP_002").mkdir(parents=True)
         (wopc_maps / "SCMP_002" / "SCMP_002_scenario.lua").write_text("-- scenario")
 
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
@@ -206,7 +206,7 @@ class TestCmdLaunchModes:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
@@ -233,7 +233,7 @@ class TestCmdLaunchModes:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
@@ -269,7 +269,7 @@ class TestCmdLaunchModes:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
@@ -297,7 +297,7 @@ class TestCmdLaunchModes:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
@@ -356,7 +356,7 @@ class TestCmdLaunchModes:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         ai_opponents = [
             {"name": "AI 1: Rush", "faction": "cybran", "ai": "rush", "team": 2},
@@ -388,7 +388,7 @@ class TestCmdLaunchModes:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         game_options = {"Victory": "supremacy", "UnitCap": "2000"}
 
@@ -435,7 +435,7 @@ class TestLaunchModeNormalization:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
@@ -462,7 +462,7 @@ class TestLaunchModeNormalization:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
@@ -489,7 +489,7 @@ class TestLaunchModeNormalization:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         with (
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
@@ -515,7 +515,7 @@ class TestLaunchModeNormalization:
         from launcher.wopc import cmd_launch
 
         wopc_bin, wopc_maps = self._setup_wopc_tree(tmp_path)
-        mock_popen.return_value = MagicMock()
+        mock_popen.return_value = MagicMock(pid=1, **{"poll.return_value": None})
 
         patches = [
             patch("launcher.wopc.WOPC_BIN", wopc_bin),
