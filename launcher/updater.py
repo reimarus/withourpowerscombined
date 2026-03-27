@@ -5,11 +5,13 @@ provides download + replace + restart when an update is available.
 
 The update flow on Windows:
 1. Download new exe to a temp file next to the running exe
-2. Rename the running exe to ``*.old`` (Windows allows renaming a running exe)
-3. Rename the temp file to the original name
-4. Launch the new exe
-5. Exit the old process
-6. On next startup, clean up the ``.old`` file
+2. Verify the download (size + PE header check)
+3. Rename the running exe to ``*.old`` (Windows allows renaming a running exe)
+4. Rename the temp file to the original name
+5. Spawn a cmd restart script that logs every step to ``restart.log``
+6. ``os._exit(0)`` — hard exit
+7. On next startup, ``cleanup_old_exe()`` reads ``restart.log``, cleans
+   up the ``.old`` file, and removes stale ``_MEI`` temp dirs
 """
 
 from __future__ import annotations
@@ -27,6 +29,13 @@ from pathlib import Path
 from launcher import config
 
 LOG = logging.getLogger("wopc.updater")
+
+# Minimum acceptable exe size (10 MB).  Our launcher is ~30 MB; a truncated
+# or corrupt download will be much smaller.
+_MIN_EXE_SIZE = 10 * 1024 * 1024
+
+# PE header magic bytes — every valid Windows exe starts with "MZ".
+_PE_MAGIC = b"MZ"
 
 # GitHub API endpoint — search for releases with the launcher tag prefix
 _RELEASES_URL = "https://api.github.com/repos/reimarus/withourpowerscombined/releases"
@@ -58,6 +67,41 @@ def _current_version_tuple() -> tuple[int, ...]:
         return tuple(int(x) for x in ver.split("."))
     except ValueError:
         return (0, 0, 0)
+
+
+# ---------------------------------------------------------------------------
+# Exe verification
+# ---------------------------------------------------------------------------
+
+
+class VerificationError(Exception):
+    """Raised when a downloaded exe fails integrity checks."""
+
+
+def _verify_exe(path: Path) -> None:
+    """Verify a downloaded exe is valid before applying.
+
+    Checks:
+    - File size is above ``_MIN_EXE_SIZE`` (truncated download guard)
+    - First 2 bytes are ``MZ`` (PE header magic)
+
+    Raises :class:`VerificationError` on failure.
+    """
+    size = path.stat().st_size
+    if size < _MIN_EXE_SIZE:
+        raise VerificationError(
+            f"Downloaded exe is only {size / 1e6:.1f} MB "
+            f"(expected >{_MIN_EXE_SIZE / 1e6:.0f} MB) — likely truncated"
+        )
+
+    with path.open("rb") as f:
+        magic = f.read(2)
+    if magic != _PE_MAGIC:
+        raise VerificationError(
+            f"Downloaded exe has invalid PE header: {magic!r} (expected {_PE_MAGIC!r})"
+        )
+
+    LOG.info("Exe verification passed: %.1f MB, valid PE header", size / 1e6)
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +225,15 @@ def download_update(
                     progress_cb(downloaded, total)
 
         LOG.info("Downloaded update: %s (%.1f MB)", tmp_path.name, tmp_path.stat().st_size / 1e6)
+
+        # Verify before returning — catch truncated/corrupt downloads
+        try:
+            _verify_exe(tmp_path)
+        except VerificationError as exc:
+            LOG.error("Update verification failed: %s", exc)
+            tmp_path.unlink(missing_ok=True)
+            return None
+
         return tmp_path
     except (OSError, urllib.error.URLError) as exc:
         LOG.error("Update download failed: %s", exc)
@@ -193,6 +246,8 @@ def apply_update(tmp_path: Path) -> bool:
     """Replace the running exe with the downloaded update and restart.
 
     On Windows, a running exe can be renamed (but not deleted).
+    The restart is handled by a cmd script that logs every step to
+    ``restart.log`` next to the exe for post-mortem debugging.
     """
     if not getattr(sys, "frozen", False):
         return False
@@ -219,22 +274,27 @@ def apply_update(tmp_path: Path) -> bool:
         # bootloader finds the stale _MEI dir and shows a warning dialog.
         # Fix: spawn a cmd script that (1) waits for this process to die,
         # (2) deletes the stale _MEI dir, (3) launches the new exe.
+        #
+        # The script writes each step to restart.log for debugging.
+        # ``start ""`` launches the new exe non-blocking — the old cmd
+        # approach ran the exe directly, which blocked until it exited
+        # (observed 68s restart delay).
         meipass = getattr(sys, "_MEIPASS", None)
+        restart_log = exe_path.parent / "restart.log"
         if meipass:
             LOG.info("Scheduling _MEI cleanup + restart: %s", meipass)
-            # Use ``ping`` for delay — ``timeout`` requires an interactive
-            # console and silently fails inside ``cmd /c``, leaving the
-            # stale _MEI directory behind.  Triple retry rmdir with longer
-            # delays to handle Windows Defender file locks and slow process
-            # teardown.  Total delay ~11s before relaunch.
             subprocess.Popen(
-                f"cmd /c ping -n 6 127.0.0.1 >nul"
-                f' & rmdir /s /q "{meipass}" 2>nul'
+                f"cmd /c ("
+                f'echo [%date% %time%] Starting update restart >>"{restart_log}"'
+                f" & ping -n 4 127.0.0.1 >nul"
+                f' & echo [%date% %time%] Deleting _MEI: {meipass} >>"{restart_log}"'
+                f' & rmdir /s /q "{meipass}" 2>>"{restart_log}"'
                 f" & ping -n 3 127.0.0.1 >nul"
-                f' & rmdir /s /q "{meipass}" 2>nul'
-                f" & ping -n 3 127.0.0.1 >nul"
-                f' & rmdir /s /q "{meipass}" 2>nul'
-                f' & "{exe_path}"',
+                f' & rmdir /s /q "{meipass}" 2>>"{restart_log}"'
+                f' & echo [%date% %time%] Launching new exe: {exe_path} >>"{restart_log}"'
+                f' & start "" "{exe_path}"'
+                f' & echo [%date% %time%] Launch command issued >>"{restart_log}"'
+                f")",
                 shell=True,
             )
         else:
@@ -251,13 +311,17 @@ def apply_update(tmp_path: Path) -> bool:
             try:
                 old_path.rename(exe_path)
                 LOG.info("Restored original exe")
-            except OSError:
-                pass
+            except OSError as restore_exc:
+                LOG.error("Failed to restore original exe: %s", restore_exc)
         return False
 
 
 def cleanup_old_exe() -> None:
     """Remove the ``.old`` leftover from a previous update and stale _MEI dirs.
+
+    Also reads and logs ``restart.log`` (written by the cmd restart script)
+    so we have visibility into what happened between the old process exiting
+    and this new process starting.
 
     PyInstaller ``--onefile`` extracts to a temp ``_MEI*`` directory. If the
     process crashes, these dirs accumulate and PyInstaller shows a warning
@@ -265,15 +329,34 @@ def cleanup_old_exe() -> None:
     """
     if not getattr(sys, "frozen", False):
         return
+
+    exe_dir = Path(sys.executable).parent
+
+    # --- Read and log restart.log from the cmd restart script ---
+    restart_log = exe_dir / "restart.log"
+    if restart_log.exists():
+        try:
+            content = restart_log.read_text(encoding="utf-8", errors="replace").strip()
+            if content:
+                LOG.info("--- restart.log from previous update ---")
+                for line in content.splitlines():
+                    LOG.info("  %s", line)
+                LOG.info("--- end restart.log ---")
+            restart_log.unlink()
+            LOG.info("Cleaned up restart.log")
+        except OSError as exc:
+            LOG.warning("Failed to read/delete restart.log: %s", exc)
+
+    # --- Clean up .old file ---
     old_path = Path(sys.executable).with_suffix(".old")
     if old_path.exists():
         try:
             old_path.unlink()
             LOG.info("Cleaned up %s", old_path.name)
-        except OSError:
-            pass  # Still locked, will try next launch
+        except OSError as exc:
+            LOG.warning("Failed to clean up %s: %s", old_path.name, exc)
 
-    # Clean up stale _MEI temp directories from previous PyInstaller runs
+    # --- Clean up stale _MEI temp directories from previous PyInstaller runs ---
     import shutil
     import tempfile
 
@@ -288,7 +371,7 @@ def cleanup_old_exe() -> None:
                 try:
                     shutil.rmtree(entry)
                     LOG.info("Cleaned up stale PyInstaller temp dir: %s", entry.name)
-                except OSError:
-                    pass  # Still in use by another process
-    except OSError:
-        pass
+                except OSError as exc:
+                    LOG.warning("Failed to clean up %s: %s", entry.name, exc)
+    except OSError as exc:
+        LOG.warning("Failed to scan temp dir for stale _MEI dirs: %s", exc)
