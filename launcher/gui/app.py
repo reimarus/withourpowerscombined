@@ -166,6 +166,7 @@ class WopcApp(BaseApp):  # type: ignore
         # Show the correct initial screen
         self._show_screen("solo")
 
+        self.report_callback_exception = self._on_tk_exception
         self._check_installation_status()
         self._bind_hotkeys()
 
@@ -576,9 +577,14 @@ class WopcApp(BaseApp):  # type: ignore
         self.send_logs_btn.grid(row=14, column=0, padx=20, pady=(4, 0), sticky="ew")
 
         # Version tag
+        from launcher.__version__ import COMMIT_HASH
+
+        _ver_text = f"v{config.VERSION}"
+        if COMMIT_HASH:
+            _ver_text += f" ({COMMIT_HASH})"
         self.version_label = ctk.CTkLabel(
             self.sidebar,
-            text=f"v{config.VERSION}",
+            text=_ver_text,
             text_color=COLOR_ACCENT_DIM,
             font=ctk.CTkFont(size=11),
         )
@@ -1975,6 +1981,20 @@ class WopcApp(BaseApp):  # type: ignore
         self._disconnect_lobby_client()
         super().destroy()
 
+    def _on_tk_exception(self, exc_type: type, exc_value: BaseException, exc_tb: Any) -> None:
+        """Handle uncaught exceptions in tkinter callbacks.
+
+        Logs the full traceback to launcher.log and shows a one-line
+        summary in the GUI textbox.  Keeps the app alive instead of
+        crashing silently.
+        """
+        logger.error(
+            "Unhandled exception in UI callback",
+            exc_info=(exc_type, exc_value, exc_tb),
+        )
+        with contextlib.suppress(Exception):
+            self.log(f"ERROR: {exc_type.__name__}: {exc_value}")
+
 
 def launch_gui() -> None:
     """Instantiate and run the WOPC graphical application."""
@@ -1982,5 +2002,28 @@ def launch_gui() -> None:
         logger.error("FATAL: customtkinter is not installed. Run 'pip install customtkinter'.")
         sys.exit(1)
 
-    app = WopcApp()
-    app.mainloop()
+    try:
+        app = WopcApp()
+        app.mainloop()
+    except Exception:
+        logger.exception("Fatal error in launcher GUI")
+        # Show error dialog if tkinter still works
+        try:
+            import tkinter.messagebox as mb
+
+            mb.showerror(
+                "WOPC Launcher",
+                "A fatal error occurred.\nCheck launcher.log for details.",
+            )
+        except Exception:
+            pass
+        # Try to upload crash info to Firebase
+        try:
+            import traceback
+
+            from launcher.relay import RelayClient
+
+            RelayClient.upload_logs(["CRASH: " + traceback.format_exc()])
+        except Exception:
+            pass
+        sys.exit(1)

@@ -370,10 +370,13 @@ class RelayClient:
         import platform
         import sys
 
+        from launcher.__version__ import COMMIT_HASH
+
         system_info = {
             "os": platform.platform(),
             "python": sys.version,
             "wopc_version": config.VERSION,
+            "commit_hash": COMMIT_HASH,
             "scfa_path": str(config.SCFA_STEAM),
             "wopc_root": str(config.WOPC_ROOT),
         }

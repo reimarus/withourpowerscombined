@@ -102,6 +102,10 @@ Items to tackle over time, roughly grouped by priority.
 75. **Solo color picker doesn't update swatch** — Selecting a new color in the solo player options doesn't visually update the color indicator, though the value is saved correctly.
 76. **Auto-include content packs in `wopc setup`** — Content pack SCDs (BlackOps, TotalMayhem, BrewLAN, etc.) require manual download via mod panel. Should be auto-downloaded during `wopc setup` so players get the full experience out of the box.
 
+## Security
+
+77. **Firebase anonymous auth** — All Firebase REST requests are unauthenticated. Anyone who finds the hardcoded URL can read/write/delete game listings and reports. Add Firebase anonymous auth (POST to `identitytoolkit.googleapis.com/v1/accounts:signUp?key=API_KEY` → returns ID token, append `?auth=TOKEN` to all requests). Set Firebase security rules to `"auth != null"`. Needs: Web API Key from Firebase Console (Project Settings), `FIREBASE_API_KEY` in config.py, auth token helper in relay.py, server-side rules update.
+
 ## Platform Support
 
 34. **Linux support** — port the launcher and game setup to run on Linux (Wine/Proton for SCFA, native Python launcher, path discovery for Linux Steam libraries, .desktop integration)
