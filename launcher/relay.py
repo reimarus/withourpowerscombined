@@ -25,6 +25,7 @@ import urllib.error
 import urllib.request
 import uuid
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from launcher import config
@@ -312,68 +313,41 @@ class RelayClient:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def upload_logs(log_lines: list[str], host_name: str = "", launch_id: str = "") -> bool:
-        """Upload launcher + engine logs to Firebase ``/reports/`` node.
+    def read_log_tail(path: Path, max_lines: int = 300) -> str:
+        """Read the last *max_lines* from a log file.
 
-        Includes:
-        - Launcher GUI log (last 500 lines from ``log_lines``)
-        - Engine log (last 300 lines from WOPC.log)
-        - System info (OS, Python version, WOPC version, exe path)
-        - Game.prefs snippet (active_mods section for corruption diagnosis)
-        - Launch ID for correlating with engine logs
-
-        Returns True on success, False on any failure.
+        Returns the text (lines joined by ``\\n``), or an empty string
+        if the file doesn't exist or can't be read.
         """
-        if not config.RELAY_URL:
-            return False
-        report_id = str(uuid.uuid4())
-        url = f"{config.RELAY_URL}/reports/{report_id}.json"
-
-        # Collect engine log (WOPC.log) — the real source of game errors
-        engine_log = ""
         try:
-            engine_log_path = config.WOPC_BIN / config.GAME_LOG
-            if engine_log_path.exists():
-                all_lines = engine_log_path.read_text(
-                    encoding="utf-8", errors="replace"
-                ).splitlines()
-                engine_log = "\n".join(all_lines[-300:])
-        except Exception:
-            engine_log = "(could not read engine log)"
-
-        # Also grab SupCom.sclog — the vanilla SCFA log that captures
-        # early boot failures before WOPC.log is created
-        sclog = ""
-        try:
-            from launcher.game_prefs_repair import _GAME_PREFS_DIR
-
-            sclog_path = _GAME_PREFS_DIR / "SupCom.sclog"
-            if sclog_path.exists():
-                sc_lines = sclog_path.read_text(encoding="utf-8", errors="replace").splitlines()
-                sclog = "\n".join(sc_lines[-200:])
+            if path.exists():
+                all_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+                return "\n".join(all_lines[-max_lines:])
         except Exception:
             pass
+        return ""
 
-        # Collect engine errors/warnings separately for quick triage
-        engine_errors = ""
-        try:
-            if engine_log:
-                err_lines = [
-                    line
-                    for line in engine_log.splitlines()
-                    if line.startswith(("warning:", "error:", "ASSERT"))
-                ]
-                engine_errors = "\n".join(err_lines[-50:])
-        except Exception:
-            pass
+    @staticmethod
+    def extract_engine_errors(engine_log: str, max_lines: int = 50) -> str:
+        """Filter engine log text for warning/error/ASSERT lines."""
+        if not engine_log:
+            return ""
+        err_lines = [
+            line
+            for line in engine_log.splitlines()
+            if line.startswith(("warning:", "error:", "ASSERT"))
+        ]
+        return "\n".join(err_lines[-max_lines:])
 
-        # System info for remote diagnosis
+    @staticmethod
+    def collect_system_info() -> dict[str, Any]:
+        """Gather OS, Python, WOPC version, and path info."""
         import platform
         import sys
 
         from launcher.__version__ import COMMIT_HASH
 
-        system_info = {
+        return {
             "os": platform.platform(),
             "python": sys.version,
             "wopc_version": config.VERSION,
@@ -382,41 +356,57 @@ class RelayClient:
             "wopc_root": str(config.WOPC_ROOT),
         }
 
-        # Check if Game.prefs exists and grab active_mods state
-        from launcher.game_prefs_repair import GAME_PREFS_PATH
+    @staticmethod
+    def extract_game_prefs_mods(prefs_path: Path) -> str:
+        """Extract the ``active_mods`` snippet from Game.prefs."""
+        import re
 
-        game_prefs_snippet = ""
         try:
-            if GAME_PREFS_PATH.exists():
-                import re
-
-                content = GAME_PREFS_PATH.read_text(encoding="utf-8", errors="replace")
-                # Extract active_mods lines for corruption diagnosis
+            if prefs_path.exists():
+                content = prefs_path.read_text(encoding="utf-8", errors="replace")
                 match = re.search(r"active_mods\s*=\s*[^\n]+", content)
                 if match:
-                    game_prefs_snippet = match.group(0)[:200]
+                    return match.group(0)[:200]
         except Exception:
             pass
+        return ""
 
-        # Collect file-based launcher log (has Python logger output — map scan
-        # errors, mod compat patches, content staleness checks, etc.)
-        launcher_file_log = ""
-        try:
-            launcher_log_path = config.WOPC_ROOT / "launcher.log"
-            if launcher_log_path.exists():
-                fl_lines = launcher_log_path.read_text(
-                    encoding="utf-8", errors="replace"
-                ).splitlines()
-                launcher_file_log = "\n".join(fl_lines[-300:])
-        except Exception:
-            pass
+    @staticmethod
+    def upload_logs(log_lines: list[str], host_name: str = "", launch_id: str = "") -> bool:
+        """Upload launcher + engine logs to Firebase ``/reports/`` node.
+
+        Collects logs from multiple sources (engine, launcher, SupCom.sclog),
+        system info, and Game.prefs state, then uploads as a single report.
+        The ``launch_id`` correlates this report with launcher and engine logs.
+
+        Returns True on success, False on any failure.
+        """
+        if not config.RELAY_URL:
+            return False
+        report_id = str(uuid.uuid4())
+        url = f"{config.RELAY_URL}/reports/{report_id}.json"
+
+        # Collect log sources — each helper is independently testable
+        engine_log = RelayClient.read_log_tail(config.WOPC_BIN / config.GAME_LOG, 300)
+        if not engine_log:
+            # Distinguish "no file" from "empty file"
+            engine_log_path = config.WOPC_BIN / config.GAME_LOG
+            if not engine_log_path.exists():
+                engine_log = "(engine log not found)"
+
+        from launcher.game_prefs_repair import _GAME_PREFS_DIR, GAME_PREFS_PATH
+
+        sclog = RelayClient.read_log_tail(_GAME_PREFS_DIR / "SupCom.sclog", 200)
+        engine_errors = RelayClient.extract_engine_errors(engine_log)
+        game_prefs_snippet = RelayClient.extract_game_prefs_mods(GAME_PREFS_PATH)
+        launcher_file_log = RelayClient.read_log_tail(config.WOPC_ROOT / "launcher.log", 300)
 
         payload: dict[str, Any] = {
             "timestamp": time.time(),
             "host_name": host_name,
             "version": config.VERSION,
             "launch_id": launch_id,
-            "system": system_info,
+            "system": RelayClient.collect_system_info(),
             "launcher_log": "\n".join(log_lines[-500:]),
             "launcher_file_log": launcher_file_log,
             "engine_log": engine_log,

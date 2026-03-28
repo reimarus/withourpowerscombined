@@ -628,3 +628,149 @@ class TestUploadLogs:
             mock_cfg.RELAY_URL = ""
             result = RelayClient.upload_logs(["hello"])
         assert result is False
+
+    def test_upload_includes_launch_id(self, tmp_path: Path) -> None:
+        """Launch ID is included in the uploaded payload."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        with (
+            patch("launcher.relay.urllib.request.urlopen") as mock_open,
+            patch("launcher.relay.config") as mock_cfg,
+            patch(
+                "launcher.game_prefs_repair.GAME_PREFS_PATH",
+                tmp_path / "Game.prefs",
+            ),
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            mock_cfg.VERSION = "2.01.0012"
+            mock_cfg.WOPC_BIN = fake_bin
+            mock_cfg.GAME_LOG = "WOPC.log"
+            mock_cfg.SCFA_STEAM = tmp_path
+            mock_cfg.WOPC_ROOT = tmp_path
+            mock_open.return_value = _make_response(b"{}")
+            RelayClient.upload_logs(["test"], launch_id="abc123def456")
+        body = json.loads(mock_open.call_args[0][0].data)
+        assert body["launch_id"] == "abc123def456"
+
+
+class TestReadLogTail:
+    """Tests for RelayClient.read_log_tail()."""
+
+    def test_reads_last_n_lines(self, tmp_path: Path) -> None:
+        """Returns the last N lines from a log file."""
+        log = tmp_path / "test.log"
+        log.write_text("\n".join(f"line {i}" for i in range(10)))
+        result = RelayClient.read_log_tail(log, max_lines=3)
+        assert result == "line 7\nline 8\nline 9"
+
+    def test_returns_all_if_fewer_than_max(self, tmp_path: Path) -> None:
+        """Returns all lines when file has fewer than max_lines."""
+        log = tmp_path / "test.log"
+        log.write_text("one\ntwo")
+        result = RelayClient.read_log_tail(log, max_lines=100)
+        assert result == "one\ntwo"
+
+    def test_returns_empty_for_missing_file(self, tmp_path: Path) -> None:
+        """Returns empty string when the file doesn't exist."""
+        result = RelayClient.read_log_tail(tmp_path / "nonexistent.log")
+        assert result == ""
+
+    def test_returns_empty_for_empty_file(self, tmp_path: Path) -> None:
+        """Returns empty string for an empty file."""
+        log = tmp_path / "empty.log"
+        log.write_text("")
+        result = RelayClient.read_log_tail(log)
+        assert result == ""
+
+    def test_handles_encoding_errors(self, tmp_path: Path) -> None:
+        """Handles files with invalid UTF-8 bytes gracefully."""
+        log = tmp_path / "bad.log"
+        log.write_bytes(b"good line\n\xff\xfe bad bytes\n")
+        result = RelayClient.read_log_tail(log)
+        assert "good line" in result
+
+
+class TestExtractEngineErrors:
+    """Tests for RelayClient.extract_engine_errors()."""
+
+    def test_extracts_warnings_and_errors(self) -> None:
+        """Filters lines starting with warning:, error:, or ASSERT."""
+        log = "info: ok\nwarning: low mem\nerror: crash\nASSERT: bad\ndebug: fine"
+        result = RelayClient.extract_engine_errors(log)
+        assert "warning: low mem" in result
+        assert "error: crash" in result
+        assert "ASSERT: bad" in result
+        assert "info: ok" not in result
+        assert "debug: fine" not in result
+
+    def test_returns_empty_for_no_errors(self) -> None:
+        """Returns empty string when no error lines exist."""
+        result = RelayClient.extract_engine_errors("info: all good\ndebug: fine")
+        assert result == ""
+
+    def test_returns_empty_for_empty_input(self) -> None:
+        """Returns empty string for empty input."""
+        assert RelayClient.extract_engine_errors("") == ""
+
+    def test_caps_at_max_lines(self) -> None:
+        """Respects max_lines limit."""
+        log = "\n".join(f"error: err {i}" for i in range(100))
+        result = RelayClient.extract_engine_errors(log, max_lines=5)
+        assert result.count("\n") == 4  # 5 lines = 4 newlines
+
+
+class TestCollectSystemInfo:
+    """Tests for RelayClient.collect_system_info()."""
+
+    def test_returns_expected_keys(self) -> None:
+        """System info dict has all required keys."""
+        with patch("launcher.relay.config") as mock_cfg:
+            mock_cfg.VERSION = "2.01.0062"
+            mock_cfg.SCFA_STEAM = Path("C:/fake")
+            mock_cfg.WOPC_ROOT = Path("C:/fake/WOPC")
+            info = RelayClient.collect_system_info()
+        assert "os" in info
+        assert "python" in info
+        assert info["wopc_version"] == "2.01.0062"
+        assert "commit_hash" in info
+        assert "scfa_path" in info
+        assert "wopc_root" in info
+
+
+class TestExtractGamePrefsMods:
+    """Tests for RelayClient.extract_game_prefs_mods()."""
+
+    def test_extracts_active_mods_line(self, tmp_path: Path) -> None:
+        """Extracts the active_mods line from Game.prefs."""
+        prefs = tmp_path / "Game.prefs"
+        prefs.write_text("foo = 1\nactive_mods = { ['uid1'] = true }\nbar = 2\n")
+        result = RelayClient.extract_game_prefs_mods(prefs)
+        assert "active_mods" in result
+        assert "uid1" in result
+
+    def test_returns_empty_when_no_active_mods(self, tmp_path: Path) -> None:
+        """Returns empty string when active_mods not present."""
+        prefs = tmp_path / "Game.prefs"
+        prefs.write_text("foo = 1\nbar = 2\n")
+        result = RelayClient.extract_game_prefs_mods(prefs)
+        assert result == ""
+
+    def test_returns_empty_for_missing_file(self, tmp_path: Path) -> None:
+        """Returns empty string when file doesn't exist."""
+        result = RelayClient.extract_game_prefs_mods(tmp_path / "nonexistent")
+        assert result == ""
+
+    def test_truncates_long_line(self, tmp_path: Path) -> None:
+        """Long active_mods lines are truncated to 200 chars."""
+        prefs = tmp_path / "Game.prefs"
+        long_value = "x" * 300
+        prefs.write_text(f"active_mods = {long_value}\n")
+        result = RelayClient.extract_game_prefs_mods(prefs)
+        assert len(result) == 200
+
+    def test_handles_corrupted_boolean(self, tmp_path: Path) -> None:
+        """Handles the known corruption case: active_mods = true."""
+        prefs = tmp_path / "Game.prefs"
+        prefs.write_text("active_mods = true\n")
+        result = RelayClient.extract_game_prefs_mods(prefs)
+        assert "active_mods = true" in result
