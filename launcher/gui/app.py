@@ -86,6 +86,8 @@ from launcher.gui.constants import (  # noqa: E402
     COLOR_WARN,
 )
 
+_UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000  # Re-check for updates every 30 min
+
 
 class WopcApp(BaseApp):  # type: ignore
     """The main Graphical User Interface for the WOPC Launcher."""
@@ -172,11 +174,17 @@ class WopcApp(BaseApp):  # type: ignore
         self._check_installation_status()
         self._bind_hotkeys()
 
+        # Log startup diagnostics for update troubleshooting
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            logger.info("PyInstaller _MEIPASS: %s", meipass)
+        logger.info("Executable: %s", sys.executable)
+
         # Clean up old exe from previous update — defer 5s to let the old
         # process fully release its _MEI temp directory file handles first.
         self.after(5000, updater.cleanup_old_exe)
         self._pending_update: updater.UpdateInfo | None = None
-        threading.Thread(target=self._check_for_update, daemon=True).start()
+        self._schedule_update_check()
 
     def _set_window_icon(self) -> None:
         """Set the application window icon (title bar + taskbar)."""
@@ -195,15 +203,40 @@ class WopcApp(BaseApp):  # type: ignore
         else:
             base_dir = Path(__file__).parent.parent.parent.resolve()
 
-        icon_path = base_dir / "launcher" / "gui" / "wopc.ico"
-        if icon_path.exists():
+        self._icon_path = base_dir / "launcher" / "gui" / "wopc.ico"
+        self._icon_photo = None  # prevent GC of PhotoImage
+
+        if self._icon_path.exists():
             try:
-                self.iconbitmap(str(icon_path))
-                # Defer a second call — CustomTkinter can override the icon
-                # during its own init, so re-apply after the event loop starts.
-                self.after(100, lambda: self.iconbitmap(str(icon_path)))
+                self.iconbitmap(str(self._icon_path))
             except Exception as exc:
-                logger.warning("Failed to set window icon: %s", exc)
+                logger.warning("Failed to set iconbitmap: %s", exc)
+
+            # Also set wm_iconphoto for better taskbar coverage
+            if _PIL_AVAILABLE:
+                try:
+                    from PIL import ImageTk
+
+                    img = PilImage.open(self._icon_path)
+                    self._icon_photo = ImageTk.PhotoImage(img)
+                    self.wm_iconphoto(True, self._icon_photo)
+                except Exception as exc:
+                    logger.warning("Failed to set wm_iconphoto: %s", exc)
+
+            # CustomTkinter can override the icon during its own init.
+            # Re-apply after the event loop settles (200ms and 1000ms).
+            self.after(200, self._reapply_icon)
+            self.after(1000, self._reapply_icon)
+
+    def _reapply_icon(self) -> None:
+        """Re-apply the window icon (deferred to survive CTk overrides)."""
+        try:
+            if self._icon_path and self._icon_path.exists():
+                self.iconbitmap(str(self._icon_path))
+            if self._icon_photo:
+                self.wm_iconphoto(True, self._icon_photo)
+        except Exception:
+            pass
 
     def _restore_window_size(self) -> None:
         """Restore the last saved window dimensions from user prefs."""
@@ -1752,9 +1785,20 @@ class WopcApp(BaseApp):  # type: ignore
     # Self-update
     # ------------------------------------------------------------------
 
+    def _schedule_update_check(self) -> None:
+        """Launch a background update check and schedule periodic re-checks."""
+        threading.Thread(target=self._check_for_update, daemon=True).start()
+        self.after(_UPDATE_CHECK_INTERVAL_MS, self._maybe_recheck_update)
+
+    def _maybe_recheck_update(self) -> None:
+        """Periodically re-check for updates if none found yet."""
+        if self._pending_update is None:
+            threading.Thread(target=self._check_for_update, daemon=True).start()
+        self.after(_UPDATE_CHECK_INTERVAL_MS, self._maybe_recheck_update)
+
     def _check_for_update(self) -> None:
         """Background thread: check GitHub for a new launcher version."""
-        info = updater.check_for_update()
+        info = updater.check_for_update(retry_on_failure=True)
         if info is not None:
             self._pending_update = info
             self.after(0, self._show_update_available)

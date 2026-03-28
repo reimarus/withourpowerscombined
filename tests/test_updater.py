@@ -145,6 +145,45 @@ class TestCheckForUpdate:
         ):
             assert updater.check_for_update() is None
 
+    def test_retries_on_network_failure(self) -> None:
+        """With retry_on_failure=True, retries once after network error."""
+        releases = [
+            {
+                "tag_name": "launcher-v2.0.0",
+                "draft": False,
+                "prerelease": False,
+                "assets": [
+                    {
+                        "name": "WOPC-Launcher.exe",
+                        "browser_download_url": "https://example.com/exe",
+                        "size": 30_000_000,
+                    }
+                ],
+                "body": "",
+            }
+        ]
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(releases).encode()
+
+        call_count = 0
+
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise OSError("no network")
+            return mock_resp
+
+        with (
+            patch.object(updater.config, "VERSION", "1.0.0"),
+            patch("launcher.updater.urllib.request.urlopen", side_effect=side_effect),
+            patch("launcher.updater.time.sleep"),
+        ):
+            result = updater.check_for_update(retry_on_failure=True)
+            assert result is not None
+            assert result.version == "2.0.0"
+            assert call_count == 2
+
 
 # ---------------------------------------------------------------------------
 # Exe verification
@@ -263,6 +302,32 @@ class TestCleanup:
 
         assert any("Failed to clean up" in r.message for r in caplog.records)
 
+    def test_cleanup_removes_stale_restart_log_paren(self, tmp_path: Path) -> None:
+        """Stale 'restart.log)' from old cmd /c (...) code is cleaned up."""
+        stale = tmp_path / "restart.log)"
+        stale.write_text("stale content")
+
+        with (
+            patch.object(updater.sys, "frozen", True, create=True),
+            patch.object(updater.sys, "executable", str(tmp_path / "WOPC-Launcher.exe")),
+        ):
+            updater.cleanup_old_exe()
+
+        assert not stale.exists(), "restart.log) should be deleted"
+
+    def test_cleanup_removes_restart_script(self, tmp_path: Path) -> None:
+        """_wopc_restart.cmd from previous update is cleaned up."""
+        script = tmp_path / "_wopc_restart.cmd"
+        script.write_text("@echo off\nrem old script")
+
+        with (
+            patch.object(updater.sys, "frozen", True, create=True),
+            patch.object(updater.sys, "executable", str(tmp_path / "WOPC-Launcher.exe")),
+        ):
+            updater.cleanup_old_exe()
+
+        assert not script.exists(), "_wopc_restart.cmd should be deleted"
+
 
 class TestRestartSafety:
     """Test that the restart mechanism doesn't use shell=True."""
@@ -293,3 +358,42 @@ class TestRestartSafety:
             # First arg should be a list (not a string)
             args = call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs.get("args")
             assert isinstance(args, list), "Popen should be called with a list, not a string"
+
+    def test_restart_script_no_mei_deletion(self, tmp_path: Path) -> None:
+        """Restart script must NOT delete _MEI dirs (cleanup is deferred)."""
+        exe = tmp_path / "WOPC-Launcher.exe"
+        exe.write_bytes(b"MZ" + b"\x00" * 1000)
+        new_exe = tmp_path / "update.exe"
+        new_exe.write_bytes(b"MZ" + b"\x00" * 1000)
+
+        with (
+            patch.object(updater.sys, "frozen", True, create=True),
+            patch.object(updater.sys, "executable", str(exe)),
+            patch.object(updater.sys, "_MEIPASS", str(tmp_path / "_MEI999"), create=True),
+            patch("launcher.updater.subprocess.Popen"),
+            patch("launcher.updater.os._exit"),
+        ):
+            updater.apply_update(new_exe)
+
+        script = (tmp_path / "_wopc_restart.cmd").read_text(encoding="utf-8")
+        assert "rmdir /s /q" not in script, "Must not delete _MEI dirs in restart script"
+
+    def test_restart_script_no_start_command(self, tmp_path: Path) -> None:
+        """Restart script must launch exe directly, not via 'start'."""
+        exe = tmp_path / "WOPC-Launcher.exe"
+        exe.write_bytes(b"MZ" + b"\x00" * 1000)
+        new_exe = tmp_path / "update.exe"
+        new_exe.write_bytes(b"MZ" + b"\x00" * 1000)
+
+        with (
+            patch.object(updater.sys, "frozen", True, create=True),
+            patch.object(updater.sys, "executable", str(exe)),
+            patch.object(updater.sys, "_MEIPASS", str(tmp_path / "_MEI999"), create=True),
+            patch("launcher.updater.subprocess.Popen"),
+            patch("launcher.updater.os._exit"),
+        ):
+            updater.apply_update(new_exe)
+
+        script = (tmp_path / "_wopc_restart.cmd").read_text(encoding="utf-8")
+        assert 'start ""' not in script, "Must not use 'start' for exe launch"
+        assert f'"{exe}"' in script, "Exe should be invoked directly"
