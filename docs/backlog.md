@@ -105,6 +105,8 @@ Items to tackle over time, roughly grouped by priority.
 ## Observability
 
 78. **Launch ID correlation (PK/FK for launcher ↔ engine)** — Generate a unique launch UUID per game launch attempt. Write it to launcher.log, pass it via the game config, and have the engine write it to WOPC.log on startup. Firebase reports include both, so we can correlate "launcher said it launched" with "engine actually ran." Currently there's no link between the two log streams — the launcher says "Launching game..." but we can't tell if the exe actually started or what session the engine log belongs to.
+81. ~~**Game exit monitoring — zero post-launch visibility**~~ ✅ — After `cmd_launch()`, launcher had no visibility into game state. Added daemon thread that monitors process exit code, session duration, and reads last 20 lines of WOPC.log. Quick exits (<30s) trigger a warning. Shipped in v2.01.0061.
+82. ~~**PhxLib.lua division-by-nil causing loading hang**~~ ✅ — `weapon.EnergyDrainPerSecond` nil at PhxLib.lua line 485 in lua.scd content pack. Patched via `_patch_scd()` at deploy time. CONTENT_BUILD bumped to 3 to force re-setup. Shipped in v2.01.0061.
 79. ~~**Game exe not starting after launch / vanilla lobby instead of quickstart**~~ ✅ — Multiple root causes found and fixed across v2.01.0057-0059:
     - v2.01.0057: Destructive content staleness check deleted wopc_core.scd before confirming replacement. Fix: delete only marker, keep SCD as fallback, pre-launch validation.
     - v2.01.0058: 795 MB download failing on slow connections (30s timeout). Fix: 120/300s timeouts, HTTP Range resume, 5 retries, GUI progress, post-setup size validation.
