@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import subprocess
 import sys
 import threading
 import time
@@ -1832,7 +1833,7 @@ class WopcApp(BaseApp):  # type: ignore
                 )
             self.log(f"Spawns: human→ARMY_{start_spot}, team→{team}")
 
-        ret = cmd_launch(
+        result = cmd_launch(
             ai_opponents=ai_opponents,
             game_options=game_options,
             player_color=color,
@@ -1840,8 +1841,9 @@ class WopcApp(BaseApp):  # type: ignore
             player_team=team,
             launch_mode="solo",
         )
-        if ret == 0:
+        if isinstance(result, subprocess.Popen):
             self.log("Game process started successfully.")
+            self._monitor_game_process(result)
         else:
             self.log("Game failed to launch.")
 
@@ -1860,7 +1862,7 @@ class WopcApp(BaseApp):  # type: ignore
         team_var = host_slot.get("team_var")
         team = int(team_var.get()) + 1 if team_var else 2  # engine offset
 
-        ret = cmd_launch(
+        result = cmd_launch(
             ai_opponents=ai_opponents,
             game_options=game_options,
             player_color=color,
@@ -1868,8 +1870,9 @@ class WopcApp(BaseApp):  # type: ignore
             player_team=team,
             launch_mode="host",
         )
-        if ret == 0:
+        if isinstance(result, subprocess.Popen):
             self.log("Game process started successfully.")
+            self._monitor_game_process(result)
         else:
             self.log("Game failed to launch.")
 
@@ -1889,6 +1892,65 @@ class WopcApp(BaseApp):  # type: ignore
                 text="▶  LAUNCH GAME", fg_color=COLOR_LAUNCH, state="normal"
             ),
         )
+
+    def _monitor_game_process(self, proc: subprocess.Popen) -> None:
+        """Monitor the game process in a background thread.
+
+        Waits for the game to exit, then logs:
+        - Exit code and session duration
+        - Warning if duration < 30s (likely failed during loading)
+        - Last 20 lines of WOPC.log for engine state at exit time
+        """
+
+        def _wait_and_log() -> None:
+            start = time.monotonic()
+            exit_code = proc.wait()
+            duration = time.monotonic() - start
+            mins, secs = divmod(int(duration), 60)
+
+            # Log exit code and duration
+            logger.info(
+                "Game exited: code=%s, duration=%dm%02ds (%.0fs)",
+                exit_code,
+                mins,
+                secs,
+                duration,
+            )
+
+            # GUI message
+            if duration < 30:
+                msg = (
+                    f"Game exited quickly ({int(duration)}s, code={exit_code})"
+                    " — likely failed during loading. Check logs."
+                )
+                logger.warning(
+                    "Game exited very quickly (%.1fs) — likely failed during loading",
+                    duration,
+                )
+            else:
+                msg = f"Game ended ({mins}m{secs:02d}s, code={exit_code})"
+
+            # Read tail of WOPC.log for engine state at exit
+            game_log = config.WOPC_BIN / config.GAME_LOG
+            if game_log.exists():
+                try:
+                    lines = game_log.read_text(encoding="utf-8", errors="replace").splitlines()
+                    tail = lines[-20:] if len(lines) > 20 else lines
+                    logger.info("=== WOPC.log tail (%d lines) ===", len(tail))
+                    for line in tail:
+                        logger.info("  %s", line)
+                    logger.info("=== end WOPC.log tail ===")
+                except OSError as exc:
+                    logger.warning("Could not read WOPC.log: %s", exc)
+            else:
+                logger.info("WOPC.log not found at %s", game_log)
+
+            # Post GUI message on the main thread
+            with contextlib.suppress(Exception):
+                self.after(0, lambda: self.log(msg))
+
+        t = threading.Thread(target=_wait_and_log, daemon=True, name="game-monitor")
+        t.start()
 
     def _persist_widget_values(self) -> None:
         """Save any unsaved widget values to prefs before launching."""

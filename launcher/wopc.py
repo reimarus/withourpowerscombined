@@ -149,7 +149,7 @@ def cmd_launch(
     player_start_spot: int = 1,
     player_team: int = 1,
     launch_mode: str | None = None,
-) -> int:
+) -> subprocess.Popen | int:
     """Launch the game from the WOPC directory.
 
     Supports three launch modes:
@@ -377,7 +377,7 @@ def cmd_launch(
         logger.error("  Game exited immediately with code %d.", exit_code)
         return 1
     logger.info("  Game process still running after 1.5 s — launch OK.")
-    return 0
+    return proc
 
 
 def cmd_validate(args: list[str] | None = None) -> int:
