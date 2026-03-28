@@ -228,34 +228,6 @@ def _download_and_extract(url: str, dst_dir: Path) -> bool:
             tmp_zip.unlink()
 
 
-def _acquire_core_content() -> None:
-    """Download core content assets from GitHub Releases when running standalone.
-
-    This is the download-first path for frozen exe / no-repo installs.
-    Iterates CORE_CONTENT_ASSETS and downloads anything missing.
-    """
-    for name, info in config.CORE_CONTENT_ASSETS.items():
-        dst_subdir = str(info["dst"])
-        dst_dir = config.WOPC_ROOT / dst_subdir
-        dst_dir.mkdir(parents=True, exist_ok=True)
-
-        if info.get("extract"):
-            # For zip archives, check if extraction target has content
-            # (we can't easily check if the specific zip was already extracted,
-            # so we check if the dst_dir has any subdirectories)
-            if any(dst_dir.iterdir()):
-                logger.info("  %s already populated, skipping %s", dst_subdir, name)
-                continue
-            logger.info("  downloading and extracting %s", name)
-            _download_and_extract(str(info["url"]), dst_dir)
-        else:
-            dst_file = dst_dir / name
-            if dst_file.exists():
-                logger.info("  %s already exists, skipping", name)
-                continue
-            _download_file(str(info["url"]), dst_file)
-
-
 def _extract_mods_from_scd(scd_path: Path) -> list[str]:
     """Extract mod directories from an SCD to WOPC/mods/.
 
