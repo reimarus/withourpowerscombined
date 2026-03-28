@@ -7,5 +7,5 @@ version in N.NN.NNNN format so the GUI shows it correctly.
 Updated automatically by ``scripts/release.py``.
 """
 
-VERSION = "2.01.0063"
-COMMIT_HASH = "7720b80"  # Written by scripts/release.py at release time
+VERSION = "2.01.0064"
+COMMIT_HASH = "4864efa"  # Written by scripts/release.py at release time
