@@ -21,6 +21,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -132,24 +133,36 @@ class UpdateInfo:
         return f"UpdateInfo(tag={self.tag!r}, size={self.size_bytes})"
 
 
-def check_for_update() -> UpdateInfo | None:
+def check_for_update(*, retry_on_failure: bool = False) -> UpdateInfo | None:
     """Query GitHub for a newer launcher release.
 
     Returns an :class:`UpdateInfo` if an update is available, else *None*.
     This is safe to call from a background thread.
+
+    When *retry_on_failure* is True, a failed network request is retried
+    once after a 5-second delay (useful for startup when the network may
+    not be ready yet).
     """
     current = _current_version_tuple()
     LOG.info("Checking for updates (current: %s) ...", config.VERSION)
 
-    try:
-        req = urllib.request.Request(
-            _RELEASES_URL,
-            headers={"Accept": "application/vnd.github+json"},
-        )
-        resp = urllib.request.urlopen(req, timeout=_CHECK_TIMEOUT)
-        releases = json.loads(resp.read())
-    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
-        LOG.warning("Update check failed: %s", exc)
+    releases = None
+    for attempt in range(2 if retry_on_failure else 1):
+        try:
+            req = urllib.request.Request(
+                _RELEASES_URL,
+                headers={"Accept": "application/vnd.github+json"},
+            )
+            resp = urllib.request.urlopen(req, timeout=_CHECK_TIMEOUT)
+            releases = json.loads(resp.read())
+            break
+        except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+            LOG.warning("Update check failed (attempt %d): %s", attempt + 1, exc)
+            if attempt == 0 and retry_on_failure:
+                time.sleep(5)
+                LOG.info("Retrying update check ...")
+
+    if releases is None:
         return None
 
     best: UpdateInfo | None = None
@@ -282,21 +295,24 @@ def apply_update(tmp_path: Path) -> bool:
         meipass = getattr(sys, "_MEIPASS", None)
         restart_log = exe_path.parent / "restart.log"
         if meipass:
-            LOG.info("Scheduling _MEI cleanup + restart: %s", meipass)
+            LOG.info("Scheduling restart (old _MEI: %s)", meipass)
             restart_script = exe_path.parent / "_wopc_restart.cmd"
-            restart_script.write_text(
+            # Simple restart: wait for old process to exit, then launch
+            # new exe directly (inherits elevation from admin cmd).
+            # Do NOT delete _MEI here — cleanup_old_exe() handles it
+            # safely on next startup, avoiding bootloader race conditions.
+            script_text = (
                 f"@echo off\n"
                 f'echo [%date% %time%] Starting update restart >>"{restart_log}"\n'
+                f'echo [%date% %time%] Old _MEI was: {meipass} >>"{restart_log}"\n'
                 f"ping -n 4 127.0.0.1 >nul\n"
-                f'echo [%date% %time%] Deleting _MEI: {meipass} >>"{restart_log}"\n'
-                f'rmdir /s /q "{meipass}" 2>>"{restart_log}"\n'
-                f"ping -n 3 127.0.0.1 >nul\n"
-                f'rmdir /s /q "{meipass}" 2>>"{restart_log}"\n'
-                f'echo [%date% %time%] Launching new exe: {exe_path} >>"{restart_log}"\n'
-                f'start "" "{exe_path}"\n'
-                f'echo [%date% %time%] Launch command issued >>"{restart_log}"\n',
-                encoding="utf-8",
+                f'echo [%date% %time%] Launching: {exe_path} >>"{restart_log}"\n'
+                f'"{exe_path}"\n'
+                f"echo [%date% %time%] Exe exited (code: %ERRORLEVEL%)"
+                f' >>"{restart_log}"\n'
             )
+            restart_script.write_text(script_text, encoding="utf-8")
+            LOG.info("Restart script:\n%s", script_text.rstrip())
             subprocess.Popen(["cmd", "/c", str(restart_script)])
         else:
             LOG.info("Restarting launcher (non-frozen) ...")
@@ -347,6 +363,24 @@ def cleanup_old_exe() -> None:
             LOG.info("Cleaned up restart.log")
         except OSError as exc:
             LOG.warning("Failed to read/delete restart.log: %s", exc)
+
+    # --- Clean up stale restart.log) from old cmd /c (...) code ---
+    stale_log = exe_dir / "restart.log)"
+    if stale_log.exists():
+        try:
+            stale_log.unlink()
+            LOG.info("Cleaned up stale restart.log)")
+        except OSError:
+            pass
+
+    # --- Clean up _wopc_restart.cmd from previous update ---
+    restart_cmd = exe_dir / "_wopc_restart.cmd"
+    if restart_cmd.exists():
+        try:
+            restart_cmd.unlink()
+            LOG.info("Cleaned up _wopc_restart.cmd")
+        except OSError:
+            pass
 
     # --- Clean up .old file ---
     old_path = Path(sys.executable).with_suffix(".old")

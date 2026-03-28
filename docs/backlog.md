@@ -4,6 +4,7 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Critical Bugs
 
+87. **Standalone DLL audit — missing dependencies break fresh installs** — Fresh SCFA-only installs (no FAF/LOUD) fail to launch because our wopc_core.scd and vendor files reference DLLs or Lua modules that don't ship with WOPC. Audit ALL FAF and LOUD file references, ensure every dependency is bundled in wopc_core.scd or WOPC/bin/. Goal: a player needs ONLY SCFA base game + WOPC-Launcher.exe + WOPC folder — nothing else. Check Firebase logs from laptop for specific missing DLLs.
 4. **Publish launcher exe to GitHub Release** — the exe must be the most prominent download on the repo. Upload `WOPC-Launcher.exe` to a pinned release so players can find it immediately.
 7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
 42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers in `deploy.py` don't check the return value. Also: the `content-v2` GitHub Release must have `wopc_core.scd.zip`, `wopc-maps.zip`, and strategic icons so first-time setup works.
