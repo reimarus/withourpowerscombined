@@ -104,14 +104,14 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Observability
 
-78. **Launch ID correlation (PK/FK for launcher ↔ engine)** — Generate a unique launch UUID per game launch attempt. Write it to launcher.log, pass it via the game config, and have the engine write it to WOPC.log on startup. Firebase reports include both, so we can correlate "launcher said it launched" with "engine actually ran." Currently there's no link between the two log streams — the launcher says "Launching game..." but we can't tell if the exe actually started or what session the engine log belongs to.
+78. ~~**Launch ID correlation (PK/FK for launcher ↔ engine)**~~ ✅ — 12-char hex UUID generated per launch in `cmd_launch()`, written to `wopc_game_config.lua` as `LaunchID`, logged by quickstart.lua/multilobby.lua to WOPC.log, and included in Firebase reports. All three log streams now correlate via a single ID.
 81. ~~**Game exit monitoring — zero post-launch visibility**~~ ✅ — After `cmd_launch()`, launcher had no visibility into game state. Added daemon thread that monitors process exit code, session duration, and reads last 20 lines of WOPC.log. Quick exits (<30s) trigger a warning. Shipped in v2.01.0061.
 82. ~~**PhxLib.lua division-by-nil causing loading hang**~~ ✅ — `weapon.EnergyDrainPerSecond` nil at PhxLib.lua line 485 in lua.scd content pack. Patched via `_patch_scd()` at deploy time. CONTENT_BUILD bumped to 3 to force re-setup. Shipped in v2.01.0061.
 79. ~~**Game exe not starting after launch / vanilla lobby instead of quickstart**~~ ✅ — Multiple root causes found and fixed across v2.01.0057-0059:
     - v2.01.0057: Destructive content staleness check deleted wopc_core.scd before confirming replacement. Fix: delete only marker, keep SCD as fallback, pre-launch validation.
     - v2.01.0058: 795 MB download failing on slow connections (30s timeout). Fix: 120/300s timeouts, HTTP Range resume, 5 retries, GUI progress, post-setup size validation.
     - **v2.01.0059: VFS mount order bug** — `lua.scd` (content pack) mounted BEFORE `wopc_core.scd`, so engine C++ loader found vanilla uimain.lua first (first-added = highest priority). Our patched uimain.lua with quickstart hook never loaded. Fix: moved wopc_core.scd mount to position 2 (before content packs). Content packs still work via Lua import() (last-added wins).
-80. **aibrain.lua import cascade failure** — Engine warning: `Error importing /lua/aibrain.lua` → cascades to `factorymanagerbraincomponent.lua` and `/lua/factions.lua`. Persists across v2.01.0054 and v2.01.0055 with fresh content-v2. Related to backlog #33 (AI reclaim grid) but broader — the entire AI brain initialization is failing. Low priority if only affecting AI (games still launch), but needs investigation if it prevents game startup.
+80. ~~**aibrain.lua import cascade failure**~~ ✅ — Root cause: `FactoryManagerBrainComponent.lua` called `GetFactions(true)` at module load time, before `__active_mods` and `DiskFindFiles` were initialized. Fixed by lazy-loading Factions via a cached getter function that defers the import until `CreateBrainShared()` is actually called.
 
 ## Security
 

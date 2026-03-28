@@ -312,7 +312,7 @@ class RelayClient:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def upload_logs(log_lines: list[str], host_name: str = "") -> bool:
+    def upload_logs(log_lines: list[str], host_name: str = "", launch_id: str = "") -> bool:
         """Upload launcher + engine logs to Firebase ``/reports/`` node.
 
         Includes:
@@ -320,6 +320,7 @@ class RelayClient:
         - Engine log (last 300 lines from WOPC.log)
         - System info (OS, Python version, WOPC version, exe path)
         - Game.prefs snippet (active_mods section for corruption diagnosis)
+        - Launch ID for correlating with engine logs
 
         Returns True on success, False on any failure.
         """
@@ -414,6 +415,7 @@ class RelayClient:
             "timestamp": time.time(),
             "host_name": host_name,
             "version": config.VERSION,
+            "launch_id": launch_id,
             "system": system_info,
             "launcher_log": "\n".join(log_lines[-500:]),
             "launcher_file_log": launcher_file_log,

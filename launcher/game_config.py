@@ -34,6 +34,7 @@ def write_game_config(
     active_mod_uids: list[str] | None = None,
     expected_humans: int = 1,
     is_host: bool = True,
+    launch_id: str = "",
 ) -> Path:
     """Write ``wopc_game_config.lua`` to ``WOPC_BIN``.
 
@@ -66,6 +67,8 @@ def write_game_config(
         Tells quickstart.lua whether to dispatch to multilobby.
     is_host:
         Whether this instance is the game host (True) or joiner (False).
+    launch_id:
+        Unique ID for correlating launcher, engine, and Firebase logs.
 
     Returns
     -------
@@ -166,6 +169,7 @@ return {{
     ScenarioFile = '{_escape_lua(scenario_file)}',
     ExpectedHumans = {expected_humans},
     IsHost = {is_host_lua},
+    LaunchID = '{_escape_lua(launch_id)}',
     Players = {{
 {players_block}
     }},

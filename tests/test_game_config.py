@@ -419,6 +419,40 @@ class TestMultiplayerConfig:
         assert "IsHost = false" in lua
 
 
+class TestLaunchID:
+    """Test LaunchID field in game config."""
+
+    def test_launch_id_written(self, config_dir: Path) -> None:
+        """LaunchID is written to config when provided."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/Caldera/Caldera_scenario.lua",
+                launch_id="abc123def456",
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        assert "LaunchID = 'abc123def456'" in lua
+
+    def test_launch_id_empty_default(self, config_dir: Path) -> None:
+        """LaunchID defaults to empty string when not provided."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config("/maps/Caldera/Caldera_scenario.lua")
+
+        lua = path.read_text(encoding="utf-8")
+        assert "LaunchID = ''" in lua
+
+    def test_launch_id_escaped(self, config_dir: Path) -> None:
+        """Special characters in launch_id are escaped for Lua."""
+        with patch("launcher.game_config.WOPC_BIN", config_dir):
+            path = write_game_config(
+                "/maps/Caldera/Caldera_scenario.lua",
+                launch_id="test'id",
+            )
+
+        lua = path.read_text(encoding="utf-8")
+        assert "LaunchID = 'test\\'id'" in lua
+
+
 class TestSlotManagerIntegration:
     """Integration: PlayerSlotManager → write_game_config → valid Lua.
 

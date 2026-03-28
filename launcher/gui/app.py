@@ -32,6 +32,7 @@ else:
         BaseApp = object  # type: ignore[misc, no-redef]
 
 from launcher import config, prefs, updater
+from launcher import wopc as wopc_module
 from launcher.gui import browser_screen, lobby_screen, slot_widget
 from launcher.gui.constants import (
     AI_DISPLAY_NAMES as _AI_NAMES,
@@ -1652,7 +1653,11 @@ class WopcApp(BaseApp):  # type: ignore
         def _upload():
             from launcher.relay import RelayClient
 
-            ok = RelayClient.upload_logs(self._log_lines, host_name=host_name)
+            ok = RelayClient.upload_logs(
+                self._log_lines,
+                host_name=host_name,
+                launch_id=wopc_module.last_launch_id,
+            )
             self.after(
                 0,
                 lambda: self._on_send_logs_done(ok),
@@ -1843,7 +1848,7 @@ class WopcApp(BaseApp):  # type: ignore
         )
         if isinstance(result, subprocess.Popen):
             self.log("Game process started successfully.")
-            self._monitor_game_process(result)
+            self._monitor_game_process(result, launch_id=wopc_module.last_launch_id)
         else:
             self.log("Game failed to launch.")
 
@@ -1872,7 +1877,7 @@ class WopcApp(BaseApp):  # type: ignore
         )
         if isinstance(result, subprocess.Popen):
             self.log("Game process started successfully.")
-            self._monitor_game_process(result)
+            self._monitor_game_process(result, launch_id=wopc_module.last_launch_id)
         else:
             self.log("Game failed to launch.")
 
@@ -1893,7 +1898,7 @@ class WopcApp(BaseApp):  # type: ignore
             ),
         )
 
-    def _monitor_game_process(self, proc: subprocess.Popen) -> None:
+    def _monitor_game_process(self, proc: subprocess.Popen, launch_id: str = "") -> None:
         """Monitor the game process in a background thread.
 
         Waits for the game to exit, then logs:
@@ -1910,11 +1915,12 @@ class WopcApp(BaseApp):  # type: ignore
 
             # Log exit code and duration
             logger.info(
-                "Game exited: code=%s, duration=%dm%02ds (%.0fs)",
+                "Game exited: code=%s, duration=%dm%02ds (%.0fs), launch_id=%s",
                 exit_code,
                 mins,
                 secs,
                 duration,
+                launch_id,
             )
 
             # GUI message

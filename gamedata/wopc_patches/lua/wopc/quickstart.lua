@@ -167,6 +167,7 @@ function Launch(protocol, port, playerName, gameName, mapFile, natTraversalProvi
         return
     end
 
+    LOG("WOPC LaunchID: " .. tostring(cfg.LaunchID or "none"))
     LOG("WOPC QuickStart: Map = " .. tostring(cfg.ScenarioFile))
     LOG("WOPC QuickStart: Players = " .. table.getn(cfg.Players))
 
@@ -280,6 +281,8 @@ function JoinLaunch(protocol, address, playerName, natTraversalProvider)
         LOG("WOPC QuickStart: Failed to load config: " .. tostring(cfg))
         return
     end
+
+    LOG("WOPC LaunchID: " .. tostring(cfg.LaunchID or "none"))
 
     -- Sanitize active_mods in prefs (prevents active_mods=true corruption)
     local Prefs = import('/lua/user/prefs.lua')
