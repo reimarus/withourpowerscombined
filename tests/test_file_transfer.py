@@ -125,6 +125,40 @@ class TestVerifyFile:
         assert verify_file(tmp_path, "nope.bin", "0" * 64) is False
 
 
+class TestPathTraversal:
+    """Test that path traversal attacks are blocked."""
+
+    def test_write_chunk_rejects_dotdot(self, tmp_path: Path) -> None:
+        """Relative paths escaping dest_dir raise ValueError."""
+        import pytest
+
+        b64 = base64.b64encode(b"evil").decode()
+        with pytest.raises(ValueError, match="Path traversal blocked"):
+            write_chunk_to_disk(tmp_path, "../../../evil.txt", 0, 1, b64)
+
+    def test_write_chunk_rejects_absolute(self, tmp_path: Path) -> None:
+        """Absolute paths that escape dest_dir raise ValueError."""
+        import pytest
+
+        b64 = base64.b64encode(b"evil").decode()
+        with pytest.raises(ValueError, match="Path traversal blocked"):
+            write_chunk_to_disk(tmp_path, "../../etc/passwd", 0, 1, b64)
+
+    def test_verify_file_rejects_traversal(self, tmp_path: Path) -> None:
+        """verify_file also blocks path traversal."""
+        import pytest
+
+        with pytest.raises(ValueError, match="Path traversal blocked"):
+            verify_file(tmp_path, "../../../etc/passwd", "0" * 64)
+
+    def test_safe_subdir_allowed(self, tmp_path: Path) -> None:
+        """Legitimate nested paths still work."""
+        b64 = base64.b64encode(b"ok").decode()
+        path = write_chunk_to_disk(tmp_path, "maps/scmp_001/scenario.lua", 0, 1, b64)
+        assert path.exists()
+        assert path.read_bytes() == b"ok"
+
+
 class TestRoundTrip:
     """End-to-end: build manifest, chunk, transfer, verify."""
 

@@ -1,5 +1,6 @@
 """Tests for WOPC deploy/setup logic."""
 
+import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -683,3 +684,36 @@ class TestPostSetupValidation:
                 raise RuntimeError(
                     f"wopc_core.scd is only {scd_size / 1e6:.1f} MB — file appears truncated."
                 )
+
+
+class TestZipTraversal:
+    """Test that ZIP extraction blocks path traversal attacks."""
+
+    def test_malicious_zip_entry_skipped(self, tmp_path):
+        """ZIP with ../evil.txt entry does not write outside dest_dir."""
+        from launcher.deploy import _download_and_extract
+
+        zip_path = tmp_path / "src" / "_download.zip"
+        zip_path.parent.mkdir()
+        dst_dir = tmp_path / "dst"
+        dst_dir.mkdir()
+
+        # Create a ZIP with a traversal entry
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("safe.txt", "ok")
+            zf.writestr("../evil.txt", "pwned")
+
+        # Manually call the extraction logic (patch _download_file to skip download)
+        with patch("launcher.deploy._download_file") as mock_dl:
+            # Copy the zip to where _download_and_extract expects it
+            import shutil
+
+            shutil.copy(zip_path, dst_dir / "_download.zip")
+            mock_dl.return_value = True
+
+            result = _download_and_extract("http://fake", dst_dir)
+
+        assert result is True
+        assert (dst_dir / "safe.txt").exists()
+        # evil.txt should NOT exist one level up
+        assert not (tmp_path / "evil.txt").exists()

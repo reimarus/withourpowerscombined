@@ -16,10 +16,13 @@ import pytest
 
 from launcher.lobby import (
     ENCODING,
+    MAX_BUFFER,
+    MAX_MESSAGE,
     PROTOCOL_VERSION,
     LobbyCallbacks,
     LobbyClient,
     LobbyServer,
+    _recv_lines,
     _send_msg,
 )
 
@@ -887,3 +890,63 @@ class TestGameStateBuffering:
                 assert r["map_name"] == "Fields of Isis"
         finally:
             server.stop()
+
+
+# ---------------------------------------------------------------------------
+# Buffer safety tests (not slow — no TCP needed)
+# ---------------------------------------------------------------------------
+
+
+class TestBufferSafety:
+    """Test _recv_lines rejects oversized data."""
+
+    def test_buffer_overflow_rejected(self) -> None:
+        """Buffer exceeding MAX_BUFFER raises ConnectionResetError."""
+        buf = bytearray(b"x" * (MAX_BUFFER + 1))
+
+        class FakeSocket:
+            def recv(self, n: int) -> bytes:
+                return b"more data"
+
+        with pytest.raises(ConnectionResetError, match="buffer overflow"):
+            _recv_lines(FakeSocket(), buf)
+
+    def test_oversized_message_dropped(self) -> None:
+        """A single message over MAX_MESSAGE is silently dropped."""
+        big_msg = "A" * (MAX_MESSAGE + 100) + "\n"
+        small_msg = '{"type":"ping"}\n'
+
+        class FakeSocket:
+            def __init__(self) -> None:
+                self._data = (big_msg + small_msg).encode(ENCODING)
+                self._sent = False
+
+            def recv(self, n: int) -> bytes:
+                if self._sent:
+                    raise TimeoutError
+                self._sent = True
+                return self._data
+
+        buf = bytearray()
+        lines = _recv_lines(FakeSocket(), buf)
+        assert len(lines) == 1
+        assert lines[0] == '{"type":"ping"}'
+
+    def test_normal_message_passes(self) -> None:
+        """Normal-sized messages pass through fine."""
+        msg = '{"type":"heartbeat"}\n'
+
+        class FakeSocket:
+            def __init__(self) -> None:
+                self._sent = False
+
+            def recv(self, n: int) -> bytes:
+                if self._sent:
+                    raise TimeoutError
+                self._sent = True
+                return msg.encode(ENCODING)
+
+        buf = bytearray()
+        lines = _recv_lines(FakeSocket(), buf)
+        assert len(lines) == 1
+        assert lines[0] == '{"type":"heartbeat"}'

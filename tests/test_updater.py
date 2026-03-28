@@ -262,3 +262,34 @@ class TestCleanup:
             updater.cleanup_old_exe()
 
         assert any("Failed to clean up" in r.message for r in caplog.records)
+
+
+class TestRestartSafety:
+    """Test that the restart mechanism doesn't use shell=True."""
+
+    def test_restart_uses_script_file_not_shell(self, tmp_path: Path) -> None:
+        """apply_update writes a .cmd script instead of inline shell=True."""
+        exe = tmp_path / "WOPC-Launcher.exe"
+        exe.write_bytes(b"MZ" + b"\x00" * 1000)
+
+        new_exe = tmp_path / "update.exe"
+        new_exe.write_bytes(b"MZ" + b"\x00" * 1000)
+
+        with (
+            patch.object(updater.sys, "frozen", True, create=True),
+            patch.object(updater.sys, "executable", str(exe)),
+            patch.object(updater.sys, "_MEIPASS", str(tmp_path / "_MEI123"), create=True),
+            patch("launcher.updater.subprocess.Popen") as mock_popen,
+            patch("launcher.updater.os._exit"),
+        ):
+            updater.apply_update(new_exe)
+
+            # Popen should have been called without shell=True
+            assert mock_popen.called, "Popen should have been called for restart"
+            call_kwargs = mock_popen.call_args
+            assert call_kwargs.kwargs.get("shell") is not True, (
+                "shell=True must not be used in restart"
+            )
+            # First arg should be a list (not a string)
+            args = call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs.get("args")
+            assert isinstance(args, list), "Popen should be called with a list, not a string"

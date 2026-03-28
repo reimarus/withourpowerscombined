@@ -101,7 +101,9 @@ def write_chunk_to_disk(
 
     Returns the full path of the file being written.
     """
-    fpath = dest_dir / relative_path
+    fpath = (dest_dir / relative_path).resolve()
+    if not fpath.is_relative_to(dest_dir.resolve()):
+        raise ValueError(f"Path traversal blocked: {relative_path}")
     fpath.parent.mkdir(parents=True, exist_ok=True)
 
     mode = "wb" if index == 0 else "ab"
@@ -114,7 +116,9 @@ def write_chunk_to_disk(
 
 def verify_file(dest_dir: Path, relative_path: str, expected_sha256: str) -> bool:
     """Verify a downloaded file matches its expected SHA256 hash."""
-    fpath = dest_dir / relative_path
+    fpath = (dest_dir / relative_path).resolve()
+    if not fpath.is_relative_to(dest_dir.resolve()):
+        raise ValueError(f"Path traversal blocked: {relative_path}")
     if not fpath.is_file():
         return False
     actual = hashlib.sha256(fpath.read_bytes()).hexdigest()

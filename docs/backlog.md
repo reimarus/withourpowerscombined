@@ -115,7 +115,11 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Security
 
-77. **Firebase anonymous auth** — All Firebase REST requests are unauthenticated. Anyone who finds the hardcoded URL can read/write/delete game listings and reports. Add Firebase anonymous auth (POST to `identitytoolkit.googleapis.com/v1/accounts:signUp?key=API_KEY` → returns ID token, append `?auth=TOKEN` to all requests). Set Firebase security rules to `"auth != null"`. Needs: Web API Key from Firebase Console (Project Settings), `FIREBASE_API_KEY` in config.py, auth token helper in relay.py, server-side rules update.
+77. ~~**Firebase security rules**~~ ✅ — Firebase Realtime Database rules deployed: games node read/write open with schema validation, reports/logs write-once only (no overwrite/delete, not readable via REST), root deny-all default. Anonymous auth deferred — current rules are sufficient for the threat model.
+83. ~~**Path traversal in file_transfer.py**~~ ✅ — `write_chunk_to_disk()` and `verify_file()` now validate that resolved paths stay within `dest_dir`. A malicious peer sending `../../evil.exe` as a relative path gets a `ValueError`.
+84. ~~**Unbound network buffer in lobby.py**~~ ✅ — `_recv_lines()` now enforces `MAX_BUFFER` (1 MB) and `MAX_MESSAGE` (256 KB) limits. Peers flooding data without newlines get disconnected; oversized individual messages are dropped.
+85. ~~**ZIP path traversal in deploy.py**~~ ✅ — `_download_and_extract()` now validates each ZIP member path before extraction. Entries with `../` that escape the destination directory are skipped with a warning.
+86. ~~**Command injection in updater.py**~~ ✅ — Restart logic replaced inline `shell=True` f-string with a `.cmd` script file + `subprocess.Popen(list)`. Eliminates shell metacharacter injection risk from exe/path names.
 
 ## Platform Support
 

@@ -217,8 +217,17 @@ def _download_and_extract(url: str, dst_dir: Path) -> bool:
     try:
         logger.info("  extracting to %s ...", dst_dir)
         with zipfile.ZipFile(tmp_zip, "r") as zf:
-            zf.extractall(dst_dir)
-        logger.info("  extracted %d files", len(zipfile.ZipFile(tmp_zip).namelist()))
+            resolved_dst = dst_dir.resolve()
+            safe_members = []
+            for member in zf.namelist():
+                target = (dst_dir / member).resolve()
+                if not target.is_relative_to(resolved_dst):
+                    logger.warning("  skipping unsafe ZIP entry: %s", member)
+                    continue
+                safe_members.append(member)
+            for member in safe_members:
+                zf.extract(member, dst_dir)
+        logger.info("  extracted %d files", len(safe_members))
         return True
     except (zipfile.BadZipFile, OSError) as exc:
         logger.warning("  WARNING: extraction failed: %s", exc)
