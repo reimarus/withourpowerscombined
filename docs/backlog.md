@@ -2,73 +2,32 @@
 
 Items to tackle over time, roughly grouped by priority.
 
-## Critical Bugs — First-Time Setup Broken
+## Critical Bugs
 
-1. ~~**Asset download stuck / no progress shown**~~ ✅ — progress bar + step labels in GUI (PR #26)
-2. ~~**Auto-discover SCFA install path**~~ ✅ — superseded: exe now lives in SCFA folder, no discovery needed (PR #30)
-3. ~~**WOPC asset download failing**~~ ✅ — 30s timeout, 3 retries with backoff, clear error messages (PR #26)
 4. **Publish launcher exe to GitHub Release** — the exe must be the most prominent download on the repo. Upload `WOPC-Launcher.exe` to a pinned release so players can find it immediately.
-5. ~~**Map preview not working (solo)**~~ ✅ — Pillow bundled in exe (PR #26)
-6. ~~**Map preview not working (multiplayer)**~~ ✅ — lobby preview image widget added (PR #26)
 7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
-42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers at lines 194, 303, 317, 398 in `deploy.py` don't check the return value. The immediate crash (`FileNotFoundError` at line 522) is fixed (PR #42), but other download calls still fail silently. Also: the `content-v2` GitHub Release doesn't exist yet — must create it with `wopc_core.scd.zip`, `wopc-maps.zip`, and strategic icons so first-time setup works for new users.
-43. ~~**"Send Logs" button**~~ ✅ — one-click button in launcher uploads log to Firebase `/reports/` node for remote troubleshooting (v2.01.0014)
-58. ~~**Game.prefs corruption causes black screen**~~ ✅ — `active_mods = true` (boolean) in Game.prefs instead of `active_mods = { }` (table) crashes prefs.lua/optionslogic.lua with "attempt to index a boolean value". Auto-repair runs before every game launch, backs up corrupted file, replaces boolean with empty table.
+42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers in `deploy.py` don't check the return value. Also: the `content-v2` GitHub Release must have `wopc_core.scd.zip`, `wopc-maps.zip`, and strategic icons so first-time setup works.
 
 ## High Priority — Player Experience
 
-5. ~~**Launcher self-update**~~ ✅ — check GitHub Releases on startup, download and replace exe, restart (PR #28)
-6. ~~**SupCom-authentic UI assets**~~ ✅ — 9-slice metallic chrome borders (SupComFrame widget), faction icons in player slots, beveled button accents on all primary actions, gold sidebar accent. Chrome PNGs rendered via PIL compositing on tk.Canvas.
-7. ~~**Remember launcher window size**~~ ✅ — persist width/height in wopc_prefs.ini Window section, restore on launch (PR #29)
-8. ~~**SupCom color picker**~~ ✅ — HSV color wheel popup with brightness slider, click/drag to pick any color, nearest-match to SCFA engine palette for game config (v2.01.0027)
 9. **Content-v2 release build** — run `scripts/build_content_release.py` and upload wopc_core.scd, wopc-maps.zip, strategic icons to `content-v2` GitHub Release so the standalone installer can download them
 10. **Player ratings / balancing** — track skill ratings for fairer matchmaking (ELO or similar)
+62. **Multiplayer: Color picker not rendering correctly** — color picker widget has visual issues in the multiplayer lobby. Needs investigation.
+72. **Global player settings** — Move player settings (name, faction, color, team) to a global scope that carries across solo and multiplayer modes. A unified player profile model would reduce duplication and ensure consistency.
+75. **Solo color picker doesn't update swatch** — Selecting a new color in the solo player options doesn't visually update the color indicator, though the value is saved correctly.
+76. **Auto-include content packs in `wopc setup`** — Content pack SCDs (BlackOps, TotalMayhem, BrewLAN, etc.) require manual download via mod panel. Should be auto-downloaded during `wopc setup`.
 
-## Multiplayer UX (Phase 6 — complete)
+## UI Polish
 
-11. ~~**"Add AI" in multiplayer lobby**~~ ✅ — wired to lobby screen with proper slot management
-12. ~~**"Change Map" in multiplayer lobby**~~ ✅ — searchable map picker dialog
-13. ~~**Remove players from solo screen**~~ ✅ — AI slots have ✕ remove buttons (human slot 1 is protected)
-14. ~~**Victory type tooltips**~~ ✅ — descriptions shown on both solo and multiplayer screens
-15. ~~**Team auto-assignment**~~ ✅ — new AI slots auto-balanced to team with fewest players via `_next_team()`
-16. ~~**Solo ↔ multiplayer UI consistency**~~ ✅ — lobby options now reuse `GAME_OPTION_DEFS`, matching labels/values/defaults; headers and button styles unified
-17. ~~**UI polish**~~ ✅ — SupCom visual redesign (gold + navy palette, dividers, warm cream text)
-18. ~~**Map preview in launcher**~~ ✅ — preview image, player count, size, description shown on map selection
-18b. ~~**Interactive map preview**~~ ✅ — canvas-based hero preview with mass/hydro/spawn overlays, click-to-inspect zoom window, DDS extraction from .scmap, dynamic filters, stable layout
-
-## High Priority — UI Polish
-
-> Based on side-by-side comparison with other SupCom launchers (2026-03-21 screenshots)
-
-36. ~~**Map preview too small**~~ ✅ — enlarged preview with 5:1 column weight ratio, reduced padding, preview dominates left side
-37. ~~**Map list should be narrower**~~ ✅ — compact sidebar with minsize=200, map list no longer competes with preview
-38. ~~**Game browser refresh button**~~ ✅ — manual "⟳ Refresh" button + auto-poll every 5s
-39. ~~**SupCom-authentic UI chrome**~~ ✅ — 9-slice metallic frames applied to solo screen (config, map, log panels), lobby screen (map, players, options, chat), and browser screen (game list). SupComFrame widget in `launcher/gui/supcom_frame.py`.
-40. ~~**Marker visibility at small sizes**~~ ✅ — increased marker radii and outline widths with better scaling formulas
-41. ~~**Map description panel**~~ ✅ — description shown in inspect window header (map_inspect.py lines 102-112)
-44. ~~**Icon-based map markers**~~ ✅ — tinted commander icons with preserved outlines, hover halo, click-to-select spawn. Mass/hydro use strategic icons from `launcher/gui/icons/marker_*.png`.
-45. ~~**Unify lobby map UI with solo**~~ ✅ — unified 4-column layout with inline map canvas, zoom/pan, searchable map list. Map inspect window removed.
-46. **Design asset library** — `launcher/gui/icons/ASSETS.md` indexes all available game textures. Faction icons (`faction_*.png`), strategic icons, chrome borders all pre-converted. Expand as new UI features need assets.
-47. ~~**Show player name in slot**~~ ✅ — human slot shows player name from prefs, updates on name change (v2.01.0027)
-
-48. **Rearrange Player Settings layout** — Name inline with Faction (same row), Color inline with minimap preference (same row). Reduces vertical space and groups related settings logically.
-49. ~~**Spawn position bug**~~ ✅ — Players array index must match ARMY_N for correct spawn. Gap-filling with civilian entries ensures contiguous array. (v2.01.0032)
-50. ~~**Map black screen after ready check**~~ ✅ — Two fixes: (1) `_refresh_map_list()` always rescans filesystem (stale cache), (2) `MapCanvas.set_map()` deferred redraw when canvas not yet laid out. Also fixes #53.
-51. ~~**"Send Logs" failure — Firebase 401 on writes**~~ ✅ — Firebase security rules updated in console to allow writes to `/reports/` and `/logs/` nodes.
-52. ~~**Player color mismatch in-game**~~ ✅ — Root cause: launcher used a custom 8-color palette that didn't match the engine's 19-color `GameColors.lua`. Aligned `PLAYER_COLORS` in `constants.py` with `vendor/faf-ui/lua/GameColors.lua` exactly.
-53. ~~**Auto-updater map list not loading after restart**~~ ✅ — Fixed by #50's always-rescan change to `_refresh_map_list()`.
-54. **Civilian filler armies investigation** — gap-filling in `game_config.py` creates `Civilian=true` entries for unused ARMY positions. Investigate whether the engine spawns idle commanders for these entries (gameplay impact).
-55. ~~**Refactor app.py monolith**~~ ✅ — 4,320 → 1,913 lines (56% reduction). Extracted 6 modules: `constants.py` (205), `models.py` (226), `map_canvas.py` (578), `slot_widget.py` (832), `browser_screen.py` (458), `lobby_screen.py` (1,070). PR #63 + PR #68.
-56. ~~**Multiplayer join broken**~~ ✅ — Six bugs fixed: (1) GameState silently dropped during Welcome wait (TCP coalescing), (2) `_build_game_state()` called from network thread (thread safety), (3) joiner launch reading solo-screen widgets instead of host config, (4) joiner map never written to prefs, (5) `_all_maps` empty causing false map-missing, (6) joiner `expected_humans` never set. See PR for details.
-57. ~~**Map spawn markers not assigned on initial load**~~ ✅ — Root cause: `_slot_accessor._slots` was empty `[]` when `set_map()` triggered `redraw()`. Fixed by syncing slot accessor in `_update_map_preview()` before calling `set_map()`.
-59. ~~**Multiplayer join: TCP port 15000 unreachable for remote players**~~ ✅ — Added UPnP auto-port-forwarding (`launcher/upnp.py` wrapping `miniupnpc`), actionable NAT error messages on timeout/refused, and `upnp_ok` field in Firebase relay for remote diagnostics. Remaining: relay-based TCP tunneling for 100% NAT coverage (Phase C in #35).
-60. ~~**Launcher log verbosity for game launch**~~ ✅ — Structured logging before `Popen()`: launch mode, exe, map, expected humans, player name, mods, config path, full command line.
+46. **Design asset library** — `launcher/gui/icons/ASSETS.md` indexes all available game textures. Expand as new UI features need assets.
+48. **Rearrange Player Settings layout** — Name inline with Faction (same row), Color inline with minimap preference (same row). Reduces vertical space.
+54. **Civilian filler armies investigation** — gap-filling in `game_config.py` creates `Civilian=true` entries for unused ARMY positions. Investigate whether the engine spawns idle commanders.
 
 ## Features
 
 19. **Map Library Browser** — searchable map library where players can browse, preview, and download maps (replaces flat list)
 20. **Mini-map size persistence** — remember the user's preferred mini-map size between sessions
-21. **Merge unit mods** — BrewLAN, TotalMayhem, etc. (BlackOps done ✅, though some strategic icons still missing: brb1302, brb1106, brb2306, brb4309, brb4401)
+21. **Merge unit mods** — BrewLAN, TotalMayhem, etc. (BlackOps done, though some strategic icons still missing)
 22. **Save game function** — save/load mid-game
 23. **Hotkeys for factory queueing** — keyboard shortcuts for build queue management
 24. **Discoball Czars** — cosmetic fun
@@ -80,46 +39,8 @@ Items to tackle over time, roughly grouped by priority.
 30. **Launcher settings persistence** — remember window size, position, panel state, last-used filters across sessions
 31. **Modern matchmaking UX** — Steam friends integration, game browser (find visible games), invite system (replaces manual IP/port)
 32. **Steam friends integration** — Steam API for multiplayer invites and presence
-35. **Internet multiplayer** — ~~Phase A: Firebase relay for internet game discovery~~ ✅ (merged: `launcher/relay.py`, `RELAY_URL` in config, 🌐 badge in browser, LAN+internet merge). **Needs**: Firebase project created + `RELAY_URL` set in config to activate. Phase B: ICE/STUN NAT traversal (eliminates port forwarding for gameplay). Phase C: Steam P2P API for zero-config multiplayer.
-33. **"Leave a comment or idea" feature** — in-launcher feedback button that lets players submit ideas, bug reports, or feature requests (e.g. opens a GitHub Issue template or a simple form that creates an issue). We review and implement what makes sense.
-
-## Multiplayer Bugs (Reported 2026-03-25)
-
-61. ~~**Multiplayer: Can't select spawn slot on map**~~ ✅ — Wired `on_spawn_select` and `on_spawn_swap` callbacks in lobby MapCanvas. Host slot and AI slots now get `start_spot` assignments. Lobby canvas accessor synced on map change, slot add/remove.
-62. **Multiplayer: Color picker not rendering correctly** — color picker widget has visual issues in the multiplayer lobby. Needs investigation.
-63. ~~**Multiplayer: Player options missing in multiplayer**~~ ✅ — Host slot now has the same structure as solo (team_var, color_var, faction label, color indicator). Map canvas renders spawn colors and teams for host + AI slots. Faction/name/color changes in lobby settings sync to the host slot row.
-64. ~~**Multiplayer: AI slots don't show on map**~~ ✅ — Lobby AI slots now assigned sequential `start_spot` values. `_redraw_lobby_canvas()` syncs the slot accessor and redraws after add/remove. Canvas shows colored markers for all lobby slots.
-65. ~~**Multiplayer: Enter key launches game instead of sending chat**~~ ✅ — Removed global `<Return>` → launch binding entirely. Enter only sends chat via the lobby chat entry's own `<Return>` binding. Game launch is button-only.
-66. ~~**Multiplayer: Friend can't join game**~~ ✅ — wopc_core.scd health check + auto-repair shipped in v2.01.0045. Friend needs to restart launcher to auto-update.
-67. ~~**Multiplayer: Game not cleaned from lobby on launch**~~ ✅ — `_launch_game_and_cleanup` now stops server, clears lobby slots, and returns to browser screen after launch. Beacon/relay discovery restarts so the player can immediately create or join a new game.
-68. ~~**Friend's wopc_core.scd missing**~~ ✅ — Fixed in v2.01.0045: health check verifies wopc_core.scd exists, auto-repair re-runs setup if missing.
-69. ~~**Send Logs should include WOPC.log from game directory**~~ ✅ — Firebase reports now include engine_log (WOPC.log last 300 lines), scfa_log (SupCom.sclog last 200 lines), launcher_file_log (launcher.log last 300 lines), engine_errors, and system_info with commit_hash. Shipped in v2.01.0055.
-70. ~~**MEI temp directory warning on update**~~ ✅ — Fixed: `cmd /c timeout` doesn't work in non-interactive shells. Replaced with `ping -n` delay + retry `rmdir` to reliably clean up old _MEI dir before launching new exe. Also added 8s final deferred retry for map canvas rendering after update restart.
-71. ~~**Failed to load Python DLL on auto-update restart**~~ ✅ — Root cause: cmd restart script ran blind (all output silenced) and launched the new exe with a blocking call (exe ran inline, not via `start ""`). Fixed in v2.01.0060: restart.log captures every cmd step for debugging, `start ""` launches non-blocking, exe verified before apply (size + PE header), all cleanup errors logged explicitly.
-72. **Global player settings** — Move player settings (name, faction, color, team) to a global scope that carries across solo and multiplayer modes. Currently each screen has its own settings widgets that are synced manually. A unified player profile model would reduce duplication and ensure consistency. Settings should persist in `wopc_prefs.ini` and auto-apply when entering any game mode.
-73. ~~**MEI Python DLL load failure on auto-update restart**~~ ✅ — Duplicate of #71. Fixed in v2.01.0060 with restart logging, non-blocking launch, exe verification, and explicit error logging.
-74. ~~**Solo map preview broken**~~ ✅ — Root cause: stale wopc_core.scd from content-v2 pre-BrewLANLOUDPath fix. Added CONTENT_BUILD marker system (v2.01.0055) to detect stale content and force re-download. Map scan now finds 61 maps after fresh content.
-75. **Solo color picker doesn't update swatch** — Selecting a new color in the solo player options doesn't visually update the color indicator, though the value is saved correctly.
-76. **Auto-include content packs in `wopc setup`** — Content pack SCDs (BlackOps, TotalMayhem, BrewLAN, etc.) require manual download via mod panel. Should be auto-downloaded during `wopc setup` so players get the full experience out of the box.
-
-## Observability
-
-78. ~~**Launch ID correlation (PK/FK for launcher ↔ engine)**~~ ✅ — 12-char hex UUID generated per launch in `cmd_launch()`, written to `wopc_game_config.lua` as `LaunchID`, logged by quickstart.lua/multilobby.lua to WOPC.log, and included in Firebase reports. All three log streams now correlate via a single ID.
-81. ~~**Game exit monitoring — zero post-launch visibility**~~ ✅ — After `cmd_launch()`, launcher had no visibility into game state. Added daemon thread that monitors process exit code, session duration, and reads last 20 lines of WOPC.log. Quick exits (<30s) trigger a warning. Shipped in v2.01.0061.
-82. ~~**PhxLib.lua division-by-nil causing loading hang**~~ ✅ — `weapon.EnergyDrainPerSecond` nil at PhxLib.lua line 485 in lua.scd content pack. Patched via `_patch_scd()` at deploy time. CONTENT_BUILD bumped to 3 to force re-setup. Shipped in v2.01.0061.
-79. ~~**Game exe not starting after launch / vanilla lobby instead of quickstart**~~ ✅ — Multiple root causes found and fixed across v2.01.0057-0059:
-    - v2.01.0057: Destructive content staleness check deleted wopc_core.scd before confirming replacement. Fix: delete only marker, keep SCD as fallback, pre-launch validation.
-    - v2.01.0058: 795 MB download failing on slow connections (30s timeout). Fix: 120/300s timeouts, HTTP Range resume, 5 retries, GUI progress, post-setup size validation.
-    - **v2.01.0059: VFS mount order bug** — `lua.scd` (content pack) mounted BEFORE `wopc_core.scd`, so engine C++ loader found vanilla uimain.lua first (first-added = highest priority). Our patched uimain.lua with quickstart hook never loaded. Fix: moved wopc_core.scd mount to position 2 (before content packs). Content packs still work via Lua import() (last-added wins).
-80. ~~**aibrain.lua import cascade failure**~~ ✅ — Root cause: `FactoryManagerBrainComponent.lua` called `GetFactions(true)` at module load time, before `__active_mods` and `DiskFindFiles` were initialized. Fixed by lazy-loading Factions via a cached getter function that defers the import until `CreateBrainShared()` is actually called.
-
-## Security
-
-77. ~~**Firebase security rules**~~ ✅ — Firebase Realtime Database rules deployed: games node read/write open with schema validation, reports/logs write-once only (no overwrite/delete, not readable via REST), root deny-all default. Anonymous auth deferred — current rules are sufficient for the threat model.
-83. ~~**Path traversal in file_transfer.py**~~ ✅ — `write_chunk_to_disk()` and `verify_file()` now validate that resolved paths stay within `dest_dir`. A malicious peer sending `../../evil.exe` as a relative path gets a `ValueError`.
-84. ~~**Unbound network buffer in lobby.py**~~ ✅ — `_recv_lines()` now enforces `MAX_BUFFER` (1 MB) and `MAX_MESSAGE` (256 KB) limits. Peers flooding data without newlines get disconnected; oversized individual messages are dropped.
-85. ~~**ZIP path traversal in deploy.py**~~ ✅ — `_download_and_extract()` now validates each ZIP member path before extraction. Entries with `../` that escape the destination directory are skipped with a warning.
-86. ~~**Command injection in updater.py**~~ ✅ — Restart logic replaced inline `shell=True` f-string with a `.cmd` script file + `subprocess.Popen(list)`. Eliminates shell metacharacter injection risk from exe/path names.
+33. **"Leave a comment or idea" feature** — in-launcher feedback button that lets players submit ideas, bug reports, or feature requests
+35. **Internet multiplayer** — Phase A done (Firebase relay). Phase B: ICE/STUN NAT traversal (eliminates port forwarding). Phase C: Steam P2P API for zero-config multiplayer.
 
 ## Platform Support
 
@@ -127,17 +48,103 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Architecture Refactors
 
-26. **Content pack pipeline** — deploy.py `_acquire_content_packs()` should be a proper pipeline: download manager, SCD registry, mod extractor as separate concerns. Will matter when adding BrewLAN, TotalMayhem, etc.
-27. **wopc_core.scd build deduplication** — setup produces "Duplicate name" warnings because WOPC patches overlap with game logic files. Need a merge strategy (last-write-wins with explicit override manifest).
+26. **Content pack pipeline** — deploy.py `_acquire_content_packs()` should be a proper pipeline: download manager, SCD registry, mod extractor as separate concerns.
+27. **wopc_core.scd build deduplication** — setup produces "Duplicate name" warnings because WOPC patches overlap with game logic files. Need a merge strategy.
 28. **Game.prefs management** — SCFA's preference system is not managed by WOPC. We write active_mods at launch but don't own the file. Need a clean strategy.
 29. **Asset integrity validation** — content pack SCDs are downloaded once and never verified. Need hash checking on download and periodic validation.
-30. ~~**Remove or fix post-commit hook**~~ ✅ — The `build_exe.py` post-commit hook was already removed. Only the standard pre-commit framework remains (ruff lint/format, whitespace, YAML/TOML checks, large file guard).
-31. ~~**Speed up release script**~~ ✅ — Three optimizations: (1) skip content-v2 rebuild when no content source files changed (~3 min saved), (2) run tests + exe build in parallel (~40s saved), (3) skip pip install if already editable (~5s saved). Launcher-only releases now ~2 min instead of ~5 min.
-32. **PyInstaller _MEI temp directory cleanup failure** — `Failed to remove temporary directory: C:\TEMP\_MEI######` warning dialog on exe exit. Caused by PyInstaller `--onefile` mode: the exe extracts to a temp dir, and if the process crashes or exits uncleanly the temp dir isn't removed. Root cause is usually a crash (e.g., the SupComFrame ValueError in v2.01.0039). Workaround: fix crashes so cleanup runs. Long-term: consider `--onedir` mode instead of `--onefile` (avoids temp extraction entirely, faster startup, no cleanup issues).
-33. **AI reclaim grid reference missing** — `Build condition ('ReclaimAvailableInGrid') requires a reference to the reclaim grid in the brain` warning repeated many times during AI games. The LOUD AI's reclaim system expects a grid object that isn't initialized. Low priority (cosmetic warning, AI still functions) but should be investigated.
-34. ~~**Game.prefs "attempt to index a boolean value" still recurring**~~ ✅ — Three-layer fix: (1) Python repair before launch (existing), (2) Lua UI repair in `uimain.lua:SetupUI()` catches corruption before any prefs code reads it, (3) quickstart.lua always writes `active_mods` to prefs (even when empty) and added to JoinLaunch path.
-35. **Refactor `relay.py:upload_logs()` into testable helpers** — The 127-line monolith mixes file I/O, text processing, regex, system info collection, and HTTP. Extract into: `_read_engine_log()`, `_read_sclog()`, `_extract_engine_errors()`, `_extract_game_prefs_mods()`, `_read_launcher_file_log()`, `_collect_system_info()`. Each becomes independently testable. Also move lazy imports (`COMMIT_HASH`, `GAME_PREFS_PATH`, `_GAME_PREFS_DIR`) to module level for mockability.
-36. **Refactor `deploy.py:run_setup()` into step functions** — The 248-line orchestrator does 6 distinct setup steps (copy binaries, copy bundled files, copy init, build content, sync mods, setup maps). Extract each step into a named function. Also: add isolated unit tests for `_patch_scd()` (currently only tested indirectly via integration).
-37. **Delete unused `deploy.py:_acquire_core_content()`** — Function defined at lines 231-256 but never called. Dead code.
-38. **Test coverage push: deploy.py + relay.py** — deploy.py has 33 tests but `_patch_scd()` has no isolated tests. relay.py upload_logs() can't test individual log source failures. After refactoring (#35, #36), add tests for: missing log files, malformed Game.prefs, boundary conditions (exactly 300/500 lines), per-source error handling.
-39. **Extract hard-coded arcnames in `deploy.py:_patch_scd()`** — Strings like `"lua/ui/uimain.lua"` are scattered as literals. Move to config constants for maintainability and testability.
+32. **PyInstaller _MEI temp directory cleanup failure** — `--onefile` mode extracts to temp dir; unclean exits leave it behind. Long-term: consider `--onedir` mode.
+33. **AI reclaim grid reference missing** — `Build condition ('ReclaimAvailableInGrid') requires a reference to the reclaim grid in the brain` warning. Low priority (cosmetic, AI still functions).
+36. **Refactor `deploy.py:run_setup()` into step functions** — Extract each setup step into a named function. Add isolated unit tests for `_patch_scd()`.
+37. **Delete unused `deploy.py:_acquire_core_content()`** — Dead code, never called.
+38. **Test coverage push: deploy.py + relay.py** — `_patch_scd()` has no isolated tests. After refactoring (#36), add tests for edge cases.
+39. **Extract hard-coded arcnames in `deploy.py:_patch_scd()`** — Move string literals to config constants.
+
+---
+
+## Archive (completed)
+
+<details>
+<summary>Click to expand completed items</summary>
+
+### Critical Bugs
+- #1 **Asset download stuck / no progress shown** — progress bar + step labels in GUI (PR #26)
+- #2 **Auto-discover SCFA install path** — superseded: exe now lives in SCFA folder (PR #30)
+- #3 **WOPC asset download failing** — 30s timeout, 3 retries with backoff (PR #26)
+- #5 **Map preview not working (solo)** — Pillow bundled in exe (PR #26)
+- #6 **Map preview not working (multiplayer)** — lobby preview image widget (PR #26)
+- #43 **"Send Logs" button** — one-click upload to Firebase `/reports/` (v2.01.0014)
+- #58 **Game.prefs corruption causes black screen** — auto-repair before every launch
+
+### Player Experience
+- #5 **Launcher self-update** — check GitHub Releases, download/replace exe, restart (PR #28)
+- #6 **SupCom-authentic UI assets** — 9-slice chrome borders, faction icons, beveled buttons
+- #7 **Remember launcher window size** — persist in wopc_prefs.ini (PR #29)
+- #8 **SupCom color picker** — HSV wheel, nearest SCFA palette match (v2.01.0027)
+
+### Multiplayer UX (Phase 6)
+- #11 **"Add AI" in multiplayer lobby** — wired with proper slot management
+- #12 **"Change Map" in multiplayer lobby** — searchable map picker
+- #13 **Remove players from solo screen** — AI slots have remove buttons
+- #14 **Victory type tooltips** — descriptions on both screens
+- #15 **Team auto-assignment** — `_next_team()` auto-balancing
+- #16 **Solo/multiplayer UI consistency** — shared `GAME_OPTION_DEFS`
+- #17 **UI polish** — SupCom visual redesign (gold + navy palette)
+- #18 **Map preview in launcher** — preview image, player count, size, description
+- #18b **Interactive map preview** — canvas with mass/hydro/spawn overlays, DDS extraction
+
+### UI Polish
+- #36 **Map preview too small** — enlarged with 5:1 column ratio
+- #37 **Map list should be narrower** — compact sidebar, minsize=200
+- #38 **Game browser refresh button** — manual refresh + 5s auto-poll
+- #39 **SupCom-authentic UI chrome** — 9-slice frames on all screens
+- #40 **Marker visibility at small sizes** — increased radii and outlines
+- #41 **Map description panel** — in inspect window header
+- #44 **Icon-based map markers** — commander icons, strategic icons
+- #45 **Unify lobby map UI with solo** — unified 4-column layout
+- #47 **Show player name in slot** — from prefs, updates on change (v2.01.0027)
+- #49 **Spawn position bug** — ARMY_N index matching with civilian gap-fill (v2.01.0032)
+- #50 **Map black screen after ready check** — always-rescan + deferred redraw
+- #51 **Send Logs failure — Firebase 401** — security rules updated
+- #52 **Player color mismatch in-game** — aligned with GameColors.lua
+- #53 **Auto-updater map list not loading** — fixed by #50's rescan
+- #55 **Refactor app.py monolith** — 4,320 to 1,913 lines (PR #63 + #68)
+
+### Multiplayer Bugs
+- #56 **Multiplayer join broken** — six bugs fixed (TCP coalescing, thread safety, etc.)
+- #57 **Map spawn markers not assigned on initial load** — slot accessor sync fix
+- #59 **TCP port 15000 unreachable** — UPnP auto-port-forwarding + NAT error messages
+- #60 **Launcher log verbosity for game launch** — structured logging before Popen()
+- #61 **Can't select spawn slot on map** — wired spawn callbacks in lobby MapCanvas
+- #63 **Player options missing in multiplayer** — host slot matched solo structure
+- #64 **AI slots don't show on map** — sequential start_spot + accessor redraw
+- #65 **Enter key launches game instead of chat** — removed global Return binding
+- #66 **Friend can't join game** — wopc_core.scd health check + auto-repair (v2.01.0045)
+- #67 **Game not cleaned from lobby on launch** — stop server + return to browser
+- #68 **Friend's wopc_core.scd missing** — health check + auto-repair (v2.01.0045)
+- #69 **Send Logs should include WOPC.log** — engine/scfa/launcher logs in Firebase (v2.01.0055)
+- #70 **MEI temp directory warning on update** — ping delay + retry rmdir
+- #71 **Failed to load Python DLL on auto-update** — restart.log + non-blocking launch (v2.01.0060)
+- #73 **MEI Python DLL load failure** — duplicate of #71 (v2.01.0060)
+- #74 **Solo map preview broken** — CONTENT_BUILD marker for stale content (v2.01.0055)
+
+### Observability
+- #78 **Launch ID correlation** — 12-char UUID threaded through launcher/engine/Firebase
+- #79 **Game exe not starting / vanilla lobby** — VFS mount order bug + download resilience (v2.01.0057-0059)
+- #80 **aibrain.lua import cascade** — lazy-load Factions in FactoryManagerBrainComponent.lua
+- #81 **Game exit monitoring** — daemon thread monitors exit code + session duration (v2.01.0061)
+- #82 **PhxLib.lua division-by-nil** — patched via _patch_scd() (v2.01.0061)
+
+### Security
+- #77 **Firebase security rules** — schema validation, write-once reports/logs, deny-all default
+- #83 **Path traversal in file_transfer.py** — resolve + is_relative_to guard
+- #84 **Unbound network buffer in lobby.py** — MAX_BUFFER (1 MB) + MAX_MESSAGE (256 KB)
+- #85 **ZIP path traversal in deploy.py** — member path validation before extraction
+- #86 **Command injection in updater.py** — .cmd script file replaces shell=True
+
+### Architecture
+- #30 **Remove or fix post-commit hook** — already removed, pre-commit framework remains
+- #31 **Speed up release script** — skip content rebuild, parallel tests+build, skip pip
+- #34 **Game.prefs boolean corruption** — three-layer fix (Python + Lua UI + quickstart)
+- #35 **Refactor relay.py:upload_logs()** — extracted 4 static helpers, 96% coverage
+
+</details>
