@@ -2,6 +2,7 @@ import hashlib
 import logging
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,9 @@ else:
 INIT_DIR = REPO_ROOT / "init"
 
 logger = logging.getLogger("wopc.cli")
+
+# Last launch ID — set by cmd_launch() for correlation with engine/Firebase logs
+last_launch_id: str = ""
 
 
 def cmd_status() -> int:
@@ -168,6 +172,12 @@ def cmd_launch(
         Explicit launch mode ('solo', 'host', or 'join').  If None,
         falls back to the pref value (for backwards compatibility).
     """
+    # Generate a unique launch ID for correlating launcher ↔ engine ↔ Firebase logs
+    global last_launch_id
+    launch_id = uuid.uuid4().hex[:12]
+    last_launch_id = launch_id
+    logger.info("Launch ID: %s", launch_id)
+
     exe_path = WOPC_BIN / GAME_EXE
 
     if not exe_path.exists():
@@ -244,6 +254,7 @@ def cmd_launch(
             active_mod_uids=all_mod_uids,
             expected_humans=expected_humans,
             is_host=False,
+            launch_id=launch_id,
         )
         logger.info("Wrote game config: %s", config_path)
         cmd.extend(
@@ -287,6 +298,7 @@ def cmd_launch(
             active_mod_uids=all_mod_uids,
             expected_humans=expected_humans,
             is_host=True,
+            launch_id=launch_id,
         )
         logger.info("Wrote game config: %s", config_path)
         cmd.extend(
@@ -324,6 +336,7 @@ def cmd_launch(
                 ai_opponents=ai_opponents,
                 game_options=merged_options_solo,
                 active_mod_uids=all_mod_uids,
+                launch_id=launch_id,
             )
             logger.info("Wrote game config: %s", config_path)
             cmd.extend(
@@ -343,8 +356,9 @@ def cmd_launch(
             logger.warning("No map selected — launching to main menu")
         logger.info("Launching WOPC (solo mode)...")
 
-    # --- Structured launch diagnostics (#60) ---
+    # --- Structured launch diagnostics (#60, #78) ---
     logger.info("--- WOPC Launch ---")
+    logger.info("  LaunchID: %s", launch_id)
     logger.info("  Mode:     %s", launch_mode)
     logger.info("  Exe:      %s", exe_path)
     logger.info("  Init:     %s", init_path)

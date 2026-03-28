@@ -347,6 +347,7 @@ local WopcMultilobby = Class(moho.lobby_methods) {
 ---@param natTraversalProvider userdata?
 function HostGame(cfg, protocol, port, playerName, gameName, mapFile, natTraversalProvider)
     LOG("WOPC MultiLobby: HostGame — expecting " .. tostring(cfg.ExpectedHumans) .. " humans")
+    LOG("WOPC LaunchID: " .. tostring(cfg.LaunchID or "none"))
     _cfg = cfg
     _isHost = true
     _expectedHumans = cfg.ExpectedHumans or 2
@@ -383,6 +384,7 @@ end
 ---@param natTraversalProvider userdata?
 function JoinGame(cfg, protocol, address, playerName, natTraversalProvider)
     LOG("WOPC MultiLobby: JoinGame — connecting to " .. tostring(address))
+    LOG("WOPC LaunchID: " .. tostring(cfg.LaunchID or "none"))
     _cfg = cfg
     _isHost = false
     _expectedHumans = cfg.ExpectedHumans or 2
