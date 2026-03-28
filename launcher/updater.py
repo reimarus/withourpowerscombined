@@ -283,20 +283,21 @@ def apply_update(tmp_path: Path) -> bool:
         restart_log = exe_path.parent / "restart.log"
         if meipass:
             LOG.info("Scheduling _MEI cleanup + restart: %s", meipass)
-            subprocess.Popen(
-                f"cmd /c ("
-                f'echo [%date% %time%] Starting update restart >>"{restart_log}"'
-                f" & ping -n 4 127.0.0.1 >nul"
-                f' & echo [%date% %time%] Deleting _MEI: {meipass} >>"{restart_log}"'
-                f' & rmdir /s /q "{meipass}" 2>>"{restart_log}"'
-                f" & ping -n 3 127.0.0.1 >nul"
-                f' & rmdir /s /q "{meipass}" 2>>"{restart_log}"'
-                f' & echo [%date% %time%] Launching new exe: {exe_path} >>"{restart_log}"'
-                f' & start "" "{exe_path}"'
-                f' & echo [%date% %time%] Launch command issued >>"{restart_log}"'
-                f")",
-                shell=True,
+            restart_script = exe_path.parent / "_wopc_restart.cmd"
+            restart_script.write_text(
+                f"@echo off\n"
+                f'echo [%date% %time%] Starting update restart >>"{restart_log}"\n'
+                f"ping -n 4 127.0.0.1 >nul\n"
+                f'echo [%date% %time%] Deleting _MEI: {meipass} >>"{restart_log}"\n'
+                f'rmdir /s /q "{meipass}" 2>>"{restart_log}"\n'
+                f"ping -n 3 127.0.0.1 >nul\n"
+                f'rmdir /s /q "{meipass}" 2>>"{restart_log}"\n'
+                f'echo [%date% %time%] Launching new exe: {exe_path} >>"{restart_log}"\n'
+                f'start "" "{exe_path}"\n'
+                f'echo [%date% %time%] Launch command issued >>"{restart_log}"\n',
+                encoding="utf-8",
             )
+            subprocess.Popen(["cmd", "/c", str(restart_script)])
         else:
             LOG.info("Restarting launcher (non-frozen) ...")
             subprocess.Popen([str(exe_path)])

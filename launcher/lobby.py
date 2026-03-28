@@ -32,6 +32,8 @@ PROTOCOL_VERSION = 1
 HEARTBEAT_INTERVAL = 5.0  # seconds
 HEARTBEAT_TIMEOUT = 15.0  # seconds
 BUFFER_SIZE = 65536
+MAX_BUFFER = 1_048_576  # 1 MB — reject peers flooding data without newlines
+MAX_MESSAGE = 262_144  # 256 KB — reject oversized individual JSON messages
 ENCODING = "utf-8"
 
 
@@ -86,12 +88,18 @@ def _recv_lines(sock: socket.socket, buf: bytearray) -> list[str]:
     if not chunk:
         raise ConnectionResetError("peer closed connection")
     buf.extend(chunk)
+    if len(buf) > MAX_BUFFER:
+        raise ConnectionResetError("buffer overflow — peer sending too much data")
     lines: list[str] = []
     while b"\n" in buf:
         line, _, rest = buf.partition(b"\n")
         buf.clear()
         buf.extend(rest)
-        lines.append(line.decode(ENCODING))
+        text = line.decode(ENCODING)
+        if len(text) > MAX_MESSAGE:
+            logger.warning("Oversized message dropped (%d bytes)", len(text))
+            continue
+        lines.append(text)
     return lines
 
 
