@@ -604,6 +604,18 @@ def run_setup(
     _report("[4/6] Downloading content packs", 4)
     _acquire_content_packs()
 
+    # Patch lua.scd (content pack dependency) with PhxLib.lua nil fix.
+    # PhxLib.lua has a division-by-nil bug (weapon.EnergyDrainPerSecond)
+    # that causes loading failures on some machines.
+    if wopc_patches_src.exists():
+        lua_scd_dst = config.WOPC_GAMEDATA / "lua.scd"
+        phxlib_src = wopc_patches_src / "lua" / "PhxLib.lua"
+        if phxlib_src.exists() and lua_scd_dst.exists():
+            if _patch_scd(lua_scd_dst, "lua/PhxLib.lua", phxlib_src):
+                logger.info("  patched lua.scd with fixed PhxLib.lua")
+            else:
+                logger.warning("  WARNING: failed to patch PhxLib.lua in lua.scd")
+
     # --- Step 4c: Build unit icon SCD for content packs ---
     _report("[4/6] Building content pack icons", 4)
     _build_content_icons_scd()

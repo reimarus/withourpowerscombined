@@ -177,7 +177,7 @@ class TestCmdLaunch:
             ),
         ):
             result = cmd_launch()
-            assert result == 0
+            assert result is mock_popen.return_value  # Returns Popen on success
             mock_popen.assert_called_once()
             # Verify exe is first arg
             call_args = mock_popen.call_args[0][0]
@@ -258,7 +258,8 @@ class TestCmdLaunchModes:
                 return_value=wopc_bin / "wopc_game_config.lua",
             ),
         ):
-            assert cmd_launch() == 0
+            result = cmd_launch()
+            assert result is mock_popen.return_value  # Returns Popen on success
             args = mock_popen.call_args[0][0]
             assert "/wopcquickstart" in args
             assert "/hostgame" in args
@@ -289,7 +290,8 @@ class TestCmdLaunchModes:
                 return_value=wopc_bin / "wopc_game_config.lua",
             ) as mock_config,
         ):
-            assert cmd_launch() == 0
+            result = cmd_launch()
+            assert result is mock_popen.return_value  # Returns Popen on success
             args = mock_popen.call_args[0][0]
             assert "/hostgame" in args
             assert "/wopcquickstart" in args
@@ -327,7 +329,8 @@ class TestCmdLaunchModes:
                 return_value=wopc_bin / "wopc_game_config.lua",
             ),
         ):
-            assert cmd_launch() == 0
+            result = cmd_launch()
+            assert result is mock_popen.return_value  # Returns Popen on success
             args = mock_popen.call_args[0][0]
             assert "17500" in args
 
@@ -360,7 +363,8 @@ class TestCmdLaunchModes:
                 return_value=wopc_bin / "wopc_game_config.lua",
             ) as mock_config,
         ):
-            assert cmd_launch() == 0
+            result = cmd_launch()
+            assert result is mock_popen.return_value  # Returns Popen on success
             args = mock_popen.call_args[0][0]
             assert "/joingame" in args
             assert "192.168.1.10:15000" in args
@@ -423,7 +427,8 @@ class TestCmdLaunchModes:
                 return_value=wopc_bin / "wopc_game_config.lua",
             ) as mock_config,
         ):
-            assert cmd_launch(ai_opponents=ai_opponents) == 0
+            result = cmd_launch(ai_opponents=ai_opponents)
+            assert result is mock_popen.return_value  # Returns Popen on success
             mock_config.assert_called_once()
             call_kwargs = mock_config.call_args
             assert call_kwargs.kwargs.get("ai_opponents") == ai_opponents
@@ -454,7 +459,8 @@ class TestCmdLaunchModes:
                 return_value=wopc_bin / "wopc_game_config.lua",
             ) as mock_config,
         ):
-            assert cmd_launch(game_options=game_options) == 0
+            result = cmd_launch(game_options=game_options)
+            assert result is mock_popen.return_value  # Returns Popen on success
             call_kwargs = mock_config.call_args
             merged = call_kwargs.kwargs.get("game_options", {})
             # Should have minimap_enabled from prefs PLUS our overrides
@@ -504,7 +510,8 @@ class TestLaunchModeNormalization:
             ),
         ):
             # "multiplayer" is the stale pref value that caused the bug
-            assert cmd_launch(launch_mode="multiplayer") == 0
+            result = cmd_launch(launch_mode="multiplayer")
+            assert result is mock_popen.return_value  # Returns Popen on success
             args = mock_popen.call_args[0][0]
             # Should have normalized to solo — solo has /hostgame
             assert "/wopcquickstart" in args
@@ -534,7 +541,8 @@ class TestLaunchModeNormalization:
             ),
         ):
             # launch_mode=None → reads pref "garbage" → normalized to "solo"
-            assert cmd_launch(launch_mode=None) == 0
+            result = cmd_launch(launch_mode=None)
+            assert result is mock_popen.return_value  # Returns Popen on success
             args = mock_popen.call_args[0][0]
             assert "/wopcquickstart" in args
 
@@ -561,7 +569,8 @@ class TestLaunchModeNormalization:
                 return_value=wopc_bin / "wopc_game_config.lua",
             ),
         ):
-            assert cmd_launch(launch_mode="") == 0
+            result = cmd_launch(launch_mode="")
+            assert result is mock_popen.return_value  # Returns Popen on success
             args = mock_popen.call_args[0][0]
             assert "/wopcquickstart" in args
 
@@ -603,7 +612,7 @@ class TestLaunchModeNormalization:
                 stack.enter_context(p)
             result = cmd_launch(launch_mode=mode)
 
-        assert result == 0
+        assert result is mock_popen.return_value  # Returns Popen on success
         args = mock_popen.call_args[0][0]
         if mode in ("solo", "host"):
             assert "/hostgame" in args
