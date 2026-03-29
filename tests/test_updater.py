@@ -84,10 +84,79 @@ FAKE_RELEASES = [
 ]
 
 
-class TestCheckForUpdate:
-    def test_finds_newer_version(self) -> None:
+FIREBASE_VERSION_DATA = {
+    "tag": "launcher-v2.0.0",
+    "version": "2.0.0",
+    "download_url": "https://wopc-cdn.roskvarek.workers.dev/launcher/WOPC-Launcher.exe",
+    "size_bytes": 30_000_000,
+}
+
+
+class TestCheckFirebase:
+    """Tests for _check_firebase() — Firebase version manifest check."""
+
+    def test_newer_version_returns_update_info(self) -> None:
         mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(FAKE_RELEASES).encode()
+        mock_resp.read.return_value = json.dumps(FIREBASE_VERSION_DATA).encode()
+
+        with patch("launcher.updater.urllib.request.urlopen", return_value=mock_resp):
+            result = updater._check_firebase((1, 0, 0))
+            assert result is not None
+            assert result.version == "2.0.0"
+            assert result.tag == "launcher-v2.0.0"
+            assert result.download_url.endswith("WOPC-Launcher.exe")
+            assert result.size_bytes == 30_000_000
+
+    def test_same_version_returns_none(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(FIREBASE_VERSION_DATA).encode()
+
+        with patch("launcher.updater.urllib.request.urlopen", return_value=mock_resp):
+            assert updater._check_firebase((2, 0, 0)) is None
+
+    def test_older_version_returns_none(self) -> None:
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(FIREBASE_VERSION_DATA).encode()
+
+        with patch("launcher.updater.urllib.request.urlopen", return_value=mock_resp):
+            assert updater._check_firebase((3, 0, 0)) is None
+
+    def test_null_response_returns_none(self) -> None:
+        """Firebase returns 'null' when the node doesn't exist."""
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b"null"
+
+        with patch("launcher.updater.urllib.request.urlopen", return_value=mock_resp):
+            assert updater._check_firebase((1, 0, 0)) is None
+
+    def test_network_error_returns_none(self) -> None:
+        with patch(
+            "launcher.updater.urllib.request.urlopen",
+            side_effect=OSError("no network"),
+        ):
+            assert updater._check_firebase((1, 0, 0)) is None
+
+    def test_malformed_data_returns_none(self) -> None:
+        """Missing tag field means we can't parse the version."""
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"version": "2.0.0"}).encode()
+
+        with patch("launcher.updater.urllib.request.urlopen", return_value=mock_resp):
+            # tag="" -> _parse_version returns None -> returns None
+            assert updater._check_firebase((1, 0, 0)) is None
+
+
+class TestCheckForUpdate:
+    def test_firebase_checked_before_github(self) -> None:
+        """Firebase is the primary source; GitHub is not called if Firebase succeeds."""
+        firebase_data = {
+            "tag": "launcher-v2.0.0",
+            "version": "2.0.0",
+            "download_url": "https://cdn.example.com/exe",
+            "size_bytes": 30_000_000,
+        }
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(firebase_data).encode()
 
         with (
             patch.object(updater.config, "VERSION", "1.0.0"),
@@ -96,21 +165,94 @@ class TestCheckForUpdate:
             info = updater.check_for_update()
             assert info is not None
             assert info.version == "2.0.0"
-            assert info.download_url == "https://example.com/WOPC-Launcher.exe"
-            assert info.size_bytes == 30_000_000
+            assert info.download_url == "https://cdn.example.com/exe"
+
+    def test_github_fallback_when_firebase_fails(self) -> None:
+        """When Firebase fails, falls back to GitHub API."""
+        github_releases = [
+            {
+                "tag_name": "launcher-v2.0.0",
+                "draft": False,
+                "prerelease": False,
+                "body": "",
+                "assets": [
+                    {
+                        "name": "WOPC-Launcher.exe",
+                        "browser_download_url": "https://github.com/example/exe",
+                        "size": 30_000_000,
+                    }
+                ],
+            }
+        ]
+
+        call_count = 0
+
+        def urlopen_side_effect(req, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            url = req.full_url if hasattr(req, "full_url") else str(req)
+            if "firebase" in url:
+                raise OSError("Firebase down")
+            mock = MagicMock()
+            mock.read.return_value = json.dumps(github_releases).encode()
+            return mock
+
+        with (
+            patch.object(updater.config, "VERSION", "1.0.0"),
+            patch("launcher.updater.urllib.request.urlopen", side_effect=urlopen_side_effect),
+        ):
+            info = updater.check_for_update()
+            assert info is not None
+            assert info.version == "2.0.0"
+            assert "github.com" in info.download_url
+            assert call_count == 2  # Firebase attempt + GitHub attempt
+
+    def test_finds_newer_version(self) -> None:
+        """End-to-end: Firebase returns newer version."""
+        firebase_data = {
+            "tag": "launcher-v2.0.0",
+            "version": "2.0.0",
+            "download_url": "https://example.com/WOPC-Launcher.exe",
+            "size_bytes": 30_000_000,
+        }
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(firebase_data).encode()
+
+        with (
+            patch.object(updater.config, "VERSION", "1.0.0"),
+            patch("launcher.updater.urllib.request.urlopen", return_value=mock_resp),
+        ):
+            info = updater.check_for_update()
+            assert info is not None
+            assert info.version == "2.0.0"
 
     def test_no_update_when_current(self) -> None:
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(FAKE_RELEASES).encode()
+        firebase_data = {
+            "tag": "launcher-v2.0.0",
+            "version": "2.0.0",
+            "download_url": "https://example.com/exe",
+            "size_bytes": 30_000_000,
+        }
+
+        call_count = 0
+
+        def urlopen_side_effect(req, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            mock = MagicMock()
+            data = firebase_data if call_count == 1 else FAKE_RELEASES
+            mock.read.return_value = json.dumps(data).encode()
+            return mock
 
         with (
             patch.object(updater.config, "VERSION", "2.0.0"),
-            patch("launcher.updater.urllib.request.urlopen", return_value=mock_resp),
+            patch("launcher.updater.urllib.request.urlopen", side_effect=urlopen_side_effect),
         ):
             info = updater.check_for_update()
             assert info is None
 
     def test_skips_draft_releases(self) -> None:
+        """GitHub fallback skips draft releases."""
         releases = [
             {
                 "tag_name": "launcher-v3.0.0",
@@ -126,16 +268,26 @@ class TestCheckForUpdate:
                 ],
             }
         ]
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(releases).encode()
+
+        call_count = 0
+
+        def urlopen_side_effect(req, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            url = req.full_url if hasattr(req, "full_url") else str(req)
+            if "firebase" in url:
+                raise OSError("Firebase down")
+            mock = MagicMock()
+            mock.read.return_value = json.dumps(releases).encode()
+            return mock
 
         with (
             patch.object(updater.config, "VERSION", "1.0.0"),
-            patch("launcher.updater.urllib.request.urlopen", return_value=mock_resp),
+            patch("launcher.updater.urllib.request.urlopen", side_effect=urlopen_side_effect),
         ):
             assert updater.check_for_update() is None
 
-    def test_handles_network_error(self) -> None:
+    def test_handles_total_network_failure(self) -> None:
         with (
             patch.object(updater.config, "VERSION", "1.0.0"),
             patch(
@@ -146,7 +298,7 @@ class TestCheckForUpdate:
             assert updater.check_for_update() is None
 
     def test_retries_on_network_failure(self) -> None:
-        """With retry_on_failure=True, retries once after network error."""
+        """With retry_on_failure=True, GitHub fallback retries once."""
         releases = [
             {
                 "tag_name": "launcher-v2.0.0",
@@ -162,17 +314,21 @@ class TestCheckForUpdate:
                 "body": "",
             }
         ]
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(releases).encode()
 
         call_count = 0
 
-        def side_effect(*args, **kwargs):
+        def side_effect(req, **kwargs):
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
+            url = req.full_url if hasattr(req, "full_url") else str(req)
+            if "firebase" in url:
+                raise OSError("Firebase down")
+            # GitHub: fail first attempt, succeed second
+            if call_count == 2:
                 raise OSError("no network")
-            return mock_resp
+            mock = MagicMock()
+            mock.read.return_value = json.dumps(releases).encode()
+            return mock
 
         with (
             patch.object(updater.config, "VERSION", "1.0.0"),
@@ -182,7 +338,6 @@ class TestCheckForUpdate:
             result = updater.check_for_update(retry_on_failure=True)
             assert result is not None
             assert result.version == "2.0.0"
-            assert call_count == 2
 
 
 # ---------------------------------------------------------------------------

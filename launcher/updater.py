@@ -38,7 +38,10 @@ _MIN_EXE_SIZE = 10 * 1024 * 1024
 # PE header magic bytes — every valid Windows exe starts with "MZ".
 _PE_MAGIC = b"MZ"
 
-# GitHub API endpoint — search for releases with the launcher tag prefix
+# Firebase version manifest — primary source for update checks
+_FIREBASE_VERSION_URL = f"{config.RELAY_URL}/launcher_version.json"
+
+# GitHub API endpoint — fallback when Firebase is unavailable
 _RELEASES_URL = "https://api.github.com/repos/reimarus/withourpowerscombined/releases"
 _TAG_PREFIX = "launcher-v"
 _CHECK_TIMEOUT = 10  # seconds
@@ -133,19 +136,39 @@ class UpdateInfo:
         return f"UpdateInfo(tag={self.tag!r}, size={self.size_bytes})"
 
 
-def check_for_update(*, retry_on_failure: bool = False) -> UpdateInfo | None:
-    """Query GitHub for a newer launcher release.
+def _check_firebase(current: tuple[int, ...]) -> UpdateInfo | None:
+    """Check Firebase for the latest launcher version (primary source).
 
-    Returns an :class:`UpdateInfo` if an update is available, else *None*.
-    This is safe to call from a background thread.
-
-    When *retry_on_failure* is True, a failed network request is retried
-    once after a 5-second delay (useful for startup when the network may
-    not be ready yet).
+    Returns an :class:`UpdateInfo` if a newer version exists, else *None*.
     """
-    current = _current_version_tuple()
-    LOG.info("Checking for updates (current: %s) ...", config.VERSION)
+    try:
+        req = urllib.request.Request(_FIREBASE_VERSION_URL)
+        resp = urllib.request.urlopen(req, timeout=_CHECK_TIMEOUT)
+        data = json.loads(resp.read())
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        LOG.warning("Firebase version check failed: %s", exc)
+        return None
 
+    if not isinstance(data, dict):
+        LOG.warning("Firebase returned non-dict: %r", type(data).__name__)
+        return None
+
+    tag = data.get("tag", "")
+    ver = _parse_version(tag)
+    if ver is None or ver <= current:
+        return None
+
+    return UpdateInfo(
+        tag=tag,
+        version=data.get("version", ""),
+        download_url=data.get("download_url", ""),
+        size_bytes=data.get("size_bytes", 0),
+        body="",
+    )
+
+
+def _check_github(current: tuple[int, ...], *, retry_on_failure: bool = False) -> UpdateInfo | None:
+    """Check GitHub API for a newer launcher release (fallback source)."""
     releases = None
     for attempt in range(2 if retry_on_failure else 1):
         try:
@@ -157,10 +180,10 @@ def check_for_update(*, retry_on_failure: bool = False) -> UpdateInfo | None:
             releases = json.loads(resp.read())
             break
         except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
-            LOG.warning("Update check failed (attempt %d): %s", attempt + 1, exc)
+            LOG.warning("GitHub update check failed (attempt %d): %s", attempt + 1, exc)
             if attempt == 0 and retry_on_failure:
                 time.sleep(5)
-                LOG.info("Retrying update check ...")
+                LOG.info("Retrying GitHub update check ...")
 
     if releases is None:
         return None
@@ -192,11 +215,38 @@ def check_for_update(*, retry_on_failure: bool = False) -> UpdateInfo | None:
                     )
                 break
 
-    if best:
-        LOG.info("Update available: %s (current: %s)", best.version, config.VERSION)
-    else:
-        LOG.info("No update available.")
     return best
+
+
+def check_for_update(*, retry_on_failure: bool = False) -> UpdateInfo | None:
+    """Check for a newer launcher version.
+
+    Tries Firebase first (fast, reliable), falls back to GitHub API.
+    Returns an :class:`UpdateInfo` if an update is available, else *None*.
+    This is safe to call from a background thread.
+
+    When *retry_on_failure* is True, a failed network request is retried
+    once after a 5-second delay (useful for startup when the network may
+    not be ready yet).
+    """
+    current = _current_version_tuple()
+    LOG.info("Checking for updates (current: %s) ...", config.VERSION)
+
+    # Primary: Firebase version manifest
+    result = _check_firebase(current)
+    if result is not None:
+        LOG.info("Update available (Firebase): %s (current: %s)", result.version, config.VERSION)
+        return result
+
+    # Fallback: GitHub releases API
+    LOG.info("Firebase had no update, trying GitHub API fallback ...")
+    result = _check_github(current, retry_on_failure=retry_on_failure)
+    if result is not None:
+        LOG.info("Update available (GitHub): %s (current: %s)", result.version, config.VERSION)
+        return result
+
+    LOG.info("No update available.")
+    return None
 
 
 # ---------------------------------------------------------------------------

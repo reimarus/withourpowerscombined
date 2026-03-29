@@ -22,6 +22,10 @@
         ".write": "!data.exists()",
         ".validate": "newData.hasChildren(['event','timestamp'])"
       }
+    },
+    "launcher_version": {
+      ".read": true,
+      ".write": true
     }
   }
 }

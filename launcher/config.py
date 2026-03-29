@@ -153,13 +153,14 @@ WOPC_CORE_SCD = "wopc_core.scd"
 BASE_EXE_URL = "https://content.faforever.com/build/ForgedAlliance_base.exe"
 BASE_EXE_CACHE = PATCH_BUILD_DIR / "ForgedAlliance_base.exe"
 
+# Content pack assets hosted on Cloudflare R2 (via Worker CDN).
+_CDN = "https://wopc-cdn.roskvarek.workers.dev"
+_V1 = f"{_CDN}/content-v1"
+_V3 = f"{_CDN}/content-v3"
+
 # Auto-generated SCD containing unit icons for content pack units.
 CONTENT_ICONS_SCD = "content_icons.scd"
-CONTENT_ICONS_URL = "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1/content_icons.scd"
-
-# Content pack assets hosted on GitHub releases.
-_V1 = "https://github.com/reimarus/withourpowerscombined/releases/download/content-v1"
-_V3 = "https://github.com/reimarus/withourpowerscombined/releases/download/content-v3"
+CONTENT_ICONS_URL = f"{_V1}/content_icons.scd"
 
 CONTENT_PACK_ASSETS: dict[str, dict] = {
     # --- Required dependency (auto-enabled when any unit pack is active) ---
@@ -237,7 +238,7 @@ CONTENT_VERSION = "v2"
 # it on startup.  A mismatch triggers automatic re-setup.
 CONTENT_BUILD = 3
 
-_RELEASE_BASE = "https://github.com/reimarus/withourpowerscombined/releases/download"
+_RELEASE_BASE = _CDN
 
 CORE_CONTENT_ASSETS: dict[str, dict[str, str | bool]] = {
     "wopc_core.scd.zip": {
