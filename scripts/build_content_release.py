@@ -287,7 +287,7 @@ def verify_scd_imports(scd_path: Path) -> list[str]:
             source_list = ", ".join(sorted(sources)[:3])
             if len(sources) > 3:
                 source_list += f" (+{len(sources) - 3} more)"
-            print(f"    {target}  ← {source_list}")
+            print(f"    {target}  <- {source_list}")
     else:
         print("  All import targets resolved successfully")
 

@@ -11,6 +11,21 @@
 
 LOG("WOPC: uimain.lua loaded from wopc_core.scd")
 
+-- WOPC: Wrap import() to log failures with the exact path that failed.
+-- When a Lua file is missing from mounted SCDs, the engine shows a cryptic
+-- error or black screen.  This wrapper ensures WOPC.log captures the path.
+do
+    local _original_import = import
+    function import(path)
+        local ok, result = pcall(_original_import, path)
+        if not ok then
+            LOG('WOPC ERROR: Failed to import: ' .. tostring(path) .. ' -- ' .. tostring(result))
+            error(result)
+        end
+        return result
+    end
+end
+
 local UIUtil = import("/lua/ui/uiutil.lua")
 local UIFile = UIUtil.UIFile
 local Prefs = import("/lua/user/prefs.lua")
