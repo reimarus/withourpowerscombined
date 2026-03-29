@@ -4,14 +4,13 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Critical Bugs
 
-87. ~~**Standalone DLL audit — missing dependencies break fresh installs**~~ — **DONE** (PRs #104, #105, #106). Pre-launch DLL validation, setup aborts on missing critical DLLs, `wopc validate` checks all 19 critical binaries + wopc_core.scd size, build-time SCD import verification, runtime import() wrapper for crash diagnostics. Moved to Archive.
-4. **Publish launcher exe to GitHub Release** — the exe must be the most prominent download on the repo. Upload `WOPC-Launcher.exe` to a pinned release so players can find it immediately.
-7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
-42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers in `deploy.py` don't check the return value. Also: the `content-v2` GitHub Release must have `wopc_core.scd.zip`, `wopc-maps.zip`, and strategic icons so first-time setup works.
+87. ~~**Standalone DLL audit — missing dependencies break fresh installs**~~ — **DONE** (PRs #104, #105, #106). Moved to Archive.
+89. ~~**GitHub account flagged — downloads broken for all users**~~ — **DONE** (PR #107). Migrated all downloads to Cloudflare R2 CDN, added Firebase version manifest, GitHub API as fallback. Appeal pending for account reinstatement. Moved to Archive.
+42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers in `deploy.py` don't check the return value. Content is now on R2 but error handling still needs work.
 
 ## High Priority — Player Experience
 
-9. **Content-v2 release build** — run `scripts/build_content_release.py` and upload wopc_core.scd, wopc-maps.zip, strategic icons to `content-v2` GitHub Release so the standalone installer can download them
+9. ~~**Content-v2 release build**~~ — Done. Content assets on R2 CDN, auto-uploaded by release script. Moved to Archive.
 10. **Player ratings / balancing** — track skill ratings for fairer matchmaking (ELO or similar)
 62. **Multiplayer: Color picker not rendering correctly** — color picker widget has visual issues in the multiplayer lobby. Needs investigation.
 72. **Global player settings** — Move player settings (name, faction, color, team) to a global scope that carries across solo and multiplayer modes. A unified player profile model would reduce duplication and ensure consistency.
@@ -142,6 +141,12 @@ Items to tackle over time, roughly grouped by priority.
 - #84 **Unbound network buffer in lobby.py** — MAX_BUFFER (1 MB) + MAX_MESSAGE (256 KB)
 - #85 **ZIP path traversal in deploy.py** — member path validation before extraction
 - #86 **Command injection in updater.py** — .cmd script file replaces shell=True
+
+### Standalone & Infrastructure
+- #87 **Standalone DLL audit** — Pre-launch DLL validation, setup aborts on missing critical DLLs, build-time SCD import verification, runtime import() wrapper (PRs #104-#106)
+- #89 **R2 CDN migration** — All downloads via Cloudflare R2 Worker CDN, Firebase version manifest, GitHub API fallback. 27 assets migrated. Release script auto-uploads exe + updates Firebase (PR #107)
+- #4 **Publish launcher exe** — now on R2 CDN + GitHub Releases, auto-published by release script
+- #9 **Content-v2 release build** — content pipeline + auto-upload in release script
 
 ### Architecture
 - #30 **Remove or fix post-commit hook** — already removed, pre-commit framework remains
