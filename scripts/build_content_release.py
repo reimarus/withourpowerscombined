@@ -13,6 +13,7 @@ Usage:
     python scripts/build_content_release.py
 """
 
+import re
 import shutil
 import sys
 import zipfile
@@ -180,6 +181,119 @@ def copy_icons_scd() -> Path:
     return dst
 
 
+_IMPORT_RE = re.compile(r"""import\s*\(\s*['"]([^'"]+)['"]\s*\)""")
+
+# Vanilla SCDs that are always mounted (engine loads these automatically).
+# Files inside these SCDs are valid import targets even if not in wopc_core.scd.
+_VANILLA_SCDS = [
+    "textures.scd",
+    "effects.scd",
+    "units.scd",
+    "loc_US.scd",
+    "env.scd",
+    "meshes.scd",
+    "mods.scd",
+    "schook.scd",
+    "projectiles.scd",
+]
+
+# Paths that are resolved at runtime and can't be statically verified.
+_DYNAMIC_PREFIXES = [
+    "/units/",  # Unit blueprints — loaded dynamically from unit SCDs
+    "/projectiles/",  # Projectile blueprints
+    "/effects/",  # Effect templates from vanilla effects.scd
+    "/env/",  # Environment textures/meshes
+    "/meshes/",  # 3D models
+    "/textures/",  # Texture files (not Lua)
+    "/mods/",  # Mod directories (loaded at runtime)
+    "/sounds/",  # Sound files
+    "/maps/",  # Map-specific files
+    "/loc/",  # Localization files
+]
+
+
+def verify_scd_imports(scd_path: Path) -> list[str]:
+    """Scan all Lua files in an SCD for import() calls and verify targets exist.
+
+    Returns a list of unresolvable import paths (targets not found in the SCD
+    or in vanilla SCDs that are always mounted).
+    """
+    print(f"\nVerifying import() targets in {scd_path.name}...")
+
+    # Collect all file paths in the built SCD
+    with zipfile.ZipFile(scd_path, "r") as zf:
+        scd_files = {name.replace("\\", "/").lower() for name in zf.namelist()}
+
+        # Extract all import() targets from Lua files
+        imports: dict[str, set[str]] = {}  # target -> set of source files
+        for name in zf.namelist():
+            if not name.lower().endswith(".lua"):
+                continue
+            try:
+                content = zf.read(name).decode("utf-8", errors="replace")
+            except Exception:
+                continue
+            for match in _IMPORT_RE.finditer(content):
+                target = match.group(1)
+                imports.setdefault(target, set()).add(name)
+
+    print(f"  Found {len(imports)} unique import targets across {len(scd_files)} files")
+
+    # Collect files from vanilla SCDs
+    vanilla_files: set[str] = set()
+    vanilla_scd_dir = config.SCFA_STEAM / "gamedata"
+    if vanilla_scd_dir.exists():
+        for scd_name in _VANILLA_SCDS:
+            scd = vanilla_scd_dir / scd_name
+            if scd.exists():
+                try:
+                    with zipfile.ZipFile(scd, "r") as vzf:
+                        for name in vzf.namelist():
+                            vanilla_files.add(name.replace("\\", "/").lower())
+                except zipfile.BadZipFile:
+                    print(f"  WARNING: {scd_name} is not a valid zip — skipping")
+    else:
+        print("  WARNING: SCFA gamedata dir not found — cannot check vanilla SCDs")
+
+    # Check each import target
+    unresolved: list[str] = []
+    for target, _sources in sorted(imports.items()):
+        # Normalize: strip leading / and lowercase
+        normalized = target.lstrip("/").lower()
+
+        # Skip non-Lua imports (textures, meshes, etc.)
+        if not normalized.endswith(".lua"):
+            continue
+
+        # Skip dynamically-resolved paths
+        target_lower = target.lower()
+        if any(target_lower.startswith(prefix) for prefix in _DYNAMIC_PREFIXES):
+            continue
+
+        # Check in wopc_core.scd
+        if normalized in scd_files:
+            continue
+
+        # Check in vanilla SCDs
+        if normalized in vanilla_files:
+            continue
+
+        unresolved.append(target)
+
+    if unresolved:
+        print(f"  WARNING: {len(unresolved)} unresolved import(s):")
+        for target in sorted(unresolved):
+            sources = imports[target]
+            source_list = ", ".join(sorted(sources)[:3])
+            if len(sources) > 3:
+                source_list += f" (+{len(sources) - 3} more)"
+            print(f"    {target}  ← {source_list}")
+    else:
+        print("  All import targets resolved successfully")
+
+    return unresolved
+
+
 def main() -> None:
     """Build all content assets and print upload commands."""
     print("=== WOPC Content Release Builder ===\n")
@@ -190,9 +304,15 @@ def main() -> None:
     STAGING.mkdir(parents=True)
 
     # Build assets
-    build_wopc_core_scd()
+    core_scd = build_wopc_core_scd()
     build_maps_zip()
     copy_icons_scd()
+
+    # Post-build verification
+    unresolved = verify_scd_imports(core_scd)
+    if unresolved:
+        print(f"\n⚠ {len(unresolved)} unresolved import(s) — review above for details")
+        print("  These files are referenced by import() but not found in any mounted SCD.")
 
     # Summary
     print("\n=== Staging complete ===")
