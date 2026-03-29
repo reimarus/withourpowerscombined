@@ -59,6 +59,7 @@ Items to tackle over time, roughly grouped by priority.
 37. **Delete unused `deploy.py:_acquire_core_content()`** — Dead code, never called.
 38. **Test coverage push: deploy.py + relay.py** — `_patch_scd()` has no isolated tests. After refactoring (#36), add tests for edge cases.
 39. **Extract hard-coded arcnames in `deploy.py:_patch_scd()`** — Move string literals to config constants.
+88. **Standardize config import pattern in wopc.py** — `wopc.py` uses `from launcher.config import WOPC_BIN, GAME_EXE, ...` (direct imports), while CLAUDE.md rule says to use `from launcher import config` then `config.WOPC_BIN`. The direct import creates local name copies; tests compensate by patching `launcher.wopc.WOPC_BIN` instead of `launcher.config.WOPC_BIN`. Both patterns work but having two conventions is confusing. Refactor `wopc.py` to use the module-level pattern (`from launcher import config` → `config.X`), then tests can patch `launcher.config.X` uniformly. Medium effort (~30 import sites in wopc.py + all test patches).
 
 ---
 
