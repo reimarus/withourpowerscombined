@@ -198,6 +198,75 @@ def _is_editable_installed() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# R2 upload + Firebase version manifest
+# ---------------------------------------------------------------------------
+
+
+def _upload_to_r2(exe_path: Path, version: str, tag: str) -> None:
+    """Upload the launcher exe to Cloudflare R2 and update Firebase version manifest.
+
+    Requires env vars: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID.
+    Falls back gracefully if env vars are missing or upload fails.
+    """
+    import json
+    import os
+    import urllib.request
+
+    account_id = os.environ.get("R2_ACCOUNT_ID")
+    access_key = os.environ.get("R2_ACCESS_KEY_ID")
+    secret_key = os.environ.get("R2_SECRET_ACCESS_KEY")
+
+    if not all([account_id, access_key, secret_key]):
+        print("\n  SKIP: R2 env vars not set (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, ...)")
+        print("        Exe not uploaded to R2, Firebase manifest not updated.")
+        return
+
+    # Upload exe to R2 via boto3 (S3-compatible)
+    print("\n-- Uploading exe to R2 --")
+    try:
+        import boto3
+
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name="auto",
+        )
+        r2_key = "launcher/WOPC-Launcher.exe"
+        s3.upload_file(
+            str(exe_path),
+            "wopc-releases",
+            r2_key,
+            ExtraArgs={"ContentType": "application/octet-stream"},
+        )
+        size_mb = exe_path.stat().st_size / 1_000_000
+        print(f"  OK: Uploaded {r2_key} to R2 ({size_mb:.1f} MB)")
+    except Exception as exc:
+        print(f"  WARNING: R2 upload failed: {exc}")
+        print("           Users will fall back to GitHub download.")
+        return
+
+    # Update Firebase version manifest
+    download_url = "https://wopc-cdn.roskvarek.workers.dev/launcher/WOPC-Launcher.exe"
+    manifest = {
+        "tag": tag,
+        "version": version,
+        "download_url": download_url,
+        "size_bytes": exe_path.stat().st_size,
+    }
+    firebase_url = "https://wopc-75b65-default-rtdb.firebaseio.com/launcher_version.json"
+    try:
+        data = json.dumps(manifest).encode()
+        req = urllib.request.Request(firebase_url, data=data, method="PUT")
+        req.add_header("Content-Type", "application/json")
+        urllib.request.urlopen(req, timeout=10)
+        print(f"  OK: Firebase version manifest updated ({tag})")
+    except Exception as exc:
+        print(f"  WARNING: Firebase manifest update failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -293,7 +362,10 @@ def main() -> None:
     title = f"WOPC Launcher v{new_ver}"
     run(f'gh release create {tag} "{exe_path}" --title "{title}" --generate-notes --latest')
 
-    # 7. Push the commit
+    # 7. Upload exe to R2 + update Firebase version manifest
+    _upload_to_r2(exe_path, new_ver, tag)
+
+    # 8. Push the commit
     run("git push")
 
     elapsed = time.monotonic() - t0
