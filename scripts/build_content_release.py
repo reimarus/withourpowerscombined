@@ -311,7 +311,7 @@ def main() -> None:
     # Post-build verification
     unresolved = verify_scd_imports(core_scd)
     if unresolved:
-        print(f"\n⚠ {len(unresolved)} unresolved import(s) — review above for details")
+        print(f"\n  WARNING: {len(unresolved)} unresolved import(s) -- review above for details")
         print("  These files are referenced by import() but not found in any mounted SCD.")
 
     # Summary
