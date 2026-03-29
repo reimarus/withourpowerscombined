@@ -231,7 +231,7 @@ def main() -> None:
     print("\n-- Running tests + building exe (parallel) --")
     t_parallel = time.monotonic()
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        test_future = pool.submit(run, "py -m pytest tests/ -x -q --no-header")
+        test_future = pool.submit(run, "py -m pytest tests/ -x -q --no-header --no-cov")
         build_future = pool.submit(run, "py build_exe.py")
         # Wait for both — raise if either fails
         test_future.result()
