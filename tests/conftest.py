@@ -11,16 +11,22 @@ def fake_scfa_tree(tmp_path: Path) -> Path:
     """Create a minimal fake SCFA directory tree for testing.
 
     Returns the path to the fake SCFA root directory.
+    Creates all critical bin files so setup doesn't abort.
     """
+    from launcher import config
+
     scfa = tmp_path / "SCFA"
     scfa_bin = scfa / "bin"
     scfa_bin.mkdir(parents=True)
 
-    # Create minimal exe and DLLs (empty files, just need to exist)
-    for name in ["SupremeCommander.exe", "MohoEngine.dll", "gpgcore.dll"]:
+    # Create all critical bin files (setup now raises on missing critical files)
+    for name in config.CRITICAL_BIN_FILES:
         (scfa_bin / name).write_bytes(b"\x00" * 64)
-
-    return scfa
+    # Also create non-critical files that tests may expect
+    for name in config.BIN_FILES:
+        f = scfa_bin / name
+        if not f.exists():
+            f.write_bytes(b"\x00" * 64)
 
     return scfa
 
@@ -28,17 +34,26 @@ def fake_scfa_tree(tmp_path: Path) -> Path:
 @pytest.fixture
 def fake_wopc_dir(tmp_path: Path) -> Path:
     """Create a fake WOPC deployment directory for validation tests."""
+    from launcher import config
+
     wopc = tmp_path / "WOPC"
     wopc_bin = wopc / "bin"
     wopc_bin.mkdir(parents=True)
-    (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00" * 64)
+    # Create all critical bin files so validate passes
+    for name in config.CRITICAL_BIN_FILES:
+        (wopc_bin / name).write_bytes(b"\x00" * 64)
     (wopc_bin / "init_wopc.lua").write_text("-- init")
-    (wopc_bin / "MohoEngine.dll").write_bytes(b"\x00" * 32)
+    (wopc_bin / "wopc_paths.lua").write_text("-- paths")
 
     wopc_gd = wopc / "gamedata"
     wopc_gd.mkdir()
-    for i in range(17):
+    for i in range(16):
         (wopc_gd / f"content{i}.scd").write_bytes(b"\x00")
+    # Create wopc_core.scd with sparse seek to pass the 100 MB size check
+    core_scd = wopc_gd / "wopc_core.scd"
+    with core_scd.open("wb") as f:
+        f.seek(110 * 1024 * 1024)
+        f.write(b"\x00")
 
     (wopc / "maps").mkdir()
     # Put a file in maps so iterdir() is non-empty

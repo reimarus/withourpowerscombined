@@ -370,7 +370,20 @@ def run_setup(
         else:
             missing.append(fname)
     if missing:
-        logger.warning("  WARNING: missing files: %s", ", ".join(missing))
+        missing_critical = [f for f in missing if f in config.CRITICAL_BIN_FILES]
+        missing_other = [f for f in missing if f not in config.CRITICAL_BIN_FILES]
+        if missing_other:
+            logger.warning("  WARNING: non-critical files missing: %s", ", ".join(missing_other))
+        if missing_critical:
+            logger.error(
+                "  CRITICAL files missing from SCFA installation: %s",
+                ", ".join(missing_critical),
+            )
+            raise RuntimeError(
+                f"SCFA installation is missing critical files: {', '.join(missing_critical)}. "
+                "Please verify your Steam installation of Supreme Commander: Forged Alliance "
+                "(Steam → right-click → Properties → Installed Files → Verify integrity)."
+            )
 
     # --- Step 2: Copy bundled bin files (icons SCD, etc) ---
     _report("[2/6] Copying bundled bin files", 2)

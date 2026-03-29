@@ -86,6 +86,32 @@ BIN_FILES = [
     "splash.png",
 ]
 
+# DLLs the exe links against at load time — if ANY are missing, the game
+# crashes immediately with exit code 0xC0000135 (STATUS_DLL_NOT_FOUND).
+# Discovered via Firebase report 037d3861: fresh SCFA-only install on
+# Windows 11 failed silently because setup only warned about missing files.
+CRITICAL_BIN_FILES = {
+    "SupremeCommander.exe",
+    "MohoEngine.dll",
+    "LuaPlus_1081.dll",
+    "game.dat",
+    "d3dx9_31.dll",
+    "msvcm80.dll",
+    "msvcp80.dll",
+    "msvcr80.dll",
+    "gpgcore.dll",
+    "gpggal.dll",
+    "BugSplat.dll",
+    "BugSplatRc.dll",
+    "DbgHelp.dll",
+    "SHSMP.DLL",
+    "SHW32d.DLL",
+    "zlibwapi.dll",
+    "wxmsw24u-vs80.dll",
+    "sx32w.dll",
+    "steam_api.dll",
+}
+
 # --- Files from SCFA/bin/ to copy to WOPC/bin/ ---
 
 # --- Init files from our repo to copy to WOPC/bin/ ---

@@ -4,7 +4,7 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Critical Bugs
 
-87. **Standalone DLL audit — missing dependencies break fresh installs** — Fresh SCFA-only installs (no FAF/LOUD) fail to launch because our wopc_core.scd and vendor files reference DLLs or Lua modules that don't ship with WOPC. Audit ALL FAF and LOUD file references, ensure every dependency is bundled in wopc_core.scd or WOPC/bin/. Goal: a player needs ONLY SCFA base game + WOPC-Launcher.exe + WOPC folder — nothing else. Check Firebase logs from laptop for specific missing DLLs.
+87. **Standalone DLL audit — missing dependencies break fresh installs** — Fresh SCFA-only installs (no FAF/LOUD) fail to launch with exit code 0xC0000135 (STATUS_DLL_NOT_FOUND). **Partially fixed:** pre-launch DLL validation now blocks launch with clear error listing missing files; setup now aborts on missing critical DLLs; `wopc validate` checks all 19 critical binaries + wopc_core.scd size. **Remaining:** build-time SCD import verification (Step 3), runtime import() wrapper (Step 4), identify specific missing DLL from laptop via test.
 4. **Publish launcher exe to GitHub Release** — the exe must be the most prominent download on the repo. Upload `WOPC-Launcher.exe` to a pinned release so players can find it immediately.
 7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
 42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers in `deploy.py` don't check the return value. Also: the `content-v2` GitHub Release must have `wopc_core.scd.zip`, `wopc-maps.zip`, and strategic icons so first-time setup works.
@@ -59,6 +59,7 @@ Items to tackle over time, roughly grouped by priority.
 37. **Delete unused `deploy.py:_acquire_core_content()`** — Dead code, never called.
 38. **Test coverage push: deploy.py + relay.py** — `_patch_scd()` has no isolated tests. After refactoring (#36), add tests for edge cases.
 39. **Extract hard-coded arcnames in `deploy.py:_patch_scd()`** — Move string literals to config constants.
+88. **Standardize config import pattern in wopc.py** — `wopc.py` uses `from launcher.config import WOPC_BIN, GAME_EXE, ...` (direct imports), while CLAUDE.md rule says to use `from launcher import config` then `config.WOPC_BIN`. The direct import creates local name copies; tests compensate by patching `launcher.wopc.WOPC_BIN` instead of `launcher.config.WOPC_BIN`. Both patterns work but having two conventions is confusing. Refactor `wopc.py` to use the module-level pattern (`from launcher import config` → `config.X`), then tests can patch `launcher.config.X` uniformly. Medium effort (~30 import sites in wopc.py + all test patches).
 
 ---
 

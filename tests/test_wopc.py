@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from launcher import config
 from launcher.log import setup_logging
 
 
@@ -12,6 +13,13 @@ from launcher.log import setup_logging
 def _init_logging():
     """Ensure logging is initialized for all tests."""
     setup_logging(verbose=False)
+
+
+def _populate_critical_bin_files(wopc_bin):
+    """Create all critical bin files in a test WOPC/bin/ directory."""
+    wopc_bin.mkdir(parents=True, exist_ok=True)
+    for f in config.CRITICAL_BIN_FILES:
+        (wopc_bin / f).write_bytes(b"\x00" * 64)
 
 
 class TestMain:
@@ -122,8 +130,7 @@ class TestCmdLaunch:
         from launcher.wopc import cmd_launch
 
         wopc_bin = tmp_path / "bin"
-        wopc_bin.mkdir()
-        (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
+        _populate_critical_bin_files(wopc_bin)
         gamedata = tmp_path / "gamedata"
         gamedata.mkdir()
         # No wopc_core.scd created
@@ -143,8 +150,7 @@ class TestCmdLaunch:
         from launcher.wopc import cmd_launch
 
         wopc_bin = tmp_path / "bin"
-        wopc_bin.mkdir()
-        (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
+        _populate_critical_bin_files(wopc_bin)
         (wopc_bin / "init_wopc.lua").write_text("-- init")
 
         wopc_gamedata = tmp_path / "gamedata"
@@ -196,8 +202,7 @@ class TestCmdLaunch:
         from launcher.wopc import cmd_launch
 
         wopc_bin = tmp_path / "bin"
-        wopc_bin.mkdir()
-        (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
+        _populate_critical_bin_files(wopc_bin)
         (wopc_bin / "init_wopc.lua").write_text("-- init")
         wopc_gamedata = tmp_path / "gamedata"
         wopc_gamedata.mkdir()
@@ -223,8 +228,7 @@ class TestCmdLaunchModes:
     def _setup_wopc_tree(self, tmp_path):
         """Create a minimal WOPC tree with exe, init, SCD, and a map."""
         wopc_bin = tmp_path / "bin"
-        wopc_bin.mkdir()
-        (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
+        _populate_critical_bin_files(wopc_bin)
         (wopc_bin / "init_wopc.lua").write_text("-- init")
         wopc_gamedata = tmp_path / "gamedata"
         wopc_gamedata.mkdir()
@@ -475,8 +479,7 @@ class TestLaunchModeNormalization:
     def _setup_wopc_tree(self, tmp_path):
         """Create a minimal WOPC tree with exe, init, SCD, and a map."""
         wopc_bin = tmp_path / "bin"
-        wopc_bin.mkdir()
-        (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
+        _populate_critical_bin_files(wopc_bin)
         (wopc_bin / "init_wopc.lua").write_text("-- init")
         wopc_gamedata = tmp_path / "gamedata"
         wopc_gamedata.mkdir()
@@ -646,3 +649,83 @@ class TestCmdSetup:
             with patch("launcher.deploy.run_setup"):
                 result = cmd_setup()
             assert result == 0
+
+
+class TestPreLaunchDllCheck:
+    """Test the pre-launch critical DLL validation."""
+
+    def test_missing_critical_dll_blocks_launch(self, tmp_path):
+        """Returns 1 when a critical DLL is missing from WOPC/bin/."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin = tmp_path / "bin"
+        _populate_critical_bin_files(wopc_bin)
+        # Remove one critical DLL
+        (wopc_bin / "MohoEngine.dll").unlink()
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+        ):
+            result = cmd_launch()
+            assert result == 1
+
+    def test_all_critical_present_passes(self, tmp_path):
+        """Pre-launch check passes when all critical files exist."""
+        from launcher.wopc import cmd_launch
+
+        wopc_bin = tmp_path / "bin"
+        _populate_critical_bin_files(wopc_bin)
+        (wopc_bin / "init_wopc.lua").write_text("-- init")
+        wopc_gamedata = tmp_path / "gamedata"
+        wopc_gamedata.mkdir()
+        (wopc_gamedata / "wopc_core.scd").write_bytes(b"\x00")
+        wopc_maps = tmp_path / "maps"
+        (wopc_maps / "TestMap").mkdir(parents=True)
+        (wopc_maps / "TestMap" / "TestMap_scenario.lua").write_text("-- scen")
+
+        mock_popen = MagicMock(pid=1, **{"poll.return_value": None})
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.WOPC_GAMEDATA", wopc_gamedata),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
+            patch("launcher.wopc.WOPC_MAPS", wopc_maps),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+            patch("launcher.wopc.GAME_LOG", "WOPC.log"),
+            patch("launcher.wopc.mods.get_active_mod_uids", return_value=[]),
+            patch("launcher.wopc.prefs.get_launch_mode", return_value="solo"),
+            patch("launcher.wopc.prefs.get_active_map", return_value="TestMap"),
+            patch("launcher.wopc.prefs.get_player_name", return_value="P1"),
+            patch(
+                "launcher.wopc.write_game_config",
+                return_value=wopc_bin / "wopc_game_config.lua",
+            ),
+            patch("subprocess.Popen", return_value=mock_popen),
+        ):
+            result = cmd_launch()
+            # Should reach Popen (not blocked by DLL check)
+            assert result is mock_popen
+
+    def test_multiple_missing_critical_files_all_reported(self, tmp_path, caplog):
+        """All missing critical files are listed in the error message."""
+        import logging
+
+        from launcher.wopc import cmd_launch
+
+        wopc_bin = tmp_path / "bin"
+        wopc_bin.mkdir()
+        # Create only one critical file — all others missing
+        (wopc_bin / "SupremeCommander.exe").write_bytes(b"\x00")
+
+        with (
+            patch("launcher.wopc.WOPC_BIN", wopc_bin),
+            patch("launcher.wopc.GAME_EXE", "SupremeCommander.exe"),
+        ):
+            with caplog.at_level(logging.ERROR):
+                result = cmd_launch()
+            assert result == 1
+            # Should mention multiple missing files
+            error_text = " ".join(caplog.messages)
+            assert "MohoEngine.dll" in error_text
+            assert "d3dx9_31.dll" in error_text
