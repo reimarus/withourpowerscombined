@@ -4,7 +4,7 @@ Items to tackle over time, roughly grouped by priority.
 
 ## Critical Bugs
 
-87. **Standalone DLL audit — missing dependencies break fresh installs** — Fresh SCFA-only installs (no FAF/LOUD) fail to launch with exit code 0xC0000135 (STATUS_DLL_NOT_FOUND). **Partially fixed:** pre-launch DLL validation now blocks launch with clear error listing missing files; setup now aborts on missing critical DLLs; `wopc validate` checks all 19 critical binaries + wopc_core.scd size. **Remaining:** build-time SCD import verification (Step 3), runtime import() wrapper (Step 4), identify specific missing DLL from laptop via test.
+87. ~~**Standalone DLL audit — missing dependencies break fresh installs**~~ — **DONE** (PRs #104, #105, #106). Pre-launch DLL validation, setup aborts on missing critical DLLs, `wopc validate` checks all 19 critical binaries + wopc_core.scd size, build-time SCD import verification, runtime import() wrapper for crash diagnostics. Moved to Archive.
 4. **Publish launcher exe to GitHub Release** — the exe must be the most prominent download on the repo. Upload `WOPC-Launcher.exe` to a pinned release so players can find it immediately.
 7. **Move launcher exe out of dist/** — `build_exe.py` outputs to `dist/WOPC-Launcher.exe`. Move the final exe to the repo root or a more obvious location so it's easy to find.
 42. **Setup crash: wopc_core.scd.zip download fails silently** — `_download_file()` returns `False` on 404/network error but callers in `deploy.py` don't check the return value. Also: the `content-v2` GitHub Release must have `wopc_core.scd.zip`, `wopc-maps.zip`, and strategic icons so first-time setup works.
