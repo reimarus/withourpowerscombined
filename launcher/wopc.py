@@ -8,6 +8,8 @@ from typing import Any
 
 from launcher import mods, prefs
 from launcher.config import (
+    BIN_FILES,
+    CRITICAL_BIN_FILES,
     FA_PATCHES_DIR,
     GAME_EXE,
     GAME_LOG,
@@ -184,6 +186,27 @@ def cmd_launch(
         logger.error("ERROR: Game exe not found at %s", exe_path)
         logger.error("Run 'wopc setup' first.")
         return 1
+
+    # Pre-launch DLL check — catch missing dependencies BEFORE spawning the
+    # game process.  Without this, the exe crashes with 0xC0000135 and the
+    # user sees nothing useful.  (Firebase report 037d3861, 2026-03-28.)
+    missing_critical = [f for f in CRITICAL_BIN_FILES if not (WOPC_BIN / f).exists()]
+    if missing_critical:
+        logger.error(
+            "ERROR: Cannot launch — %d critical file(s) missing from %s:",
+            len(missing_critical),
+            WOPC_BIN,
+        )
+        for f in sorted(missing_critical):
+            logger.error("  - %s", f)
+        logger.error("Run 'wopc setup' to re-install, or verify your SCFA Steam installation.")
+        return 1
+
+    # Log non-critical missing files as warnings (won't block launch)
+    all_missing = [f for f in BIN_FILES if not (WOPC_BIN / f).exists()]
+    non_critical = [f for f in all_missing if f not in CRITICAL_BIN_FILES]
+    if non_critical:
+        logger.warning("Non-critical files missing: %s", ", ".join(sorted(non_critical)))
 
     # Validate wopc_core.scd — without it, the engine loads vanilla uimain.lua
     # and the quickstart bypass won't work (user sees the vanilla SCFA lobby).
@@ -410,30 +433,25 @@ def cmd_validate(args: list[str] | None = None) -> int:
     logger.info("WOPC Validation\n")
     errors = 0
 
-    # Check exe
-    exe = WOPC_BIN / GAME_EXE
-    if exe.exists():
+    # Check all critical binaries
+    missing_critical = [f for f in CRITICAL_BIN_FILES if not (WOPC_BIN / f).exists()]
+    if missing_critical:
+        for f in sorted(missing_critical):
+            logger.error("  bin:        MISSING  %s", f)
+        errors += len(missing_critical)
+    else:
+        exe = WOPC_BIN / GAME_EXE
         h = hashlib.md5(exe.read_bytes()).hexdigest()
-        logger.info("  exe:        OK  (%s)", h)
-    else:
-        logger.error("  exe:        MISSING")
-        errors += 1
+        logger.info("  binaries:   OK  (%d critical files, exe md5=%s)", len(CRITICAL_BIN_FILES), h)
 
-    # Check init
-    init = WOPC_BIN / "init_wopc.lua"
-    if init.exists():
-        logger.info("  init:       OK")
-    else:
-        logger.error("  init:       MISSING")
-        errors += 1
-
-    # Check engine DLL
-    dll = WOPC_BIN / "MohoEngine.dll"
-    if dll.exists():
-        logger.info("  engine:     OK")
-    else:
-        logger.error("  engine:     MISSING")
-        errors += 1
+    # Check init files
+    for init_name in ("init_wopc.lua", "wopc_paths.lua"):
+        init = WOPC_BIN / init_name
+        if init.exists():
+            logger.info("  %-11s OK", init_name + ":")
+        else:
+            logger.error("  %-11s MISSING", init_name + ":")
+            errors += 1
 
     # Check gamedata
     gd_count = 0
@@ -443,6 +461,19 @@ def cmd_validate(args: list[str] | None = None) -> int:
     logger.info("  gamedata:   %d SCDs", gd_count)
     if gd_count < 10:
         logger.warning("  WARNING: Expected 17+ SCDs, found %d", gd_count)
+        errors += 1
+
+    # Check wopc_core.scd size (must be >= 100 MB to be valid)
+    core_scd = WOPC_GAMEDATA / WOPC_CORE_SCD
+    if core_scd.exists():
+        size_mb = core_scd.stat().st_size / 1e6
+        if size_mb < 100:
+            logger.error("  wopc_core:  CORRUPT (%.1f MB, expected >100 MB)", size_mb)
+            errors += 1
+        else:
+            logger.info("  wopc_core:  OK  (%.0f MB)", size_mb)
+    else:
+        logger.error("  wopc_core:  MISSING")
         errors += 1
 
     # Check maps

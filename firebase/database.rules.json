@@ -1,5 +1,7 @@
 {
   "rules": {
+    ".read": false,
+    ".write": false,
     "games": {
       ".read": true,
       "$game_id": {
@@ -10,14 +12,14 @@
     "reports": {
       ".read": true,
       "$report_id": {
-        ".write": true,
+        ".write": "!data.exists()",
         ".validate": "newData.hasChildren(['timestamp','host_name','log','version'])"
       }
     },
     "logs": {
       ".read": true,
       "$log_id": {
-        ".write": true,
+        ".write": "!data.exists()",
         ".validate": "newData.hasChildren(['event','timestamp'])"
       }
     }

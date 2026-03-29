@@ -32,6 +32,7 @@ class TestCmdValidate:
             patch("launcher.wopc.WOPC_ROOT", fake_wopc_dir),
             patch("launcher.wopc.WOPC_BIN", fake_wopc_dir / "bin"),
             patch("launcher.wopc.WOPC_GAMEDATA", fake_wopc_dir / "gamedata"),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", fake_wopc_dir / "maps"),
             patch("launcher.wopc.WOPC_SOUNDS", fake_wopc_dir / "sounds"),
             patch("launcher.wopc.WOPC_USERMODS", fake_wopc_dir / "usermods"),
@@ -41,16 +42,17 @@ class TestCmdValidate:
             assert result == 0
 
     def test_missing_exe_reports_error(self, fake_wopc_dir):
-        """Missing exe is counted as an error."""
+        """Missing critical binary is counted as an error."""
         from launcher.wopc import cmd_validate
 
-        # Remove the exe
+        # Remove the exe (a critical file)
         (fake_wopc_dir / "bin" / "SupremeCommander.exe").unlink()
 
         with (
             patch("launcher.wopc.WOPC_ROOT", fake_wopc_dir),
             patch("launcher.wopc.WOPC_BIN", fake_wopc_dir / "bin"),
             patch("launcher.wopc.WOPC_GAMEDATA", fake_wopc_dir / "gamedata"),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", fake_wopc_dir / "maps"),
             patch("launcher.wopc.WOPC_SOUNDS", fake_wopc_dir / "sounds"),
             patch("launcher.wopc.WOPC_USERMODS", fake_wopc_dir / "usermods"),
@@ -73,6 +75,7 @@ class TestCmdValidate:
             patch("launcher.wopc.WOPC_ROOT", fake_wopc_dir),
             patch("launcher.wopc.WOPC_BIN", fake_wopc_dir / "bin"),
             patch("launcher.wopc.WOPC_GAMEDATA", gd),
+            patch("launcher.wopc.WOPC_CORE_SCD", "wopc_core.scd"),
             patch("launcher.wopc.WOPC_MAPS", fake_wopc_dir / "maps"),
             patch("launcher.wopc.WOPC_SOUNDS", fake_wopc_dir / "sounds"),
             patch("launcher.wopc.WOPC_USERMODS", fake_wopc_dir / "usermods"),

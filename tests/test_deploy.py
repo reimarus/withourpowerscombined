@@ -126,13 +126,75 @@ class TestRunSetup:
         content = paths_lua.read_text()
         assert "SCFARoot" in content
 
-    def test_handles_missing_bin_files(self, patched_config, repo_init_dir):
-        """Warns about missing bin files but continues without error."""
+    def test_handles_missing_non_critical_bin_files(self, patched_config, repo_init_dir):
+        """Warns about missing non-critical bin files but continues."""
         from launcher.deploy import run_setup
 
-        # The fake SCFA tree only has 3 files, so most BIN_FILES will be missing
-        # Setup should still complete without raising
+        # Remove a non-critical file (splash.png) — setup should still complete
+        scfa_bin = patched_config["SCFA_BIN"]
+        splash = scfa_bin / "splash.png"
+        if splash.exists():
+            splash.unlink()
+
         run_setup(repo_init_dir)
+
+    def test_raises_on_missing_critical_bin_files(self, tmp_path):
+        """Setup aborts with RuntimeError when critical DLLs are missing from SCFA."""
+        from launcher.deploy import run_setup
+
+        # Create SCFA tree with NO bin files at all
+        scfa = tmp_path / "SCFA_empty"
+        scfa_bin = scfa / "bin"
+        scfa_bin.mkdir(parents=True)
+        wopc = scfa / "WOPC"
+
+        init_dir = tmp_path / "init"
+        init_dir.mkdir()
+        (init_dir / "init_wopc.lua").write_text("-- init")
+        (init_dir / "CommonDataPath.lua").write_text("-- common")
+
+        bundled = tmp_path / "bundled"
+        (bundled / "gamedata").mkdir(parents=True)
+        (bundled / "bin").mkdir()
+        (bundled / "bin" / "CommonDataPath.lua").write_text("-- fake")
+        for subdir in ["maps", "sounds", "usermods"]:
+            (bundled / subdir).mkdir()
+
+        config_patches = {
+            "SCFA_STEAM": scfa,
+            "SCFA_BIN": scfa_bin,
+            "REPO_BUNDLED": bundled,
+            "REPO_BUNDLED_BIN": bundled / "bin",
+            "REPO_BUNDLED_GAMEDATA": bundled / "gamedata",
+            "REPO_BUNDLED_MAPS": bundled / "maps",
+            "REPO_BUNDLED_SOUNDS": bundled / "sounds",
+            "REPO_BUNDLED_USERMODS": bundled / "usermods",
+            "WOPC_ROOT": wopc,
+            "WOPC_BIN": wopc / "bin",
+            "WOPC_GAMEDATA": wopc / "gamedata",
+            "WOPC_MAPS": wopc / "maps",
+            "WOPC_SOUNDS": wopc / "sounds",
+            "WOPC_MODS": wopc / "mods",
+            "WOPC_USERMODS": wopc / "usermods",
+            "WOPC_USERMAPS": wopc / "usermaps",
+            "PATCH_BUILD_DIR": tmp_path / "patch_build",
+            "FA_PATCHES_DIR": tmp_path / "vendor" / "FA-Binary-Patches",
+            "FA_PATCHER_DIR": tmp_path / "vendor" / "fa-python-binary-patcher",
+            "PATCH_MANIFEST": tmp_path / "wopc_patches.toml",
+            "REPO_WOPC_CORE_SRC": tmp_path / "no_vendor",
+            "WOPC_CORE_SCD": "wopc_core.scd",
+            "REPO_WOPC_PATCHES": tmp_path / "fake_patches",
+            "CONTENT_ICONS_SCD": "content_icons.scd",
+            "CONTENT_ICONS_URL": "https://example.com/content_icons.scd",
+        }
+
+        from unittest.mock import patch as mock_patch
+
+        with (
+            mock_patch.multiple("launcher.config", **config_patches),
+            pytest.raises(RuntimeError, match="missing critical files"),
+        ):
+            run_setup(init_dir)
 
     def test_copies_bundled_gamedata_scds(self, patched_config, repo_init_dir):
         """Copies each SCD file from bundled gamedata."""
