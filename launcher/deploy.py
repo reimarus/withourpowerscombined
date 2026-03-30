@@ -101,7 +101,10 @@ def _download_file(
                 resume_offset = tmp.stat().st_size
 
             # Build request — add Range header if resuming
-            req_obj = urllib.request.Request(url)
+            req_obj = urllib.request.Request(
+                url,
+                headers={"User-Agent": f"WOPC-Launcher/{config.VERSION}"},
+            )
             if resume_offset > 0:
                 req_obj.add_header("Range", f"bytes={resume_offset}-")
                 logger.info(

@@ -272,7 +272,11 @@ def download_update(
 
     try:
         LOG.info("Downloading update from %s ...", info.download_url)
-        req = urllib.request.urlopen(info.download_url, timeout=60)
+        dl_req = urllib.request.Request(
+            info.download_url,
+            headers={"User-Agent": f"WOPC-Launcher/{config.VERSION}"},
+        )
+        req = urllib.request.urlopen(dl_req, timeout=60)
         total = int(req.headers.get("Content-Length", info.size_bytes))
         downloaded = 0
         chunk_size = 256 * 1024
