@@ -372,7 +372,14 @@ class RelayClient:
         return ""
 
     @staticmethod
-    def upload_logs(log_lines: list[str], host_name: str = "", launch_id: str = "") -> bool:
+    def upload_logs(
+        log_lines: list[str],
+        host_name: str = "",
+        launch_id: str = "",
+        exit_code: int | None = None,
+        exit_duration: float | None = None,
+        exit_reason: str = "",
+    ) -> bool:
         """Upload launcher + engine logs to Firebase ``/reports/`` node.
 
         Collects logs from multiple sources (engine, launcher, SupCom.sclog),
@@ -414,6 +421,10 @@ class RelayClient:
             "scfa_log": sclog,
             "game_prefs_active_mods": game_prefs_snippet,
         }
+        if exit_code is not None:
+            payload["exit_code"] = exit_code
+            payload["exit_duration"] = exit_duration
+            payload["exit_reason"] = exit_reason
         try:
             data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             req = urllib.request.Request(

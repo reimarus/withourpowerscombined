@@ -652,6 +652,61 @@ class TestUploadLogs:
         body = json.loads(mock_open.call_args[0][0].data)
         assert body["launch_id"] == "abc123def456"
 
+    def test_upload_includes_exit_info(self, tmp_path: Path) -> None:
+        """Exit code, duration, and reason are included when provided."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        with (
+            patch("launcher.relay.urllib.request.urlopen") as mock_open,
+            patch("launcher.relay.config") as mock_cfg,
+            patch(
+                "launcher.game_prefs_repair.GAME_PREFS_PATH",
+                tmp_path / "Game.prefs",
+            ),
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            mock_cfg.VERSION = "2.01.0012"
+            mock_cfg.WOPC_BIN = fake_bin
+            mock_cfg.GAME_LOG = "WOPC.log"
+            mock_cfg.SCFA_STEAM = tmp_path
+            mock_cfg.WOPC_ROOT = tmp_path
+            mock_open.return_value = _make_response(b"{}")
+            RelayClient.upload_logs(
+                ["test"],
+                exit_code=-1073741515,
+                exit_duration=3.5,
+                exit_reason="failed to start — DLL_NOT_FOUND (0xC0000135)",
+            )
+        body = json.loads(mock_open.call_args[0][0].data)
+        assert body["exit_code"] == -1073741515
+        assert body["exit_duration"] == 3.5
+        assert "DLL_NOT_FOUND" in body["exit_reason"]
+
+    def test_upload_omits_exit_info_when_none(self, tmp_path: Path) -> None:
+        """Exit fields are omitted from payload when exit_code is None."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        with (
+            patch("launcher.relay.urllib.request.urlopen") as mock_open,
+            patch("launcher.relay.config") as mock_cfg,
+            patch(
+                "launcher.game_prefs_repair.GAME_PREFS_PATH",
+                tmp_path / "Game.prefs",
+            ),
+        ):
+            mock_cfg.RELAY_URL = "https://example.firebaseio.com"
+            mock_cfg.VERSION = "2.01.0012"
+            mock_cfg.WOPC_BIN = fake_bin
+            mock_cfg.GAME_LOG = "WOPC.log"
+            mock_cfg.SCFA_STEAM = tmp_path
+            mock_cfg.WOPC_ROOT = tmp_path
+            mock_open.return_value = _make_response(b"{}")
+            RelayClient.upload_logs(["test"])
+        body = json.loads(mock_open.call_args[0][0].data)
+        assert "exit_code" not in body
+        assert "exit_duration" not in body
+        assert "exit_reason" not in body
+
 
 class TestReadLogTail:
     """Tests for RelayClient.read_log_tail()."""
