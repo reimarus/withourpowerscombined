@@ -13,7 +13,7 @@
       ".read": true,
       "$report_id": {
         ".write": "!data.exists()",
-        ".validate": "newData.hasChildren(['timestamp','host_name','log','version'])"
+        ".validate": "newData.hasChildren(['timestamp','host_name','version'])"
       }
     },
     "logs": {
