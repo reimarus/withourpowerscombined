@@ -88,6 +88,37 @@ from launcher.gui.constants import (  # noqa: E402
 
 _UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000  # Re-check for updates every 30 min
 
+# Windows NTSTATUS exit codes — Python subprocess returns signed int32.
+# Maps known crash codes to human-readable descriptions for log analysis.
+_EXIT_CODE_NAMES: dict[int, str] = {
+    0: "clean exit",
+    1: "general error",
+    -1073741819: "ACCESS_VIOLATION (0xC0000005)",
+    -1073741515: "DLL_NOT_FOUND (0xC0000135)",
+    -1073741510: "CONTROL_C_EXIT (0xC000013A)",
+    -1073740791: "STACK_OVERFLOW (0xC00000FD)",
+    -1073740771: "HEAP_CORRUPTION (0xC0000374)",
+}
+
+
+def _classify_exit(exit_code: int, duration: float) -> str:
+    """Classify a game exit into a human-readable reason.
+
+    Uses exit code as the primary signal (not duration), which avoids
+    false positives where a user manually closes a working game quickly.
+    """
+    code_name = _EXIT_CODE_NAMES.get(exit_code)
+    if exit_code == 0:
+        return "clean exit"
+    if code_name:
+        if duration < 10:
+            return f"failed to start — {code_name}"
+        return f"crashed — {code_name}"
+    # Unknown non-zero code
+    if duration < 10:
+        return f"failed to start (code={exit_code})"
+    return f"crashed (code={exit_code})"
+
 
 class WopcApp(BaseApp):  # type: ignore
     """The main Graphical User Interface for the WOPC Launcher."""
@@ -130,6 +161,11 @@ class WopcApp(BaseApp):  # type: ignore
         self._is_hosting: bool = False
         self._current_screen: str = "solo"
         self._log_lines: list[str] = []
+
+        # Last game exit info — populated by _monitor_game_process, read by Send Logs
+        self._last_exit_code: int | None = None
+        self._last_exit_duration: float | None = None
+        self._last_exit_reason: str = ""
 
         # Thread-safe game state cache — network thread reads snapshot only
         self._cached_game_state: dict[str, Any] | None = None
@@ -1574,18 +1610,35 @@ class WopcApp(BaseApp):  # type: ignore
         self.after(300, self._do_check_wopc)
 
     def _do_check_wopc(self) -> None:
-        """Check WOPC deployment and finalize."""
+        """Check WOPC deployment (including critical DLLs) and finalize."""
         wopc_ok = config.WOPC_BIN.exists() and (config.WOPC_BIN / config.GAME_EXE).exists()
+
+        # If WOPC dir exists, also validate critical DLLs
+        missing_dlls: list[str] = []
+        if wopc_ok:
+            missing_dlls = [
+                f for f in config.CRITICAL_BIN_FILES if not (config.WOPC_BIN / f).exists()
+            ]
+            if missing_dlls:
+                wopc_ok = False
+
+        if missing_dlls:
+            label_fail = f"✗  WOPC: {len(missing_dlls)} DLL(s) missing"
+            for dll in sorted(missing_dlls):
+                self.log(f"  Missing: {dll}")
+        else:
+            label_fail = "✗  WOPC: Not Setup"
+
         self._resolve_status_check(
             self.status_wopc,
             self.progress_wopc,
             ok=wopc_ok,
             label_ok="✓  WOPC: Ready",
-            label_fail="✗  WOPC: Not Setup",
+            label_fail=label_fail,
             color_ok=COLOR_LAUNCH,
             color_fail=COLOR_WARN,
         )
-        self._finalize_status(self._scfa_ok, self._assets_ok, wopc_ok)
+        self._finalize_status(self._scfa_ok, self._assets_ok, wopc_ok, missing_dlls)
 
     def _resolve_status_check(
         self,
@@ -1606,7 +1659,13 @@ class WopcApp(BaseApp):  # type: ignore
             text_color=color_ok if ok else color_fail,
         )
 
-    def _finalize_status(self, scfa_ok: bool, assets_ok: bool, wopc_ok: bool) -> None:
+    def _finalize_status(
+        self,
+        scfa_ok: bool,
+        assets_ok: bool,
+        wopc_ok: bool,
+        missing_dlls: list[str] | None = None,
+    ) -> None:
         """Update primary button and populate lists after all checks complete."""
         # Check content freshness — stale wopc_core.scd causes BrewLANLOUDPath
         # crashes and other issues.  Force re-download if content_build.txt is
@@ -1645,7 +1704,25 @@ class WopcApp(BaseApp):  # type: ignore
             )
 
         if scfa_ok and (not wopc_ok or not assets_ok):
-            if not assets_ok and wopc_ok:
+            if missing_dlls:
+                # DLLs missing — check if they exist in SCFA source before attempting setup
+                scfa_missing = [f for f in missing_dlls if not (config.SCFA_BIN / f).exists()]
+                if scfa_missing:
+                    # SCFA itself is missing these DLLs — setup can't fix this
+                    self.log(
+                        "Missing game files that setup cannot repair. "
+                        "Try 'Verify integrity of game files' in Steam for "
+                        "Supreme Commander: Forged Alliance, then restart WOPC."
+                    )
+                    self.primary_btn.configure(
+                        text="MISSING GAME FILES",
+                        state="disabled",
+                        fg_color=COLOR_TEXT_MUTED,
+                        text_color=COLOR_BG,
+                    )
+                    return
+                self.log("Missing DLLs detected — re-running setup to repair...")
+            elif not assets_ok and wopc_ok:
                 self.log("wopc_core.scd missing — re-running setup to repair...")
             else:
                 self.log("WOPC not deployed — starting automatic installation...")
@@ -1690,6 +1767,9 @@ class WopcApp(BaseApp):  # type: ignore
                 self._log_lines,
                 host_name=host_name,
                 launch_id=wopc_module.last_launch_id,
+                exit_code=self._last_exit_code,
+                exit_duration=self._last_exit_duration,
+                exit_reason=self._last_exit_reason,
             )
             self.after(
                 0,
@@ -1945,10 +2025,9 @@ class WopcApp(BaseApp):  # type: ignore
     def _monitor_game_process(self, proc: subprocess.Popen, launch_id: str = "") -> None:
         """Monitor the game process in a background thread.
 
-        Waits for the game to exit, then logs:
-        - Exit code and session duration
-        - Warning if duration < 30s (likely failed during loading)
-        - Last 20 lines of WOPC.log for engine state at exit time
+        Waits for the game to exit, then logs exit code (with human-readable
+        NTSTATUS name), session duration, and WOPC.log tail.  Stores results
+        so "Send Logs" can include them in the Firebase report.
         """
 
         def _wait_and_log() -> None:
@@ -1956,29 +2035,30 @@ class WopcApp(BaseApp):  # type: ignore
             exit_code = proc.wait()
             duration = time.monotonic() - start
             mins, secs = divmod(int(duration), 60)
+            reason = _classify_exit(exit_code, duration)
+
+            # Store for Send Logs
+            self._last_exit_code = exit_code
+            self._last_exit_duration = duration
+            self._last_exit_reason = reason
 
             # Log exit code and duration
             logger.info(
-                "Game exited: code=%s, duration=%dm%02ds (%.0fs), launch_id=%s",
+                "Game exited: code=%s (%s), duration=%dm%02ds (%.0fs), launch_id=%s",
                 exit_code,
+                reason,
                 mins,
                 secs,
                 duration,
                 launch_id,
             )
 
-            # GUI message
-            if duration < 30:
-                msg = (
-                    f"Game exited quickly ({int(duration)}s, code={exit_code})"
-                    " — likely failed during loading. Check logs."
-                )
-                logger.warning(
-                    "Game exited very quickly (%.1fs) — likely failed during loading",
-                    duration,
-                )
+            # GUI message — use exit code, not duration, to decide severity
+            if exit_code == 0:
+                msg = f"Game ended ({mins}m{secs:02d}s) — {reason}"
             else:
-                msg = f"Game ended ({mins}m{secs:02d}s, code={exit_code})"
+                msg = f"Game exited ({mins}m{secs:02d}s) — {reason}"
+                logger.warning("Non-zero exit: %s", reason)
 
             # Read tail of WOPC.log for engine state at exit
             game_log = config.WOPC_BIN / config.GAME_LOG
