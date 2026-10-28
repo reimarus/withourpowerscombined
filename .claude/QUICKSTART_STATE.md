@@ -1,5 +1,5 @@
 # WOPC Quick-Start — Session State & Recovery Breadcrumbs
-> Last updated: 2026-03-29 (v2.01.0066 released)
+> Last updated: 2026-10-28 (v2.01.0068 released)
 > If session runs out of tokens, a new session can pick up from here.
 
 ## Current State: Phase 7 — Pathfinding + Stability + CDN Migration
